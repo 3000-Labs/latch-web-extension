@@ -1,0 +1,31 @@
+{
+  "name": "@latch/extension",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@latch/crypto": "workspace:*",
+    "@latch/stellar": "workspace:*",
+    "@latch/types": "workspace:*",
+    "@latch/ui": "workspace:*",
+    "plasmo": "^0.90.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.321",
+    "@types/react": "^18.3.21",
+    "@types/react-dom": "^18.3.5",
+    "typescript": "^5.8.3"
+  },
+  "manifest": {
+    "name": "Latch Wallet",
+    "description": "Stellar smart account wallet",
+    "version": "0.0.1",
+    "permissions": ["storage", "alarms"]
+  }
+}
