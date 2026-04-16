@@ -1,4 +1,4 @@
-# Latch
+# Latch Web Extension
 
 Stellar smart account browser extension wallet.
 

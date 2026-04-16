@@ -1,6 +1,6 @@
-# Latch — AGENTS.md
+# Latch Web Extension — AGENTS.md
 
-AI coding agent context for the Latch monorepo.
+AI coding agent context for the `latch-web-extension` monorepo.
 
 ## What is Latch
 
