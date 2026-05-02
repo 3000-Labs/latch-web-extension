@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Theme tokens (default: dark) */
+:root {
+  /* dark */
+  --latch-bg: 31 31 31; /* #1F1F1F */
+  --latch-fg: 255 255 255;
+  --latch-muted: 178 178 178;
+  --latch-primary: 255 173 0; /* #FFAD00 */
+  --latch-surface: 9 9 9; /* #090909 */
+  /* #2B2A29 */
+  --latch-border: 43 42 41;
+}
+
+.theme-light {
+  --latch-bg: 245 244 244; /* #F5F4F4 */
+  --latch-fg: 15 15 15;
+  --latch-muted: 110 110 110;
+  --latch-primary: 255 173 0; /* keep brand */
+  --latch-surface: 255 255 251; /* #FFFFFB */
+  /* #E1E1E1 */
+  --latch-border: 225 225 225;
+}
+
+/* Better text rendering in small popup surfaces */
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+  background: rgb(var(--latch-bg));
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "SF Pro", "Helvetica Neue", Helvetica, Arial, system-ui, "Segoe UI", Roboto,
+    "Noto Sans", "Liberation Sans", sans-serif;
+}
+
