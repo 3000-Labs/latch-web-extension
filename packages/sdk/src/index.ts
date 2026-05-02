@@ -25,4 +25,38 @@ export interface LatchSDK {
   getNetwork(): Promise<Network>
 }
 
-// TODO: implement LatchSDK using window.postMessage ↔ content script bridge
+declare global {
+  interface Window {
+    latch?: {
+      isConnected(): Promise<boolean>
+      getPublicKey(): Promise<string>
+      signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+      getNetwork(): Promise<Network>
+    }
+  }
+}
+
+function requireLatch(): NonNullable<Window['latch']> {
+  if (typeof window === 'undefined') throw new Error('Latch SDK must be used in a browser environment')
+  if (!window.latch) throw new Error('Latch extension not detected')
+  return window.latch
+}
+
+export function getLatchSDK(): LatchSDK {
+  return {
+    async isConnected() {
+      return await requireLatch().isConnected()
+    },
+    async getPublicKey() {
+      return await requireLatch().getPublicKey()
+    },
+    async signTransaction(request: SignTransactionRequest) {
+      return await requireLatch().signTransaction(request)
+    },
+    async getNetwork() {
+      return await requireLatch().getNetwork()
+    }
+  }
+}
+
+export default getLatchSDK
