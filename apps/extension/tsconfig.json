@@ -2,10 +2,18 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "paths": {
-      "~*": ["./src/*"]
+      "~*": [
+        "./src/*"
+      ]
     }
   },
-  "include": ["src"]
+  "include": [
+    ".plasmo/index.d.ts",
+    "src"
+  ]
 }
