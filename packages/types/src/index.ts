@@ -153,9 +153,7 @@ export interface PendingDappRequest {
   createdAt: number
 }
 
-export interface ListPendingDappRequestsRequest {
-  // reserved
-}
+export type ListPendingDappRequestsRequest = Record<string, never>
 
 export interface ListPendingDappRequestsResponse {
   requests: PendingDappRequest[]
