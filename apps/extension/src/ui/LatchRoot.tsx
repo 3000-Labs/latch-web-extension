@@ -253,10 +253,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const { theme, setTheme } = useTheme()
   const { pref, setPref } = useUiSurfacePreference()
 
+  // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
+  const ENABLE_OTHER_SIGNERS = false
+
   const [route, setRoute] = useState<Route>('welcome')
   const [page, setPage] = useState<Page>('main')
   const [menuOpen, setMenuOpen] = useState(false)
-  const [selectedSigner, setSelectedSigner] = useState<SignerId>('freighter')
+  const [selectedSigner, setSelectedSigner] = useState<SignerId>('passkey')
 
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -840,19 +843,27 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <div className="flex flex-col items-center space-y-3">
                   <div className="mt-6 space-y-3 w-full">
                     {(
-                      [
-                        {
-                          id: 'freighter',
-                          name: 'Freighter',
-                          subtitle: 'Browser extension wallet for Stellar',
-                        },
-                        { id: 'phantom', name: 'Phantom', subtitle: 'Wallet for message signing' },
-                        {
-                          id: 'passkey',
-                          name: 'Passkey',
-                          subtitle: 'Biometric WebAuthn signer (P-256)',
-                        },
-                      ] as const
+                      ENABLE_OTHER_SIGNERS
+                        ? ([
+                            {
+                              id: 'freighter',
+                              name: 'Freighter',
+                              subtitle: 'Browser extension wallet for Stellar',
+                            },
+                            { id: 'phantom', name: 'Phantom', subtitle: 'Wallet for message signing' },
+                            {
+                              id: 'passkey',
+                              name: 'Passkey',
+                              subtitle: 'Biometric WebAuthn signer (P-256)',
+                            },
+                          ] as const)
+                        : ([
+                            {
+                              id: 'passkey',
+                              name: 'Passkey',
+                              subtitle: 'Biometric WebAuthn signer (P-256)',
+                            },
+                          ] as const)
                     ).map((s) => {
                       const active = s.id === selectedSigner
                       return (
@@ -1015,12 +1026,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     >
                       Send transaction
                     </button>
-                    <button
-                      onClick={() => setRoute('chooseSigner')}
-                      className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                    >
-                      Add another signer
-                    </button>
+                    {ENABLE_OTHER_SIGNERS ? (
+                      <button
+                        onClick={() => setRoute('chooseSigner')}
+                        className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                      >
+                        Add another signer
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>

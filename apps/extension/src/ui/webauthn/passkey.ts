@@ -1,4 +1,4 @@
-import { p256 } from "@noble/curves/nist"
+import { p256 } from "@noble/curves/nist.js"
 import { decodeMultiple } from "cbor-x"
 import { xdr } from "@stellar/stellar-sdk"
 
