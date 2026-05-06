@@ -203,6 +203,7 @@ export type MessageType =
   | 'GET_PUBLIC_KEY'
   | 'UNLOCK_VAULT'
   | 'LOCK_VAULT'
+  | 'LOGOUT'
   | 'GET_SETUP_STATE'
   | 'SET_SETUP_STATE'
   | 'GET_ACCOUNTS'
@@ -246,6 +247,7 @@ export interface SetSetupStateRequest {
 }
 
 export type BackgroundRequestPayloadByType = {
+  LOGOUT: undefined
   GET_SETUP_STATE: undefined
   SET_SETUP_STATE: SetSetupStateRequest
   GET_ACCOUNTS: undefined
@@ -267,6 +269,7 @@ export type BackgroundRequestPayloadByType = {
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
+  LOGOUT: undefined
   GET_SETUP_STATE: GetSetupStateResponse
   SET_SETUP_STATE: undefined
   GET_ACCOUNTS: GetAccountsResponse

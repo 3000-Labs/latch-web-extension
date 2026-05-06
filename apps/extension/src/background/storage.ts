@@ -100,6 +100,17 @@ export async function removePendingDappRequest(requestId: string) {
   })
 }
 
+export async function clearSession() {
+  await chrome.storage.local.remove([
+    STORAGE_KEYS.accounts,
+    STORAGE_KEYS.activeAccountId,
+    STORAGE_KEYS.setupState,
+    STORAGE_KEYS.legacyAccountPublicKey,
+    STORAGE_KEYS.dappPermissions,
+    STORAGE_KEYS.pendingDappRequests
+  ])
+}
+
 /**
  * Optional one-time migration: if legacy `latch.accountPublicKey` exists and no accounts are present,
  * create a placeholder account for UI continuity.

@@ -52,6 +52,7 @@ import {
   listPendingDappRequests,
   addPendingDappRequest,
   removePendingDappRequest,
+  clearSession,
   migrateLegacyPublicKeyIfNeeded,
   setActiveAccount,
   setDappPermissions
@@ -224,6 +225,13 @@ chrome.runtime.onMessage.addListener(
 
         case "SET_SETUP_STATE": {
           await setSetupState(message.payload as SetSetupStateRequest)
+          sendResponse(ok())
+          return
+        }
+
+        case "LOGOUT": {
+          await clearSession()
+          await setSetupState({ setupState: "new", accountPublicKey: undefined })
           sendResponse(ok())
           return
         }

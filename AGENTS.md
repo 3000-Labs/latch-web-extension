@@ -44,6 +44,8 @@ packages/
 - Message types defined in `@latch/types` (`MessageType`, `BackgroundMessage`, `BackgroundResponse`)
 - Network config via `PLASMO_PUBLIC_*` env vars
 - Stellar network: testnet by default during development
+- All icons SVGs should never be written from scratch, prefer importing icons that fit the task.
+- Use lucide icons or icon svgs if provided
 
 ## Data fetching & API requests (Plasmo / MV3 best practices)
 
@@ -59,7 +61,7 @@ packages/
 ### Architecture: one network “edge” in the background
 
 - **Single entrypoint**: implement all outbound HTTP/RPC calls behind a small background “API layer” (e.g. `apps/extension/src/background/api/*`).
-- **UI talks in messages, not URLs**: popup asks for *intent* (“get balances”, “simulate tx”, “create passkey”) via typed messages; background returns typed responses.
+- **UI talks in messages, not URLs**: popup asks for _intent_ (“get balances”, “simulate tx”, “create passkey”) via typed messages; background returns typed responses.
 - **No duplicated clients**: avoid creating separate fetch/RPC clients in popup, sidepanel, and background. Centralize in background and expose a message API.
 
 ### Fetch implementation guidance (clean + reliable)

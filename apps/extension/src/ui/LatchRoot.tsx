@@ -20,7 +20,10 @@ import type {
   SerializableError,
   SetSetupStateRequest,
   StoredAccount,
+  SubmitDelegatedTxRequest,
+  SubmitPhantomTxRequest,
   SubmitTxResponse,
+  SubmitWebauthnTxRequest,
 } from '@latch/types'
 
 import {
@@ -32,10 +35,16 @@ import {
 } from '@stellar/freighter-api'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
+import { ExternalLink, Menu, Moon, Settings, Sun, X } from 'lucide-react'
 
 import logoUrl from 'url:../../assets/brand/latch-logo.svg'
 import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
 import successAvatarUrl from 'url:../../assets/avatars/success.png'
+
+import { SectionCard } from './components/SectionCard'
+import { HomeScreen } from './screens/HomeScreen'
+import { HistoryScreen } from './screens/HistoryScreen'
+import { SettingsScreen } from './screens/SettingsScreen'
 
 import {
   buildWebauthnSigDataXdrHex,
@@ -56,7 +65,8 @@ type Route =
   | 'chooseSigner'
   | 'createPasskey'
   | 'passkeyCreated'
-  | 'dashboard'
+  | 'home'
+  | 'history'
   | 'sendTx'
   | 'txResult'
   | 'dappApproval'
@@ -129,102 +139,7 @@ function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   )
 }
 
-function ExternalLinkIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M14 5h5v5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M10 14L19 5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M19 14v5a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function XIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M18 6L6 18M6 6l12 12"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function HamburgerIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M4 7h16M4 12h16M4 17h16"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-function GearIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
-        stroke="currentColor"
-        strokeWidth="2"
-      />
-      <path
-        d="M19.4 15a7.9 7.9 0 0 0 .1-1 7.9 7.9 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a8.2 8.2 0 0 0-1.7-1l-.4-2.6H9.1L8.7 7.1a8.2 8.2 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.5a7.9 7.9 0 0 0-.1 1c0 .3 0 .7.1 1l-2 1.5 2 3.4 2.4-1c.5.4 1.1.7 1.7 1l.4 2.6h5.8l.4-2.6c.6-.3 1.2-.6 1.7-1l2.4 1 2-3.4-2-1.5Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function ThemeIcon({ theme }: { theme: Theme }) {
-  return theme === 'light' ? (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path d="M12 18a6 6 0 1 1 0-12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      <path
-        d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l-1.5-1.5M20.5 20.5 19 19M5 19l-1.5 1.5M20.5 3.5 19 5"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-      />
-    </svg>
-  ) : (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M21 12.8A8 8 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
+const headerIconClass = 'h-[18px] w-[18px]'
 
 async function openSidePanel() {
   if (!('sidePanel' in chrome)) return
@@ -242,11 +157,6 @@ function friendlyError(e?: SerializableError): string {
   if (e.code === 'timeout') return 'Request timed out. Please try again.'
   if (e.status === 403) return 'Not authorized.'
   return e.message
-}
-
-function shortAddr(s: string, left = 6, right = 5) {
-  if (s.length <= left + right + 1) return s
-  return `${s.slice(0, left)}…${s.slice(-right)}`
 }
 
 export function LatchRoot({ surface }: { surface: Surface }) {
@@ -296,7 +206,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         if (!res.ok || !res.data) return
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
-        if (res.data.accounts.length > 0) setRoute('dashboard')
+        if (res.data.accounts.length > 0) setRoute('home')
       })
       .catch(() => {})
 
@@ -304,7 +214,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [])
 
   useEffect(() => {
-    if (setupState === 'has_account' && accounts.length > 0) setRoute('dashboard')
+    if (setupState === 'has_account' && accounts.length > 0) setRoute('home')
   }, [setupState, accounts.length])
 
   async function persistSetupHasAccount(publicKey: string) {
@@ -343,7 +253,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const allowed = await isAllowed()
       if (!allowed) await setAllowed()
 
-      const gAddress = await getAddress()
+      const g = (await getAddress()) as unknown
+      const gAddress =
+        typeof g === 'string' ? g : typeof (g as any)?.address === 'string' ? (g as any).address : undefined
+      if (!gAddress) throw new Error('Failed to read Freighter address.')
       const res = await sendToBackground<
         CreateOrConnectFreighterRequest,
         CreateOrConnectFreighterResponse & { account: StoredAccount }
@@ -354,7 +267,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!res.ok) throw new Error(friendlyError(res.error))
       await persistSetupHasAccount(res.data!.smartAccountAddress)
       await refreshAccounts()
-      setRoute('dashboard')
+      setRoute('home')
     } finally {
       setLoading(null)
     }
@@ -383,7 +296,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!res.ok) throw new Error(friendlyError(res.error))
       await persistSetupHasAccount(res.data!.smartAccountAddress)
       await refreshAccounts()
-      setRoute('dashboard')
+      setRoute('home')
     } finally {
       setLoading(null)
     }
@@ -473,7 +386,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         if (!b) throw new Error('Failed to build delegated transaction.')
         setLoading('Awaiting Freighter signature…')
         const signed = await signAuthEntry(b.gAddressPreimageXdr as any)
-        const signedAuthEntryBase64 = signed?.signedAuthEntry ?? signed?.signedAuthEntryBase64
+        const signedAuthEntryBase64 = (signed as any)?.signedAuthEntry as string | undefined
         const signerAddress = signed?.signerAddress
         if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
 
@@ -597,7 +510,54 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     })
     await loadPendingDapp()
     if (pendingDappRequests.length <= 1) {
-      setRoute(accounts.length > 0 ? 'dashboard' : 'welcome')
+      setRoute(accounts.length > 0 ? 'home' : 'welcome')
+    }
+  }
+
+  const sidepanelPreferenceSection = (
+    <div className="mt-2">
+      <SectionCard>
+        <div className="text-base font-extrabold">Side panel</div>
+        <div className="mt-1 text-xs text-muted">
+          When enabled, clicking the Latch icon opens the side panel instead of the popup.
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="text-sm font-bold">Enable side panel</div>
+          <button
+            className={[
+              'h-9 w-20 rounded-full border text-sm font-extrabold',
+              pref === 'sidepanel' ? 'border-primary bg-primary text-black' : 'border-border bg-bg text-fg',
+            ].join(' ')}
+            onClick={() => {
+              const next = pref === 'sidepanel' ? 'popup' : 'sidepanel'
+              setPref(next)
+              void setDefaultSurface(next).then(() => {
+                if (next === 'sidepanel') void openSidePanel().catch(() => {})
+              })
+            }}
+          >
+            {pref === 'sidepanel' ? 'On' : 'Off'}
+          </button>
+        </div>
+      </SectionCard>
+    </div>
+  )
+
+  async function logout() {
+    setError(null)
+    setLoading('Logging out…')
+    try {
+      const res = await sendToBackground<undefined, undefined>({ type: 'LOGOUT', payload: undefined })
+      if (!res.ok) throw new Error(friendlyError(res.error))
+      setAccounts([])
+      setActiveAccountId(undefined)
+      setSetupState('new')
+      setPendingDappRequests([])
+      setRoute('welcome')
+      setPage('main')
+    } finally {
+      setLoading(null)
     }
   }
 
@@ -615,7 +575,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       >
         <div className="flex items-center justify-between gap-2">
           <IconButton aria-label="Menu" title="Menu" onClick={() => setMenuOpen((v) => !v)}>
-            <HamburgerIcon />
+            <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
           </IconButton>
 
           <div className="flex items-center justify-end gap-2">
@@ -623,12 +583,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               aria-label="Toggle theme"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             >
-              <ThemeIcon theme={theme} />
+              {theme === 'light' ? (
+                <Sun className={headerIconClass} strokeWidth={2} aria-hidden />
+              ) : (
+                <Moon className={headerIconClass} strokeWidth={2} aria-hidden />
+              )}
             </IconButton>
 
             {surface === 'popup' ? (
               <IconButton aria-label="Close" onClick={() => window.close()}>
-                <XIcon />
+                <X className={headerIconClass} strokeWidth={2} aria-hidden />
               </IconButton>
             ) : null}
           </div>
@@ -654,7 +618,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   setMenuOpen(false)
                 }}
               >
-                <GearIcon />
+                <Settings className={headerIconClass} strokeWidth={2} aria-hidden />
                 <span>Settings</span>
               </button>
             </div>
@@ -663,46 +627,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
         {page === 'settings' ? (
           <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-extrabold tracking-tight">Settings</div>
-                <div className="mt-1 text-sm text-muted">Manage preferences</div>
-              </div>
-              <button
-                className="rounded-full border border-border px-4 py-2 text-sm font-bold hover:bg-surface/70"
-                onClick={() => setPage('main')}
-              >
-                Back
-              </button>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
-              <div className="text-base font-extrabold">Side panel</div>
-              <div className="mt-1 text-xs text-muted">
-                When enabled, clicking the Latch icon opens the side panel instead of the popup.
-              </div>
-
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <div className="text-sm font-bold">Enable side panel</div>
-                <button
-                  className={[
-                    'h-9 w-20 rounded-full border text-sm font-extrabold',
-                    pref === 'sidepanel'
-                      ? 'border-primary bg-primary text-black'
-                      : 'border-border bg-bg text-fg',
-                  ].join(' ')}
-                  onClick={() => {
-                    const next = pref === 'sidepanel' ? 'popup' : 'sidepanel'
-                    setPref(next)
-                    void setDefaultSurface(next).then(() => {
-                      if (next === 'sidepanel') void openSidePanel().catch(() => {})
-                    })
-                  }}
-                >
-                  {pref === 'sidepanel' ? 'On' : 'Off'}
-                </button>
-              </div>
-            </div>
+            <SettingsScreen
+              accountName={activeAccount?.smartAccountAddress ? 'Crownz' : 'Account'}
+              accountAddress={activeAccount?.smartAccountAddress ?? '—'}
+              biometricsEnabled={false}
+              onChangeBiometricsEnabled={() => {}}
+              sidepanelPreferenceSection={sidepanelPreferenceSection}
+              onBack={() => setPage('main')}
+              onLogout={() => void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+            />
           </div>
         ) : null}
 
@@ -881,7 +814,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                             <div className="mt-1 text-xs text-muted">{s.subtitle}</div>
                           </div>
                           <span className="text-fg/70">
-                            <ExternalLinkIcon />
+                            <ExternalLink className={headerIconClass} strokeWidth={2} aria-hidden />
                           </span>
                         </button>
                       )
@@ -989,7 +922,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
                 <div className="mt-auto w-full">
                   <button
-                    onClick={() => setRoute('dashboard')}
+                    onClick={() => setRoute('home')}
                     className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   >
                     Go to Dashboard
@@ -998,44 +931,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'dashboard' ? (
+            {!loading && route === 'home' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Dashboard</h2>
-                  <p className="mt-2 text-sm text-muted">Active smart account</p>
-                </div>
+                <HomeScreen accountName="Crownz" onOpenHistory={() => setRoute('history')} />
+              </div>
+            ) : null}
 
-                <div className={`flex flex-col justify-between h-[450px]`}>
-                  <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
-                    <div className="text-xs font-bold text-muted">Account</div>
-                    <div className="mt-2 text-base font-extrabold">
-                      {activeAccount?.smartAccountAddress
-                        ? shortAddr(activeAccount.smartAccountAddress)
-                        : '—'}
-                    </div>
-                    <div className="mt-1 text-xs text-muted">
-                      Mode: {activeAccount?.mode ?? '—'}
-                    </div>
-                  </div>
-
-                  <div className="mt-auto space-y-3">
-                    <button
-                      onClick={() => setRoute('sendTx')}
-                      className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                    >
-                      Send transaction
-                    </button>
-                    {ENABLE_OTHER_SIGNERS ? (
-                      <button
-                        onClick={() => setRoute('chooseSigner')}
-                        className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                      >
-                        Add another signer
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
+            {!loading && route === 'history' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <HistoryScreen onBack={() => setRoute('home')} />
               </div>
             ) : null}
 
@@ -1064,7 +968,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     Build & Sign
                   </button>
                   <button
-                    onClick={() => setRoute('dashboard')}
+                    onClick={() => setRoute('home')}
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     Back
@@ -1093,11 +997,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                       setBuiltTx(null)
                       setBuiltDelegatedTx(null)
                       setTxResult(null)
-                      setRoute('dashboard')
+                      setRoute('home')
                     }}
                     className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   >
-                    Back to Dashboard
+                    Back to Home
                   </button>
                 </div>
               </div>
