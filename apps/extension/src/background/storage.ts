@@ -1,5 +1,7 @@
 import type { AccountMode, DappPermission, GetAccountsResponse, PendingDappRequest, StoredAccount } from "@latch/types"
 
+import { clearAllMnemonicVaultRecords } from "./mnemonicVault"
+
 const STORAGE_KEYS = {
   setupState: "latch.setupState",
   legacyAccountPublicKey: "latch.accountPublicKey",
@@ -101,6 +103,7 @@ export async function removePendingDappRequest(requestId: string) {
 }
 
 export async function clearSession() {
+  await clearAllMnemonicVaultRecords()
   await chrome.storage.local.remove([
     STORAGE_KEYS.accounts,
     STORAGE_KEYS.activeAccountId,

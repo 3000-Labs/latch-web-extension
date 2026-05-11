@@ -9,6 +9,7 @@ import type {
   CreateOrConnectPasskeyResponse,
   CreateOrConnectPhantomRequest,
   CreateOrConnectPhantomResponse,
+  FreighterSmartAccountStatusResponse,
   SerializableError,
   SubmitDelegatedTxRequest,
   SubmitPhantomTxRequest,
@@ -73,6 +74,16 @@ async function jsonFetch<TRes>(path: string, init?: RequestInit & { timeoutMs?: 
   }
 }
 
+export async function getFreighterSmartAccountStatus(
+  gAddress: string
+): Promise<FreighterSmartAccountStatusResponse> {
+  const q = encodeURIComponent(gAddress)
+  return await jsonFetch<FreighterSmartAccountStatusResponse>(
+    `/api/smart-account/freighter?gAddress=${q}`,
+    { method: "GET" }
+  )
+}
+
 export async function createOrConnectFreighter(
   req: CreateOrConnectFreighterRequest
 ): Promise<CreateOrConnectFreighterResponse> {
@@ -80,6 +91,17 @@ export async function createOrConnectFreighter(
     method: "POST",
     body: JSON.stringify(req)
   })
+}
+
+/** GET predict/deploy flow: returns smart account address; POST only if not yet deployed. */
+export async function ensureFreighterSmartAccountDeployed(
+  gAddress: string
+): Promise<CreateOrConnectFreighterResponse> {
+  const status = await getFreighterSmartAccountStatus(gAddress)
+  if (status.deployed) {
+    return { smartAccountAddress: status.smartAccountAddress, alreadyDeployed: true }
+  }
+  return await createOrConnectFreighter({ gAddress })
 }
 
 export async function createOrConnectPhantom(

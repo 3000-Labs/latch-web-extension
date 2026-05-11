@@ -20,6 +20,7 @@ import type {
   GetAccountsResponse,
   GetDappPermissionsRequest,
   GetSetupStateResponse,
+  ImportMnemonicAccountRequest,
   ListPendingDappRequestsResponse,
   PendingDappRequest,
   SerializableError,
@@ -28,9 +29,11 @@ import type {
   SetDappPermissionsRequest,
   SetSetupStateRequest,
   SetupState,
+  SignDelegatedGAuthEntryRequest,
   SubmitDelegatedTxRequest,
   SubmitPhantomTxRequest,
-  SubmitWebauthnTxRequest
+  SubmitWebauthnTxRequest,
+  UnlockMnemonicVaultRequest
 } from "@latch/types"
 
 import {
@@ -40,10 +43,21 @@ import {
   createOrConnectFreighter,
   createOrConnectPasskey,
   createOrConnectPhantom,
+  ensureFreighterSmartAccountDeployed,
   submitTxDelegated,
   submitTxPhantom,
   submitTxWebauthn
 } from "./backend"
+
+import { signDelegatedGAddressEntry } from "./delegatedLocalSign"
+import {
+  decryptMnemonicFromVault,
+  encryptMnemonicForVault,
+  loadMnemonicVaultRecord,
+  saveMnemonicVaultRecord
+} from "./mnemonicVault"
+import { clearMnemonicSessionKeys, getMnemonicKeypair, registerMnemonicKeypair } from "./mnemonicSession"
+import { deriveStellarKeypairFromMnemonic } from "./stellarMnemonic"
 
 import {
   createAccount,
@@ -230,6 +244,7 @@ chrome.runtime.onMessage.addListener(
         }
 
         case "LOGOUT": {
+          clearMnemonicSessionKeys()
           await clearSession()
           await setSetupState({ setupState: "new", accountPublicKey: undefined })
           sendResponse(ok())
@@ -237,8 +252,17 @@ chrome.runtime.onMessage.addListener(
         }
 
         case "GET_ACCOUNTS": {
-          const data: GetAccountsResponse = await getAccounts()
-          sendResponse(ok<GetAccountsResponse>(data))
+          const data = await getAccounts()
+          let activeAccountHasMnemonicVault: boolean | undefined
+          if (data.activeAccountId) {
+            const active = data.accounts.find((a) => a.id === data.activeAccountId)
+            if (active?.mode === "mnemonic") {
+              const rec = await loadMnemonicVaultRecord(active.id)
+              activeAccountHasMnemonicVault = Boolean(rec)
+            }
+          }
+          const payload: GetAccountsResponse = { ...data, activeAccountHasMnemonicVault }
+          sendResponse(ok<GetAccountsResponse>(payload))
           return
         }
 
@@ -284,6 +308,80 @@ chrome.runtime.onMessage.addListener(
             passkeyKeyDataHex: req.keyDataHex
           })
           sendResponse(ok({ ...data, account }))
+          return
+        }
+
+        case "IMPORT_MNEMONIC_ACCOUNT": {
+          const req = message.payload as ImportMnemonicAccountRequest
+          if (req.remember && (!req.encryptionPassword || req.encryptionPassword.length < 8)) {
+            throw new BackendError("Choose an encryption password of at least 8 characters to remember your seed.", {
+              code: "invalid_input"
+            })
+          }
+          const { keypair, gAddress } = deriveStellarKeypairFromMnemonic(req.mnemonic, req.bip39Passphrase)
+          const data = await ensureFreighterSmartAccountDeployed(gAddress)
+          const { account } = await createAccount({
+            mode: "mnemonic",
+            smartAccountAddress: data.smartAccountAddress,
+            gAddress
+          })
+          registerMnemonicKeypair(account.id, keypair)
+          if (req.remember && req.encryptionPassword) {
+            const record = await encryptMnemonicForVault({
+              accountId: account.id,
+              mnemonic: req.mnemonic,
+              bip39Passphrase: req.bip39Passphrase ?? "",
+              encryptionPassword: req.encryptionPassword
+            })
+            await saveMnemonicVaultRecord(record)
+          }
+          sendResponse(
+            ok({
+              gAddress,
+              smartAccountAddress: data.smartAccountAddress,
+              alreadyDeployed: data.alreadyDeployed,
+              account
+            })
+          )
+          return
+        }
+
+        case "UNLOCK_MNEMONIC_VAULT": {
+          const req = message.payload as UnlockMnemonicVaultRequest
+          const record = await loadMnemonicVaultRecord(req.accountId)
+          if (!record) {
+            throw new BackendError("No encrypted seed is stored for this account.", { code: "no_vault" })
+          }
+          const { mnemonic, bip39Passphrase } = await decryptMnemonicFromVault(record, req.encryptionPassword)
+          const { keypair, gAddress } = deriveStellarKeypairFromMnemonic(
+            mnemonic,
+            bip39Passphrase ? bip39Passphrase : undefined
+          )
+          const { accounts } = await getAccounts()
+          const acc = accounts.find((a) => a.id === req.accountId)
+          if (!acc || acc.mode !== "mnemonic" || acc.gAddress !== gAddress) {
+            throw new BackendError("Account does not match saved seed.", { code: "account_mismatch" })
+          }
+          registerMnemonicKeypair(acc.id, keypair)
+          sendResponse(ok())
+          return
+        }
+
+        case "SIGN_DELEGATED_G_AUTH_ENTRY": {
+          const req = message.payload as SignDelegatedGAuthEntryRequest
+          const kp = getMnemonicKeypair(req.accountId)
+          if (!kp) {
+            throw new BackendError(
+              "Seed signer is not loaded. Re-open the wallet and unlock with your encryption password if you enabled Remember.",
+              { code: "mnemonic_locked" }
+            )
+          }
+          const signed = await signDelegatedGAddressEntry({
+            gAddressEntryTemplateXdr: req.gAddressEntryTemplateXdr,
+            signer: kp,
+            networkPassphrase: req.networkPassphrase
+          })
+          sendResponse(ok(signed))
           return
         }
 
