@@ -16,7 +16,7 @@ export interface SignTransactionResponse {
   signedXdr: string
 }
 
-export type AccountMode = 'freighter' | 'phantom' | 'passkey'
+export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic'
 
 export interface StoredAccount {
   id: string
@@ -50,6 +50,8 @@ export interface StoredAccount {
 export interface GetAccountsResponse {
   accounts: StoredAccount[]
   activeAccountId?: string
+  /** Present when the active account is `mnemonic` and an encrypted seed exists (`remember`). */
+  activeAccountHasMnemonicVault?: boolean
 }
 
 export interface SetActiveAccountRequest {
@@ -63,6 +65,44 @@ export interface CreateOrConnectFreighterRequest {
 export interface CreateOrConnectFreighterResponse {
   smartAccountAddress: string
   alreadyDeployed: boolean
+}
+
+/** GET /api/smart-account/freighter?gAddress=… — shape may include backend aliases */
+export interface FreighterSmartAccountStatusResponse {
+  deployed: boolean
+  smartAccountAddress: string
+}
+
+export interface ImportMnemonicAccountRequest {
+  mnemonic: string
+  bip39Passphrase?: string
+  remember?: boolean
+  encryptionPassword?: string
+}
+
+export interface ImportMnemonicAccountResponse {
+  gAddress: string
+  smartAccountAddress: string
+  alreadyDeployed: boolean
+  account: StoredAccount
+}
+
+export interface UnlockMnemonicVaultRequest {
+  accountId: string
+  encryptionPassword: string
+}
+
+export interface SignDelegatedGAuthEntryRequest {
+  accountId: string
+  /** Unsigned Soroban authorization entry XDR (base64); used with stellar-base `authorizeEntry`. */
+  gAddressEntryTemplateXdr: string
+  /** Stellar network passphrase (e.g. `Networks.TESTNET`); must match the delegated build. */
+  networkPassphrase: string
+}
+
+export interface SignDelegatedGAuthEntryResponse {
+  signedAuthEntryBase64: string
+  signerAddress: string
 }
 
 export interface CreateOrConnectPhantomRequest {
@@ -211,6 +251,9 @@ export type MessageType =
   | 'CREATE_OR_CONNECT_FREIGHTER'
   | 'CREATE_OR_CONNECT_PHANTOM'
   | 'CREATE_OR_CONNECT_PASSKEY'
+  | 'IMPORT_MNEMONIC_ACCOUNT'
+  | 'UNLOCK_MNEMONIC_VAULT'
+  | 'SIGN_DELEGATED_G_AUTH_ENTRY'
   | 'BUILD_TX'
   | 'BUILD_DELEGATED_TX'
   | 'SUBMIT_TX_PHANTOM'
@@ -255,6 +298,9 @@ export type BackgroundRequestPayloadByType = {
   CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterRequest
   CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomRequest
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyRequest
+  IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountRequest
+  UNLOCK_MNEMONIC_VAULT: UnlockMnemonicVaultRequest
+  SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryRequest
   BUILD_TX: BuildTxRequest
   BUILD_DELEGATED_TX: BuildDelegatedTxRequest
   SUBMIT_TX_PHANTOM: SubmitPhantomTxRequest
@@ -277,6 +323,9 @@ export type BackgroundResponseDataByType = {
   CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterResponse & { account: StoredAccount }
   CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomResponse & { account: StoredAccount }
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyResponse & { account: StoredAccount }
+  IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountResponse
+  UNLOCK_MNEMONIC_VAULT: undefined
+  SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryResponse
   BUILD_TX: BuildTxResponse
   BUILD_DELEGATED_TX: BuildDelegatedTxResponse
   SUBMIT_TX_PHANTOM: SubmitTxResponse

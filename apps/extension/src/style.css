@@ -5,11 +5,11 @@
 /* Theme tokens (default: dark) */
 :root {
   /* dark */
-  --latch-bg: 31 31 31; /* #1F1F1F */
+  --latch-bg: 28 28 28; /* #1C1C1C */
   --latch-fg: 255 255 255;
   --latch-muted: 178 178 178;
   --latch-primary: 255 173 0; /* #FFAD00 */
-  --latch-surface: 9 9 9; /* #090909 */
+  --latch-surface: 22 22 22; /* #161616 */
   /* #2B2A29 */
   --latch-border: 43 42 41;
 }

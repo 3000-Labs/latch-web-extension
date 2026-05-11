@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss"
+import tailwindAnimate from "tailwindcss-animate"
 
 export default {
   content: ["./src/**/*.{ts,tsx}"],
@@ -14,7 +15,7 @@ export default {
         border: "rgb(var(--latch-border) / <alpha-value>)"
       },
       boxShadow: {
-        soft: "0 10px 30px rgba(0, 0, 0, 0.35)"
+        soft: "none"
       },
       keyframes: {
         screenIn: {
@@ -36,6 +37,6 @@ export default {
       }
     }
   },
-  plugins: []
+  plugins: [tailwindAnimate]
 } satisfies Config
 

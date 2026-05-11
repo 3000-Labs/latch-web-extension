@@ -1,7 +1,6 @@
-import React from "react"
+import React, { useState } from "react"
 import {
   Bell,
-  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Copy,
@@ -9,14 +8,20 @@ import {
   Globe,
   Info,
   KeyRound,
+  Moon,
   Shield,
+  Sun,
+  X,
   User
 } from "lucide-react"
 
 import { Avatar } from "../components/Avatar"
-import { SectionCard } from "../components/SectionCard"
 
 const rowIconClass = "h-[18px] w-[18px] shrink-0"
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <div className="px-1 text-xs font-extrabold tracking-wide text-muted/70">{children}</div>
+}
 
 function ListRow({
   label,
@@ -32,20 +37,24 @@ function ListRow({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-2xl bg-bg/40 px-4 py-3 text-left hover:bg-bg/60"
+      className={[
+        "flex w-full items-center justify-between rounded-2xl",
+        "bg-surface px-4 py-[14px] text-left",
+        "hover:bg-surface/65 active:bg-surface/70"
+      ].join(" ")}
     >
       <div className="flex items-center gap-3">
-        <span className="text-fg/80">{leftIcon}</span>
+        <span className="text-fg/70">{leftIcon}</span>
         <span className="text-sm font-extrabold">{label}</span>
       </div>
-      <div className="flex items-center gap-2 text-fg/60">
+      <div className="flex items-center gap-2 text-fg/50">
         {right ?? <ChevronRight className={rowIconClass} strokeWidth={2} aria-hidden />}
       </div>
     </button>
   )
 }
 
-function Toggle({
+function SettingsToggle({
   checked,
   onChange
 }: {
@@ -54,18 +63,20 @@ function Toggle({
 }) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={[
-        "h-6 w-11 rounded-full border transition-colors",
-        checked ? "border-primary bg-primary" : "border-border bg-surface/60"
+        "h-6 w-11 rounded-full border border-border px-0.5 transition-colors",
+        checked ? "bg-primary" : "bg-surface/60"
       ].join(" ")}
-      aria-pressed={checked}
       aria-label="Toggle"
     >
       <span
         className={[
-          "block h-5 w-5 translate-x-0.5 rounded-full bg-black/80 transition-transform",
-          checked ? "translate-x-[22px] bg-black" : "bg-fg/80"
+          "block h-5 w-5 rounded-full bg-bg transition-transform",
+          checked ? "translate-x-5" : "translate-x-0"
         ].join(" ")}
       />
     </button>
@@ -75,20 +86,26 @@ function Toggle({
 export function SettingsScreen({
   accountName,
   accountAddress,
+  theme,
+  onToggleTheme,
   biometricsEnabled,
   onChangeBiometricsEnabled,
   sidepanelPreferenceSection,
-  onBack,
+  onClose,
   onLogout
 }: {
   accountName: string
   accountAddress: string
+  theme: "dark" | "light"
+  onToggleTheme: () => void
   biometricsEnabled: boolean
   onChangeBiometricsEnabled: (next: boolean) => void
   sidepanelPreferenceSection: React.ReactNode
-  onBack: () => void
+  onClose: () => void
   onLogout: () => void
 }) {
+  const [networkEnabled, setNetworkEnabled] = useState(false)
+
   const short =
     accountAddress.length > 12
       ? `${accountAddress.slice(0, 4)}...${accountAddress.slice(-4)}`
@@ -96,42 +113,36 @@ export function SettingsScreen({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={onBack}
-          className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface/40 text-fg/80 hover:bg-surface/60"
-          aria-label="Back"
-        >
-          <ChevronLeft className={rowIconClass} strokeWidth={2} aria-hidden />
-        </button>
-        <div className="text-base font-extrabold">Settings</div>
-        <div className="w-9" />
-      </div>
+      <button
+        onClick={onClose}
+        className="grid h-9 w-9 place-items-center rounded-full text-fg/70 hover:bg-surface/50 active:bg-surface/60"
+        aria-label="Close"
+      >
+        <X className={rowIconClass} strokeWidth={2} aria-hidden />
+      </button>
 
-      <div className="mt-6">
-        <SectionCard className="p-5">
-          <div className="flex items-center gap-3">
-            <Avatar name={accountName} size={44} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-extrabold">{accountName}</div>
-              <div className="mt-0.5 flex items-center gap-2 text-xs font-bold text-muted">
-                <span className="truncate">{short}</span>
-                <button
-                  className="text-fg/60 hover:text-fg"
-                  aria-label="Copy address"
-                  onClick={() => void navigator.clipboard.writeText(accountAddress)}
-                >
-                  <Copy className={rowIconClass} strokeWidth={2} aria-hidden />
-                </button>
-              </div>
+      <div className="mt-5 rounded-[28px] bg-surface p-4">
+        <div className="flex items-center gap-3">
+          <Avatar name={accountName} size={44} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-base font-extrabold">{accountName}</div>
+            <div className="mt-1 flex items-center gap-2 text-xs font-bold text-muted/80">
+              <span className="truncate">{short}</span>
+              <button
+                className="text-fg/55 hover:text-fg/80"
+                aria-label="Copy address"
+                onClick={() => void navigator.clipboard.writeText(accountAddress)}
+              >
+                <Copy className={rowIconClass} strokeWidth={2} aria-hidden />
+              </button>
             </div>
           </div>
-        </SectionCard>
+        </div>
       </div>
 
-      <div className="mt-6 space-y-5 overflow-auto pb-1">
+      <div className="mt-6 space-y-6 overflow-auto pb-8">
         <div>
-          <div className="px-1 text-xs font-extrabold text-muted">Account</div>
+          <SectionLabel>Account</SectionLabel>
           <div className="mt-3 space-y-2">
             <ListRow label="Account" leftIcon={<User className={rowIconClass} strokeWidth={2} aria-hidden />} />
             <ListRow
@@ -142,31 +153,51 @@ export function SettingsScreen({
         </div>
 
         <div>
-          <div className="px-1 text-xs font-extrabold text-muted">Security</div>
+          <SectionLabel>Security</SectionLabel>
           <div className="mt-3 space-y-2">
             <ListRow
               label="Biometrics Authentication"
               leftIcon={<Fingerprint className={rowIconClass} strokeWidth={2} aria-hidden />}
-              right={<Toggle checked={biometricsEnabled} onChange={onChangeBiometricsEnabled} />}
+              right={<SettingsToggle checked={biometricsEnabled} onChange={onChangeBiometricsEnabled} />}
             />
             <ListRow label="Passcode" leftIcon={<Shield className={rowIconClass} strokeWidth={2} aria-hidden />} />
           </div>
         </div>
 
         <div>
-          <div className="px-1 text-xs font-extrabold text-muted">Preferences</div>
+          <SectionLabel>Preferences</SectionLabel>
           <div className="mt-3 space-y-2">
+            <ListRow
+              label="Theme"
+              leftIcon={
+                theme === "light" ? (
+                  <Sun className={rowIconClass} strokeWidth={2} aria-hidden />
+                ) : (
+                  <Moon className={rowIconClass} strokeWidth={2} aria-hidden />
+                )
+              }
+              right={
+                <SettingsToggle
+                  checked={theme === "light"}
+                  onChange={(next) => {
+                    // Off = dark (default). On = light.
+                    if (next && theme !== "light") onToggleTheme()
+                    if (!next && theme !== "dark") onToggleTheme()
+                  }}
+                />
+              }
+            />
             <ListRow
               label="Network"
               leftIcon={<Globe className={rowIconClass} strokeWidth={2} aria-hidden />}
-              right={<span className="text-xs font-extrabold text-muted">Public</span>}
+              right={<SettingsToggle checked={networkEnabled} onChange={setNetworkEnabled} />}
             />
             <ListRow label="Notifications" leftIcon={<Bell className={rowIconClass} strokeWidth={2} aria-hidden />} />
           </div>
         </div>
 
         <div>
-          <div className="px-1 text-xs font-extrabold text-muted">Support</div>
+          <SectionLabel>Support</SectionLabel>
           <div className="mt-3 space-y-2">
             <ListRow
               label="Help & Support"
@@ -184,7 +215,7 @@ export function SettingsScreen({
 
         <button
           onClick={onLogout}
-          className="mt-2 h-12 w-full rounded-full border border-border bg-surface text-base font-extrabold text-fg hover:bg-surface/80"
+          className="mt-2 h-12 w-full rounded-full bg-surface text-base font-extrabold text-fg hover:bg-surface/65"
         >
           Logout
         </button>

@@ -38,13 +38,17 @@ export const mockHistoryBySection: Array<{ title: string; items: HistoryItemVm[]
     items: [
       { id: "tether-1", kind: "deposit", asset: "Tether", status: "completed", timeLabel: "2hrs ago", amountUsd: "+$505.00" },
       { id: "eth-1", kind: "deposit", asset: "Ethereum", status: "completed", timeLabel: "2hrs ago", amountUsd: "+$1,250.00" },
+      { id: "swap-1", kind: "swap", asset: "Swap USDT → XLM", status: "completed", timeLabel: "3hrs ago", amountUsd: "~$1.00" },
       { id: "xlm-1", kind: "sent", asset: "Stellar", status: "pending", timeLabel: "3hrs ago", amountUsd: "+$1,250.00" },
       { id: "xlm-2", kind: "sent", asset: "Stellar", status: "pending", timeLabel: "6hrs ago", amountUsd: "+$1,250.00" }
     ]
   },
   {
     title: "Yesterday",
-    items: [{ id: "tether-2", kind: "deposit", asset: "Tether", status: "completed", timeLabel: "2hrs ago", amountUsd: "+$505.00" }]
+    items: [
+      { id: "swap-2", kind: "swap", asset: "Swap XLM → USDT", status: "completed", timeLabel: "1d ago", amountUsd: "~$15.24" },
+      { id: "tether-2", kind: "deposit", asset: "Tether", status: "completed", timeLabel: "2hrs ago", amountUsd: "+$505.00" }
+    ]
   }
 ]
 

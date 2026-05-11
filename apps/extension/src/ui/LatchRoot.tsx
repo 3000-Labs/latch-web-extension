@@ -15,15 +15,21 @@ import type {
   CreateOrConnectPhantomResponse,
   GetAccountsResponse,
   GetSetupStateResponse,
+  ImportMnemonicAccountRequest,
+  ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
+  SetActiveAccountRequest,
+  SignDelegatedGAuthEntryRequest,
+  SignDelegatedGAuthEntryResponse,
   StoredAccount,
   SubmitDelegatedTxRequest,
   SubmitPhantomTxRequest,
   SubmitTxResponse,
   SubmitWebauthnTxRequest,
+  UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
 import {
@@ -33,9 +39,10 @@ import {
   getAddress,
   signAuthEntry,
 } from '@stellar/freighter-api'
+import { Networks } from '@stellar/stellar-sdk'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
-import { ExternalLink, Menu, Moon, Settings, Sun, X } from 'lucide-react'
+import { ExternalLink, Menu } from 'lucide-react'
 
 import logoUrl from 'url:../../assets/brand/latch-logo.svg'
 import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
@@ -45,6 +52,9 @@ import { SectionCard } from './components/SectionCard'
 import { HomeScreen } from './screens/HomeScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { SwapScreen } from './screens/SwapScreen'
+import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
+import { AccountMenu } from './components/AccountMenu'
 
 import {
   buildWebauthnSigDataXdrHex,
@@ -54,6 +64,7 @@ import {
   parseAuthenticationResponse,
 } from './webauthn/passkey'
 import { bytesToHex } from './webauthn/utils'
+import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
 
 type Theme = 'dark' | 'light'
 type Surface = 'popup' | 'sidepanel'
@@ -65,8 +76,12 @@ type Route =
   | 'chooseSigner'
   | 'createPasskey'
   | 'passkeyCreated'
+  | 'importSeed'
+  | 'unlockMnemonic'
   | 'home'
   | 'history'
+  | 'swap'
+  | 'swapConfirm'
   | 'sendTx'
   | 'txResult'
   | 'dappApproval'
@@ -156,6 +171,9 @@ function friendlyError(e?: SerializableError): string {
   if (!e) return 'Unknown error'
   if (e.code === 'timeout') return 'Request timed out. Please try again.'
   if (e.status === 403) return 'Not authorized.'
+  if (e.code === 'mnemonic_locked') {
+    return 'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.'
+  }
   return e.message
 }
 
@@ -168,7 +186,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [route, setRoute] = useState<Route>('welcome')
   const [page, setPage] = useState<Page>('main')
-  const [menuOpen, setMenuOpen] = useState(false)
   const [selectedSigner, setSelectedSigner] = useState<SignerId>('passkey')
 
   const [loading, setLoading] = useState<string | null>(null)
@@ -188,6 +205,17 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
   const [txResult, setTxResult] = useState<SubmitTxResponse | null>(null)
 
+  const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
+  const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
+
+  const [activeAccountHasMnemonicVault, setActiveAccountHasMnemonicVault] = useState(false)
+  const [seedPhraseText, setSeedPhraseText] = useState('')
+  const [seedPhraseVisible, setSeedPhraseVisible] = useState(false)
+  const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
+  const [rememberSeed, setRememberSeed] = useState(false)
+  const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
+  const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
+
   useEffect(() => {
     void sendToBackground<undefined, GetSetupStateResponse>({
       type: 'GET_SETUP_STATE',
@@ -206,6 +234,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         if (!res.ok || !res.data) return
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
+        setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
         if (res.data.accounts.length > 0) setRoute('home')
       })
       .catch(() => {})
@@ -231,6 +260,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (!res.ok || !res.data) return
     setAccounts(res.data.accounts)
     setActiveAccountId(res.data.activeAccountId)
+    setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
   }
 
   async function loadPendingDapp() {
@@ -302,6 +332,50 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
+  async function beginMnemonicImport() {
+    setError(null)
+    setLoading('Importing wallet…')
+    try {
+      const req: ImportMnemonicAccountRequest = {
+        mnemonic: seedPhraseText,
+        bip39Passphrase: seedExtensionPassphrase || undefined,
+        remember: rememberSeed,
+        encryptionPassword: rememberSeed ? seedEncryptionPassword : undefined,
+      }
+      const res = await sendToBackground<ImportMnemonicAccountRequest, ImportMnemonicAccountResponse>({
+        type: 'IMPORT_MNEMONIC_ACCOUNT',
+        payload: req,
+      })
+      if (!res.ok) throw new Error(friendlyError(res.error))
+      await persistSetupHasAccount(res.data!.smartAccountAddress)
+      await refreshAccounts()
+      setSeedPhraseText('')
+      setSeedExtensionPassphrase('')
+      setSeedEncryptionPassword('')
+      setRememberSeed(false)
+      setRoute('home')
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  async function unlockMnemonicVault() {
+    if (!activeAccount?.id) throw new Error('No active account')
+    setError(null)
+    setLoading('Unlocking…')
+    try {
+      const res = await sendToBackground<UnlockMnemonicVaultRequest, undefined>({
+        type: 'UNLOCK_MNEMONIC_VAULT',
+        payload: { accountId: activeAccount.id, encryptionPassword: unlockVaultPassword },
+      })
+      if (!res.ok) throw new Error(friendlyError(res.error))
+      setUnlockVaultPassword('')
+      setRoute('home')
+    } finally {
+      setLoading(null)
+    }
+  }
+
   async function beginPasskeyRegistration() {
     setError(null)
     setLoading('Creating passkey…')
@@ -331,8 +405,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (!activeAccount) throw new Error('No active account')
     if (!activeAccount.smartAccountAddress) throw new Error('Account not ready')
 
-    if (activeAccount.mode === 'freighter') {
-      if (!activeAccount.gAddress) throw new Error('Missing G-address for Freighter account')
+    if (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') {
+      if (!activeAccount.gAddress) throw new Error('Missing G-address for delegated account')
       const res = await sendToBackground<
         { smartAccountAddress: string; gAddress: string },
         BuildDelegatedTxResponse
@@ -389,6 +463,53 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const signedAuthEntryBase64 = (signed as any)?.signedAuthEntry as string | undefined
         const signerAddress = signed?.signerAddress
         if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
+
+        setLoading('Submitting transaction…')
+        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
+          type: 'SUBMIT_TX_DELEGATED',
+          payload: {
+            txXdr: b.txXdr,
+            smartAccountAuthEntryXdr: b.smartAccountAuthEntryXdr,
+            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
+            signedAuthEntryBase64,
+            signerAddress,
+          },
+        })
+        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+        setTxResult(submitRes.data ?? {})
+        setRoute('txResult')
+        return b.txXdr
+      }
+
+      if (activeAccount.mode === 'mnemonic') {
+        if (!activeAccount.gAddress) throw new Error('Missing G-address for mnemonic account')
+        const b =
+          builtDelegatedTx ??
+          (
+            await sendToBackground<any, BuildDelegatedTxResponse>({
+              type: 'BUILD_DELEGATED_TX',
+              payload: {
+                smartAccountAddress: activeAccount.smartAccountAddress,
+                gAddress: activeAccount.gAddress,
+              },
+            })
+          ).data
+        if (!b) throw new Error('Failed to build delegated transaction.')
+        setLoading('Signing with local key…')
+        const signRes = await sendToBackground<
+          SignDelegatedGAuthEntryRequest,
+          SignDelegatedGAuthEntryResponse
+        >({
+          type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
+          payload: {
+            accountId: activeAccount.id,
+            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
+            networkPassphrase: Networks.TESTNET,
+          },
+        })
+        if (!signRes.ok) throw new Error(friendlyError(signRes.error))
+        const signedAuthEntryBase64 = signRes.data!.signedAuthEntryBase64
+        const signerAddress = signRes.data!.signerAddress
 
         setLoading('Submitting transaction…')
         const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
@@ -574,66 +695,47 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         ].join(' ')}
       >
         <div className="flex items-center justify-between gap-2">
-          <IconButton aria-label="Menu" title="Menu" onClick={() => setMenuOpen((v) => !v)}>
-            <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
-          </IconButton>
-
+          {page === 'main' && route === 'home' ? (
+            <AccountMenu
+              name="Crownz"
+              accounts={accounts}
+              activeAccountId={activeAccountId}
+              onSelectAccount={(accountId) => {
+                void sendToBackground<SetActiveAccountRequest, undefined>({
+                  type: 'SET_ACTIVE_ACCOUNT',
+                  payload: { accountId },
+                })
+                  .then(() => refreshAccounts())
+                  .catch(() => {})
+              }}
+            />
+          ) : (
+            <div className="h-10 w-10" />
+          )}
           <div className="flex items-center justify-end gap-2">
             <IconButton
-              aria-label="Toggle theme"
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              aria-label="Menu"
+              title="Menu"
+              onClick={() => {
+                setPage('settings')
+              }}
             >
-              {theme === 'light' ? (
-                <Sun className={headerIconClass} strokeWidth={2} aria-hidden />
-              ) : (
-                <Moon className={headerIconClass} strokeWidth={2} aria-hidden />
-              )}
+              <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
             </IconButton>
-
-            {surface === 'popup' ? (
-              <IconButton aria-label="Close" onClick={() => window.close()}>
-                <X className={headerIconClass} strokeWidth={2} aria-hidden />
-              </IconButton>
-            ) : null}
           </div>
         </div>
 
-        {menuOpen ? (
-          <>
-            <button
-              aria-label="Close menu"
-              className="absolute inset-0 z-10 cursor-default bg-black/30"
-              onClick={() => setMenuOpen(false)}
-            />
-            <div className="absolute left-0 top-0 z-20 h-full w-[240px] border-r border-border bg-surface px-3 py-4 shadow-soft">
-              <div className="px-3 pb-3 text-sm font-extrabold">Latch</div>
-
-              <button
-                className={[
-                  'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-bold',
-                  page === 'settings' ? 'bg-bg text-fg' : 'text-fg/90 hover:bg-bg/70',
-                ].join(' ')}
-                onClick={() => {
-                  setPage('settings')
-                  setMenuOpen(false)
-                }}
-              >
-                <Settings className={headerIconClass} strokeWidth={2} aria-hidden />
-                <span>Settings</span>
-              </button>
-            </div>
-          </>
-        ) : null}
-
         {page === 'settings' ? (
-          <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+          <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
             <SettingsScreen
               accountName={activeAccount?.smartAccountAddress ? 'Crownz' : 'Account'}
               accountAddress={activeAccount?.smartAccountAddress ?? '—'}
+              theme={theme}
+              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               biometricsEnabled={false}
               onChangeBiometricsEnabled={() => {}}
               sidepanelPreferenceSection={sidepanelPreferenceSection}
-              onBack={() => setPage('main')}
+              onClose={() => setPage('main')}
               onLogout={() => void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
             />
           </div>
@@ -757,6 +859,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     I Have a Wallet
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoute('importSeed')}
+                    className="h-11 w-full rounded-full text-sm font-extrabold text-primary hover:underline"
+                  >
+                    Import with recovery phrase
                   </button>
                 </div>
               </div>
@@ -931,15 +1040,225 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
+            {!loading && route === 'importSeed' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <div className="text-center">
+                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
+                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">Import recovery phrase</h2>
+                  <p className="mt-2 text-xs text-muted">
+                    Your phrase stays on this device. Only your public Stellar address is sent to Latch.
+                  </p>
+                </div>
+
+                <div className="mt-4 flex items-center justify-between gap-3">
+                  <label className="block text-xs font-bold text-muted">Recovery phrase (12–24 words)</label>
+                  <button
+                    type="button"
+                    onClick={() => setSeedPhraseVisible((v) => !v)}
+                    className="rounded-full px-3 py-1 text-xs font-extrabold text-fg/80 hover:bg-surface/60 hover:text-fg"
+                    aria-pressed={seedPhraseVisible}
+                  >
+                    {seedPhraseVisible ? 'Hide' : 'View'}
+                  </button>
+                </div>
+                <textarea
+                  value={seedPhraseText}
+                  onChange={(e) => setSeedPhraseText(e.target.value)}
+                  rows={4}
+                  autoComplete="off"
+                  style={
+                    ({
+                      WebkitTextSecurity: seedPhraseVisible ? 'none' : 'disc',
+                    }) as React.CSSProperties
+                  }
+                  className="mt-1 w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                  placeholder="word1 word2 …"
+                />
+
+                <label className="mt-3 block text-xs font-bold text-muted">BIP-39 passphrase (optional)</label>
+                <input
+                  type="password"
+                  value={seedExtensionPassphrase}
+                  onChange={(e) => setSeedExtensionPassphrase(e.target.value)}
+                  autoComplete="new-password"
+                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                />
+
+                <label className="mt-3 flex items-center gap-2 text-sm font-bold">
+                  <input
+                    type="checkbox"
+                    checked={rememberSeed}
+                    onChange={(e) => setRememberSeed(e.target.checked)}
+                  />
+                  Remember on this device (encrypted)
+                </label>
+                {rememberSeed ? (
+                  <>
+                    <label className="mt-2 block text-xs font-bold text-muted">Encryption password</label>
+                    <input
+                      type="password"
+                      value={seedEncryptionPassword}
+                      onChange={(e) => setSeedEncryptionPassword(e.target.value)}
+                      autoComplete="new-password"
+                      className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                    />
+                  </>
+                ) : null}
+
+                <div className="mt-auto space-y-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void beginMnemonicImport().catch((e) =>
+                        setError(e instanceof Error ? e.message : String(e))
+                      )
+                    }
+                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                  >
+                    Import & connect
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoute('welcome')}
+                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {!loading && route === 'unlockMnemonic' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <div className="text-center">
+                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
+                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">Unlock saved phrase</h2>
+                  <p className="mt-2 text-xs text-muted">Enter the password you chose when enabling Remember.</p>
+                </div>
+                <input
+                  type="password"
+                  value={unlockVaultPassword}
+                  onChange={(e) => setUnlockVaultPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="mt-6 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                />
+                <div className="mt-auto space-y-3 pt-6">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void unlockMnemonicVault().catch((e) =>
+                        setError(e instanceof Error ? e.message : String(e))
+                      )
+                    }
+                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                  >
+                    Unlock
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRoute('home')}
+                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {!loading && route === 'home' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <HomeScreen accountName="Crownz" onOpenHistory={() => setRoute('history')} />
+                {activeAccount?.mode === 'mnemonic' && activeAccountHasMnemonicVault ? (
+                  <div className="mb-3 rounded-2xl border border-primary/40 bg-surface/80 px-3 py-3 text-xs shadow-soft">
+                    <div className="font-extrabold text-fg">Saved recovery phrase is locked</div>
+                    <div className="mt-1 text-muted">Unlock to sign transactions after the extension restarts.</div>
+                    <button
+                      type="button"
+                      onClick={() => setRoute('unlockMnemonic')}
+                      className="mt-2 h-9 w-full rounded-full bg-primary text-sm font-extrabold text-black"
+                    >
+                      Unlock
+                    </button>
+                  </div>
+                ) : null}
+                <HomeScreen
+                  accountName="Crownz"
+                  onOpenHistory={() => setRoute('history')}
+                  onOpenSwap={() => {
+                    setSwapDraft({
+                      payTokenId: 'usdt',
+                      receiveTokenId: 'xlm',
+                      payAmount: '',
+                      useExchangeBalance: false,
+                      approved: false,
+                    })
+                    setSwapQuote(null)
+                    setRoute('swap')
+                  }}
+                />
               </div>
             ) : null}
 
             {!loading && route === 'history' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <HistoryScreen onBack={() => setRoute('home')} />
+                <HistoryScreen
+                  onBack={() => setRoute('home')}
+                  onSelectItem={(it) => {
+                    if (it.kind !== 'swap') return
+                    setSwapDraft({
+                      payTokenId: it.asset.includes('XLM') ? 'xlm' : 'usdt',
+                      receiveTokenId: it.asset.includes('XLM') ? 'usdt' : 'xlm',
+                      payAmount: '1',
+                      useExchangeBalance: false,
+                      approved: true,
+                    })
+                    setSwapQuote(null)
+                    setRoute('swap')
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'swap' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <SwapScreen
+                  surface={surface}
+                  initialState={swapDraft ?? undefined}
+                  onBack={() => setRoute('home')}
+                  onContinue={(q, d) => {
+                    setSwapDraft(d)
+                    setSwapQuote(q)
+                    setRoute('swapConfirm')
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'swapConfirm' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                {swapDraft && swapQuote ? (
+                  <ConfirmSwapScreen
+                    surface={surface}
+                    draft={swapDraft}
+                    quote={swapQuote}
+                    onBackOrCancel={() => setRoute('swap')}
+                    onConfirm={() => {
+                      setSwapDraft(null)
+                      setSwapQuote(null)
+                      setRoute('home')
+                    }}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
+                    <div className="font-extrabold">Swap session expired</div>
+                    <div className="mt-2 text-muted">Start a new swap from the dashboard.</div>
+                    <button
+                      className="mt-4 h-10 w-full rounded-full bg-primary text-sm font-extrabold text-black"
+                      onClick={() => setRoute('home')}
+                    >
+                      Back to Home
+                    </button>
+                  </div>
+                )}
               </div>
             ) : null}
 

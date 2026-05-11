@@ -1,9 +1,9 @@
-import React from "react"
+import React from 'react'
 
 export function ActionIconButton({
   label,
   icon,
-  onClick
+  onClick,
 }: {
   label: string
   icon: React.ReactNode
@@ -11,11 +11,10 @@ export function ActionIconButton({
 }) {
   return (
     <button onClick={onClick} className="flex flex-col items-center gap-2">
-      <span className="grid h-14 w-14 place-items-center rounded-full bg-surface/60 shadow-soft">
+      <span className="grid h-14 w-14 place-items-center rounded-full bg-surface/60 ">
         <span className="text-primary">{icon}</span>
       </span>
-      <span className="text-xs font-bold text-muted">{label}</span>
+      <span className="text-sm font-normal text-muted">{label}</span>
     </button>
   )
 }
-

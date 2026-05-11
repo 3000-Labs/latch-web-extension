@@ -46,6 +46,11 @@ packages/
 - Stellar network: testnet by default during development
 - All icons SVGs should never be written from scratch, prefer importing icons that fit the task.
 - Use lucide icons or icon svgs if provided
+- Keep UI code clean and modular: avoid large monolithic screen files. Prefer extracting reusable UI building blocks into `apps/extension/src/ui/components/*` or feature-local folders (e.g. `apps/extension/src/ui/swap/components/*`) once a screen grows beyond a few small helpers.
+- **Pixel-perfect UI from designs is mandatory**:
+  - Do not invent spacing, typography, shadows, gradients, layouts, or components that are not explicitly shown in the design.
+  - Prefer using the exact design-provided image/assets when pixel accuracy is required.
+  - If any design detail is ambiguous or missing (dimensions, states, interactions), **ask for clarification** before implementing.
 
 ## Data fetching & API requests (Plasmo / MV3 best practices)
 

@@ -5,14 +5,17 @@ import { FilterChip } from "../components/FilterChip"
 import { SearchInput } from "../components/SearchInput"
 import { SectionCard } from "../components/SectionCard"
 import type { HistoryKind } from "../mock/wallet"
+import type { HistoryItemVm } from "../mock/wallet"
 import { mockHistoryBySection } from "../mock/wallet"
 
 type Filter = "all" | HistoryKind
 
 export function HistoryScreen({
-  onBack
+  onBack,
+  onSelectItem
 }: {
   onBack: () => void
+  onSelectItem?: (item: HistoryItemVm) => void
 }) {
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<Filter>("all")
@@ -82,6 +85,8 @@ export function HistoryScreen({
                 {section.items.map((it) => (
                   <button
                     key={it.id}
+                    type="button"
+                    onClick={() => onSelectItem?.(it)}
                     className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface/40 px-4 py-4 text-left hover:bg-surface/60"
                   >
                     <div className="flex items-center gap-3">
