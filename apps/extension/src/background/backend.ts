@@ -23,8 +23,8 @@ import type {
   SubmitWebauthnTxRequest
 } from "@latch/types"
 
-// const DEFAULT_LATCH_API_URL = "https://v0-latch-stellar.vercel.app"
-const DEFAULT_LATCH_API_URL = "http://localhost:3000"
+const DEFAULT_LATCH_API_URL = "https://v0-latch-stellar.vercel.app"
+// const DEFAULT_LATCH_API_URL = "http://localhost:3000"
 
 /** Plasmo inlines `process.env.PLASMO_PUBLIC_*` at build time; keep a direct `process.env` reference. */
 function latchApiBaseUrl(): string {
