@@ -22,6 +22,9 @@ export interface StoredAccount {
   id: string
   mode: AccountMode
 
+  /** Local-only user label (stored in chrome.storage.local). */
+  label?: string
+
   /** Soroban smart account address */
   smartAccountAddress: string
 
@@ -182,6 +185,48 @@ export interface SubmitTxResponse {
   [k: string]: unknown
 }
 
+export interface BackendWebauthnBeginResponse {
+  options: unknown
+}
+
+export interface BackendWebauthnRegistrationFinishRequest {
+  response: unknown
+}
+
+export interface BackendWebauthnRegistrationFinishResponse {
+  credentialId: string
+  keyDataHex: string
+  smartAccountAddress: string
+  deployed: boolean
+  alreadyDeployed: boolean
+  [k: string]: unknown
+}
+
+export interface BackendWebauthnAuthenticationFinishRequest {
+  response: unknown
+}
+
+export interface BackendSessionAccount {
+  smartAccountAddress: string
+  credentialId?: string
+  deployed?: boolean
+  createdAt?: number
+  [k: string]: unknown
+}
+
+export interface BackendAccountsResponse {
+  accounts: BackendSessionAccount[]
+}
+
+export interface BackendWebauthnAuthenticationFinishResponse {
+  smartAccountAddress: string
+  keyDataHex: string
+  deployed: boolean
+  activeCredentialId?: string
+  accounts: BackendSessionAccount[]
+  [k: string]: unknown
+}
+
 export type DappPermission = 'getPublicKey' | 'signTransaction'
 
 export type PendingDappRequestKind = DappPermission
@@ -259,6 +304,11 @@ export type MessageType =
   | 'SUBMIT_TX_PHANTOM'
   | 'SUBMIT_TX_DELEGATED'
   | 'SUBMIT_TX_WEBAUTHN'
+  | 'PASSKEY_REG_BEGIN'
+  | 'PASSKEY_REG_FINISH'
+  | 'PASSKEY_AUTH_BEGIN'
+  | 'PASSKEY_AUTH_FINISH'
+  | 'RENAME_ACCOUNT'
   | 'GET_DAPP_PERMISSIONS'
   | 'SET_DAPP_PERMISSIONS'
   | 'LIST_PENDING_DAPP_REQUESTS'
@@ -306,6 +356,11 @@ export type BackgroundRequestPayloadByType = {
   SUBMIT_TX_PHANTOM: SubmitPhantomTxRequest
   SUBMIT_TX_DELEGATED: SubmitDelegatedTxRequest
   SUBMIT_TX_WEBAUTHN: SubmitWebauthnTxRequest
+  PASSKEY_REG_BEGIN: { displayName?: string } | undefined
+  PASSKEY_REG_FINISH: BackendWebauthnRegistrationFinishRequest
+  PASSKEY_AUTH_BEGIN: undefined
+  PASSKEY_AUTH_FINISH: BackendWebauthnAuthenticationFinishRequest
+  RENAME_ACCOUNT: { accountId: string; label?: string }
   GET_DAPP_PERMISSIONS: GetDappPermissionsRequest
   SET_DAPP_PERMISSIONS: SetDappPermissionsRequest
   LIST_PENDING_DAPP_REQUESTS: ListPendingDappRequestsRequest
@@ -331,6 +386,15 @@ export type BackgroundResponseDataByType = {
   SUBMIT_TX_PHANTOM: SubmitTxResponse
   SUBMIT_TX_DELEGATED: SubmitTxResponse
   SUBMIT_TX_WEBAUTHN: SubmitTxResponse
+  PASSKEY_REG_BEGIN: BackendWebauthnBeginResponse
+  PASSKEY_REG_FINISH: BackendWebauthnRegistrationFinishResponse & { account: StoredAccount }
+  PASSKEY_AUTH_BEGIN: BackendWebauthnBeginResponse
+  PASSKEY_AUTH_FINISH: BackendWebauthnAuthenticationFinishResponse & {
+    account: StoredAccount
+    accounts: StoredAccount[]
+    activeAccountId?: string
+  }
+  RENAME_ACCOUNT: undefined
   GET_DAPP_PERMISSIONS: GetDappPermissionsResponse
   SET_DAPP_PERMISSIONS: GetDappPermissionsResponse
   LIST_PENDING_DAPP_REQUESTS: ListPendingDappRequestsResponse

@@ -1,9 +1,72 @@
-import { describe, expect, it } from "vitest"
+import type { StoredAccount } from "@latch/types"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { Encoder } from "cbor-x"
 import { bytesToBase64Url, bytesToHex, concatBytes } from "./utils"
-import { extractRegistrationKeyData } from "./passkey"
+import {
+  assertBeginOptionsRpIdMatchesExtension,
+  enrichWebauthnRpIdHashErrorMessage,
+  extractRegistrationKeyData,
+  formatWebauthnBrowserError,
+  getWebauthnRpIdFromBeginOptions,
+  nextPasskeyAccountDisplayName,
+  readAuthenticatorRpIdHashHexFromCredentialJSON
+} from "./passkey"
+
+function account(mode: StoredAccount["mode"], id: string): StoredAccount {
+  return { id, mode, smartAccountAddress: "SADDR", createdAt: 0 }
+}
 
 describe("webauthn/passkey", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("nextPasskeyAccountDisplayName is 1-based and counts only passkey accounts", () => {
+    expect(nextPasskeyAccountDisplayName([])).toBe("Latch account 1")
+    expect(nextPasskeyAccountDisplayName([account("mnemonic", "1"), account("passkey", "2")])).toBe("Latch account 2")
+    expect(nextPasskeyAccountDisplayName([account("passkey", "1"), account("passkey", "2")])).toBe("Latch account 3")
+  })
+
+  it("getWebauthnRpIdFromBeginOptions reads rp.id or rpId from object or JSON string", () => {
+    expect(getWebauthnRpIdFromBeginOptions({ rp: { id: "ext-1", name: "x" }, challenge: "c" })).toBe("ext-1")
+    expect(getWebauthnRpIdFromBeginOptions({ rpId: "ext-2", challenge: "c" })).toBe("ext-2")
+    expect(
+      getWebauthnRpIdFromBeginOptions(JSON.stringify({ rp: { id: "ext-3", name: "x" }, challenge: "c" }))
+    ).toBe("ext-3")
+    expect(getWebauthnRpIdFromBeginOptions(null)).toBeUndefined()
+  })
+
+  it("assertBeginOptionsRpIdMatchesExtension throws on chrome-extension when rp id mismatches", () => {
+    vi.stubGlobal("chrome", { runtime: { id: "expected-ext" } })
+    vi.stubGlobal("window", { location: { protocol: "chrome-extension:" } })
+
+    expect(() => assertBeginOptionsRpIdMatchesExtension({ rp: { id: "wrong", name: "n" } })).toThrow(/RP mismatch/)
+
+    expect(() => assertBeginOptionsRpIdMatchesExtension({ rp: { id: "expected-ext", name: "n" } })).not.toThrow()
+  })
+
+  it("assertBeginOptionsRpIdMatchesExtension is a no-op when not on chrome-extension protocol", () => {
+    vi.stubGlobal("chrome", { runtime: { id: "expected-ext" } })
+    vi.stubGlobal("window", { location: { protocol: "https:" } })
+
+    expect(() => assertBeginOptionsRpIdMatchesExtension({ rp: { id: "wrong", name: "n" } })).not.toThrow()
+  })
+
+  it("formatWebauthnBrowserError surfaces cause for ERROR_INVALID_DOMAIN on chrome-extension", () => {
+    vi.stubGlobal("chrome", { runtime: { id: "ghpalnblflhpeggnlilhhmohbdinlfne" } })
+    vi.stubGlobal("window", {
+      location: { protocol: "chrome-extension:" },
+    })
+
+    const err = new Error("ghpalnblflhpeggnlilhhmohbdinlfne is an invalid domain")
+    ;(err as { code?: string }).code = "ERROR_INVALID_DOMAIN"
+    err.cause = new Error("SecurityError: The relying party ID is not valid.")
+
+    const msg = formatWebauthnBrowserError(err)
+    expect(msg).toContain("Details:")
+    expect(msg).toContain('rp.id to "ghpalnblflhpeggnlilhhmohbdinlfne"')
+  })
+
   it("extractRegistrationKeyData builds keyDataHex = uncompressedPk||credentialIdBytes", () => {
     const encoder = new Encoder()
 
@@ -42,6 +105,59 @@ describe("webauthn/passkey", () => {
 
     const expectedKeyDataBytes = concatBytes(res.publicKeyUncompressed, credIdBytes)
     expect(res.keyDataHex).toBe(bytesToHex(expectedKeyDataBytes))
+  })
+
+  it("readAuthenticatorRpIdHashHexFromCredentialJSON reads first 32 bytes from authenticatorData", () => {
+    const rpIdHash = new Uint8Array(32)
+    rpIdHash[0] = 0xab
+    rpIdHash[31] = 0xcd
+    const authData = concatBytes(rpIdHash, new Uint8Array([0, 0, 0, 0]))
+    const cred = { response: { authenticatorData: bytesToBase64Url(authData) } }
+    expect(readAuthenticatorRpIdHashHexFromCredentialJSON(cred)).toBe(bytesToHex(rpIdHash))
+  })
+
+  it("enrichWebauthnRpIdHashErrorMessage leaves unrelated messages unchanged", async () => {
+    expect(await enrichWebauthnRpIdHashErrorMessage("Network error", {})).toBe("Network error")
+  })
+
+  it("enrichWebauthnRpIdHashErrorMessage appends expected vs authenticator rpId hashes", async () => {
+    const rpId = "test-extension-id"
+    const enc = new TextEncoder()
+    const expectedDigest = new Uint8Array(await crypto.subtle.digest("SHA-256", enc.encode(rpId)))
+    const expectedHex = bytesToHex(expectedDigest)
+
+    const encoder = new Encoder()
+    const credIdBytes = new Uint8Array([1])
+    const x = new Uint8Array(32).fill(0x11)
+    const y = new Uint8Array(32).fill(0x22)
+    const coseKeyBytes = encoder.encode({ [-2]: x, [-3]: y })
+    const flags = 0x40
+    const authRpIdHash = new Uint8Array(32).fill(0xee)
+    const signCount = new Uint8Array(4)
+    const aaguid = new Uint8Array(16)
+    const credIdLen = new Uint8Array([0, credIdBytes.length])
+    const authData = concatBytes(
+      authRpIdHash,
+      concatBytes(
+        new Uint8Array([flags]),
+        concatBytes(signCount, concatBytes(aaguid, concatBytes(credIdLen, concatBytes(credIdBytes, coseKeyBytes))))
+      )
+    )
+    const attestationObjectBytes = encoder.encode({ authData })
+    const registrationResponse = {
+      id: "cred-1",
+      response: { attestationObject: bytesToBase64Url(attestationObjectBytes) }
+    }
+
+    const msg = await enrichWebauthnRpIdHashErrorMessage("Unexpected RP ID hash", {
+      optionsJSON: { rp: { id: rpId, name: "Latch" }, challenge: "x" },
+      credentialResponse: registrationResponse
+    })
+
+    expect(msg).toContain("Unexpected RP ID hash")
+    expect(msg).toContain(`"test-extension-id"`)
+    expect(msg).toContain(expectedHex)
+    expect(msg).toContain(bytesToHex(authRpIdHash))
   })
 })
 

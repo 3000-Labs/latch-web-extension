@@ -12,6 +12,8 @@
 import type {
   BackgroundMessage,
   BackgroundResponse,
+  BackendWebauthnAuthenticationFinishRequest,
+  BackendWebauthnRegistrationFinishRequest,
   BuildDelegatedTxRequest,
   BuildTxRequest,
   CreateOrConnectFreighterRequest,
@@ -44,6 +46,10 @@ import {
   createOrConnectPasskey,
   createOrConnectPhantom,
   ensureFreighterSmartAccountDeployed,
+  passkeyAuthenticationBegin,
+  passkeyAuthenticationFinish,
+  passkeyRegistrationBegin,
+  passkeyRegistrationFinish,
   submitTxDelegated,
   submitTxPhantom,
   submitTxWebauthn
@@ -67,7 +73,9 @@ import {
   addPendingDappRequest,
   removePendingDappRequest,
   clearSession,
+  disconnectSessionForLogoutDev,
   migrateLegacyPublicKeyIfNeeded,
+  renameAccount,
   setActiveAccount,
   setDappPermissions
 } from "./storage"
@@ -245,7 +253,7 @@ chrome.runtime.onMessage.addListener(
 
         case "LOGOUT": {
           clearMnemonicSessionKeys()
-          await clearSession()
+          await disconnectSessionForLogoutDev()
           await setSetupState({ setupState: "new", accountPublicKey: undefined })
           sendResponse(ok())
           return
@@ -308,6 +316,70 @@ chrome.runtime.onMessage.addListener(
             passkeyKeyDataHex: req.keyDataHex
           })
           sendResponse(ok({ ...data, account }))
+          return
+        }
+
+        case "PASSKEY_REG_BEGIN": {
+          const req = (message.payload as { displayName?: string } | undefined) ?? undefined
+          const data = await passkeyRegistrationBegin(req)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "PASSKEY_REG_FINISH": {
+          const req = message.payload as BackendWebauthnRegistrationFinishRequest
+          const data = await passkeyRegistrationFinish(req)
+          const { account } = await createAccount({
+            mode: "passkey",
+            smartAccountAddress: data.smartAccountAddress,
+            passkeyCredentialId: data.credentialId,
+            passkeyKeyDataHex: data.keyDataHex
+          })
+          sendResponse(ok({ ...data, account }))
+          return
+        }
+
+        case "PASSKEY_AUTH_BEGIN": {
+          const data = await passkeyAuthenticationBegin()
+          sendResponse(ok(data))
+          return
+        }
+
+        case "PASSKEY_AUTH_FINISH": {
+          const req = message.payload as BackendWebauthnAuthenticationFinishRequest
+          const data = await passkeyAuthenticationFinish(req)
+
+          const activeCredentialId = data.activeCredentialId ?? data.accounts?.[0]?.credentialId
+          if (!activeCredentialId) {
+            throw new BackendError("Passkey login did not return a credential id.", { code: "invalid_response" })
+          }
+
+          const { account, activeAccountId } = await createAccount({
+            mode: "passkey",
+            smartAccountAddress: data.smartAccountAddress,
+            passkeyCredentialId: activeCredentialId,
+            passkeyKeyDataHex: data.keyDataHex
+          })
+
+          // Best-effort: attach other passkey accounts from session list (may not include keyDataHex).
+          for (const a of data.accounts ?? []) {
+            if (!a.smartAccountAddress || !a.credentialId) continue
+            await createAccount({
+              mode: "passkey",
+              smartAccountAddress: a.smartAccountAddress,
+              passkeyCredentialId: a.credentialId
+            })
+          }
+
+          const accRes = await getAccounts()
+          sendResponse(ok({ ...data, account, accounts: accRes.accounts, activeAccountId }))
+          return
+        }
+
+        case "RENAME_ACCOUNT": {
+          const req = message.payload as { accountId: string; label?: string }
+          await renameAccount(req)
+          sendResponse(ok())
           return
         }
 

@@ -1,8 +1,15 @@
+import type { StoredAccount } from "@latch/types"
 import { p256 } from "@noble/curves/nist.js"
 import { decodeMultiple } from "cbor-x"
 import { xdr } from "@stellar/stellar-sdk"
 
 import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from "./utils"
+
+/** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
+export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
+  const passkeyCount = accounts.reduce((n, a) => n + (a.mode === "passkey" ? 1 : 0), 0)
+  return `Latch account ${passkeyCount + 1}`
+}
 
 export type PasskeyRegistrationResult = {
   credentialId: string
@@ -197,5 +204,173 @@ export function parseAuthenticationResponse(authResponse: any): Omit<PasskeyAsse
   const signatureDer = base64UrlToBytes(resp?.signature)
   const signatureCompact = toLowSCompactSignatureP256(signatureDer)
   return { authenticatorData, clientDataJson, signatureCompact }
+}
+
+function readErrorCauseMessage(cause: unknown): string | undefined {
+  if (cause instanceof Error) return cause.message
+  if (cause && typeof cause === "object" && "message" in cause && typeof (cause as { message: unknown }).message === "string") {
+    return (cause as { message: string }).message
+  }
+  return undefined
+}
+
+/**
+ * Maps @simplewebauthn/browser start errors to clearer text on extension pages.
+ * `ERROR_INVALID_DOMAIN` often masks the real SecurityError in `cause`.
+ */
+/** Parse begin `options` whether the API returns an object or a JSON string. */
+export function webauthnBeginOptionsToObject(options: unknown): Record<string, unknown> | null {
+  if (options == null) return null
+  if (typeof options === "string") {
+    try {
+      const o = JSON.parse(options) as unknown
+      if (typeof o === "object" && o !== null && !Array.isArray(o)) return o as Record<string, unknown>
+      return null
+    } catch {
+      return null
+    }
+  }
+  if (typeof options === "object" && !Array.isArray(options)) return options as Record<string, unknown>
+  return null
+}
+
+/**
+ * Reads rp.id (registration) or rpId (authentication) from WebAuthn begin options.
+ */
+export function getWebauthnRpIdFromBeginOptions(options: unknown): string | undefined {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return undefined
+  const rp = o.rp as { id?: unknown } | undefined
+  if (rp && typeof rp.id === "string") return rp.id
+  if (typeof o.rpId === "string") return o.rpId
+  return undefined
+}
+
+/**
+ * Ensures server-issued options match extension WebAuthn (rp.id / rpId === chrome.runtime.id).
+ * No-op when not on a chrome-extension page (e.g. unit tests without extension globals).
+ */
+export function assertBeginOptionsRpIdMatchesExtension(options: unknown): void {
+  const protocol = typeof window !== "undefined" ? window.location.protocol : ""
+  if (protocol !== "chrome-extension:") return
+
+  const extId =
+    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+      ? chrome.runtime.id
+      : ""
+  if (!extId) return
+
+  const rpId = getWebauthnRpIdFromBeginOptions(options)
+  if (rpId === undefined) {
+    throw new Error(
+      [
+        "WebAuthn options from the server are missing rp.id (registration) or rpId (authentication).",
+        "The Latch API must return options built for this Chrome extension when chromeExtensionId is sent on begin.",
+      ].join(" ")
+    )
+  }
+  if (rpId !== extId) {
+    throw new Error(
+      [
+        `WebAuthn RP mismatch: the server set rp.id/rpId to "${rpId}" but this extension's id is "${extId}".`,
+        "Registration/authentication will fail verification. Fix the API to set rp.id (and verify with expectedRPID) to chrome.runtime.id from chromeExtensionId.",
+      ].join(" ")
+    )
+  }
+}
+
+export function formatWebauthnBrowserError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err)
+
+  const code = (err as { code?: string }).code
+  const causeMsg = readErrorCauseMessage((err as { cause?: unknown }).cause)
+  const protocol = typeof window !== "undefined" ? window.location.protocol : ""
+
+  if (code === "ERROR_INVALID_DOMAIN" && protocol === "chrome-extension:") {
+    const extId = typeof chrome !== "undefined" && chrome.runtime?.id ? chrome.runtime.id : "your-extension-id"
+    const parts = [
+      "WebAuthn failed in the extension.",
+      causeMsg ? `Details: ${causeMsg}` : undefined,
+      `The server must receive chromeExtensionId and set WebAuthn rp.id to "${extId}" (same as chrome.runtime.id).`,
+    ].filter(Boolean)
+    return parts.join(" ")
+  }
+
+  if (causeMsg) return `${err.message} (${causeMsg})`
+  return err.message
+}
+
+/** SimpleWebAuthn server throws this when `authenticatorData` rpIdHash does not match any expected RP ID (SHA-256). */
+const UNEXPECTED_RP_ID_HASH_RE = /unexpected\s+rp\s*id\s*hash/i
+
+async function sha256HexUtf8(rpId: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId))
+  return bytesToHex(new Uint8Array(digest))
+}
+
+/**
+ * Reads the first 32 bytes of `authenticatorData` (WebAuthn rpIdHash) from a credential returned by
+ * `startRegistration` / `startAuthentication` (JSON shape).
+ */
+export function readAuthenticatorRpIdHashHexFromCredentialJSON(credential: unknown): string | null {
+  const resp = (credential as { response?: unknown } | null)?.response
+  if (!resp || typeof resp !== "object") return null
+  const r = resp as Record<string, unknown>
+  try {
+    if (typeof r.authenticatorData === "string" && r.authenticatorData.length > 0) {
+      const d = base64UrlToBytes(r.authenticatorData)
+      if (d.length < 32) return null
+      return bytesToHex(d.subarray(0, 32))
+    }
+    if (typeof r.attestationObject === "string") {
+      const { authData } = parseAttestationObject(r.attestationObject)
+      if (authData.length < 32) return null
+      return bytesToHex(authData.subarray(0, 32))
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+/**
+ * When the Latch API returns SimpleWebAuthn's `Unexpected RP ID hash`, append local diagnostics:
+ * rpId from begin options, SHA-256(rpId) as the verifier expects, and rpIdHash from the credential's authData.
+ */
+export async function enrichWebauthnRpIdHashErrorMessage(
+  message: string,
+  ctx: { optionsJSON?: unknown; credentialResponse?: unknown }
+): Promise<string> {
+  if (!UNEXPECTED_RP_ID_HASH_RE.test(message)) return message
+
+  const parts: string[] = [message]
+  const rpId =
+    ctx.optionsJSON !== undefined ? getWebauthnRpIdFromBeginOptions(ctx.optionsJSON) : undefined
+
+  if (rpId) {
+    parts.push(`Begin rp.id/rpId: ${JSON.stringify(rpId)}`)
+    parts.push(`SHA-256(rpId) expected by verifier (hex): ${await sha256HexUtf8(rpId)}`)
+  } else {
+    parts.push("Begin options did not include rp.id or rpId (could not compute expected hash).")
+  }
+
+  const fromCred =
+    ctx.credentialResponse != null ? readAuthenticatorRpIdHashHexFromCredentialJSON(ctx.credentialResponse) : null
+  if (fromCred) {
+    parts.push(`Authenticator rpIdHash from this credential (hex): ${fromCred}`)
+  } else {
+    parts.push("Could not read rpIdHash from the WebAuthn credential (missing or invalid authenticatorData).")
+  }
+
+  const extId =
+    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+      ? chrome.runtime.id
+      : undefined
+  if (extId) {
+    parts.push(`This extension chrome.runtime.id: ${JSON.stringify(extId)}`)
+    parts.push(`SHA-256(chrome.runtime.id) (hex): ${await sha256HexUtf8(extId)}`)
+  }
+
+  return parts.join(" ")
 }
 

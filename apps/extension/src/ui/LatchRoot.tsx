@@ -1,16 +1,17 @@
 import '../style.css'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   BackgroundMessage,
   BackgroundResponse,
+  BackendWebauthnAuthenticationFinishResponse,
+  BackendWebauthnBeginResponse,
+  BackendWebauthnRegistrationFinishResponse,
   BuildDelegatedTxResponse,
   BuildTxResponse,
   CreateOrConnectFreighterRequest,
   CreateOrConnectFreighterResponse,
-  CreateOrConnectPasskeyRequest,
-  CreateOrConnectPasskeyResponse,
   CreateOrConnectPhantomRequest,
   CreateOrConnectPhantomResponse,
   GetAccountsResponse,
@@ -22,9 +23,9 @@ import type {
   SerializableError,
   SetSetupStateRequest,
   SetActiveAccountRequest,
+  StoredAccount,
   SignDelegatedGAuthEntryRequest,
   SignDelegatedGAuthEntryResponse,
-  StoredAccount,
   SubmitDelegatedTxRequest,
   SubmitPhantomTxRequest,
   SubmitTxResponse,
@@ -55,14 +56,17 @@ import { SettingsScreen } from './screens/SettingsScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
 import { AccountMenu } from './components/AccountMenu'
+import { storedAccountLabel } from './lib/storedAccountLabel'
 
 import {
+  assertBeginOptionsRpIdMatchesExtension,
   buildWebauthnSigDataXdrHex,
-  createLocalAuthenticationOptions,
-  createLocalRegistrationOptions,
-  extractRegistrationKeyData,
+  enrichWebauthnRpIdHashErrorMessage,
+  formatWebauthnBrowserError,
   parseAuthenticationResponse,
+  nextPasskeyAccountDisplayName,
 } from './webauthn/passkey'
+import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
 import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
 
@@ -76,6 +80,8 @@ type Route =
   | 'chooseSigner'
   | 'createPasskey'
   | 'passkeyCreated'
+  | 'addAccount'
+  | 'addAccountPasskey'
   | 'importSeed'
   | 'unlockMnemonic'
   | 'home'
@@ -88,6 +94,14 @@ type Route =
 
 type SignerId = 'freighter' | 'phantom' | 'passkey'
 
+/**
+ * WebAuthn must run in the same document update as the user click as much as possible.
+ * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.
+ */
+function routeKeepsUiMountedForWebauthn(route: Route): boolean {
+  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'sendTx'
+}
+
 const STORAGE_KEYS = {
   theme: 'latch.theme',
   uiSurface: 'latch.uiSurface',
@@ -97,6 +111,21 @@ async function sendToBackground<TPayload, TData>(
   message: BackgroundMessage<TPayload>
 ): Promise<BackgroundResponse<TData>> {
   return (await chrome.runtime.sendMessage(message)) as BackgroundResponse<TData>
+}
+
+function readAddressFromFreighterGetAddressResult(v: unknown): string | undefined {
+  if (typeof v === 'string') return v
+  if (typeof v === 'object' && v) {
+    const maybe = v as { address?: unknown }
+    if (typeof maybe.address === 'string') return maybe.address
+  }
+  return undefined
+}
+
+type PhantomSolanaProvider = {
+  connect: () => Promise<{ publicKey?: { toBase58?: () => string } } | undefined>
+  publicKey?: { toBase58?: () => string }
+  signMessage: (msg: Uint8Array) => Promise<{ signature?: Uint8Array } | Uint8Array>
 }
 
 function useTheme() {
@@ -178,6 +207,28 @@ function friendlyError(e?: SerializableError): string {
 }
 
 export function LatchRoot({ surface }: { surface: Surface }) {
+  /**
+   * Chrome does not reliably run WebAuthn inside the extension side panel (hangs with no UI).
+   * Popup uses in-page credentials; side panel opens the shared `tabs/passkey-bridge` window.
+   */
+  async function webauthnCredential(mode: 'registration' | 'authentication', optionsJSON: unknown): Promise<unknown> {
+    try {
+      if (surface === 'sidepanel') {
+        return await openPasskeyBridgeAndWait({ mode, optionsJSON })
+      }
+      if (mode === 'registration') {
+        return await startRegistration({
+          optionsJSON,
+        } as unknown as Parameters<typeof startRegistration>[0])
+      }
+      return await startAuthentication({
+        optionsJSON,
+      } as unknown as Parameters<typeof startAuthentication>[0])
+    } catch (e) {
+      throw new Error(formatWebauthnBrowserError(e))
+    }
+  }
+
   const { theme, setTheme } = useTheme()
   const { pref, setPref } = useUiSurfacePreference()
 
@@ -185,6 +236,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const ENABLE_OTHER_SIGNERS = false
 
   const [route, setRoute] = useState<Route>('welcome')
+  /** True when `chooseSigner` was opened from "I Have a Wallet" (passkey should authenticate, not register). */
+  const [chooseSignerForExistingWallet, setChooseSignerForExistingWallet] = useState(false)
   const [page, setPage] = useState<Page>('main')
   const [selectedSigner, setSelectedSigner] = useState<SignerId>('passkey')
 
@@ -201,6 +254,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [accounts, activeAccountId]
   )
 
+  const activeAccountLabel = useMemo(() => {
+    if (!activeAccount) return 'Account'
+    const i = accounts.findIndex((x) => x.id === activeAccount.id)
+    return storedAccountLabel(activeAccount, i >= 0 ? i : 0)
+  }, [accounts, activeAccount])
+
+  const [renameAccountId, setRenameAccountId] = useState<string | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
+
   const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
   const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
   const [txResult, setTxResult] = useState<SubmitTxResponse | null>(null)
@@ -215,6 +277,67 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [rememberSeed, setRememberSeed] = useState(false)
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
+
+  /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
+  const passkeyPrefetchRef = useRef<
+    | { kind: 'registration'; optionsJSON: unknown; displayName: string }
+    | { kind: 'authentication'; optionsJSON: unknown }
+    | null
+  >(null)
+  const [passkeyPrefetchReady, setPasskeyPrefetchReady] = useState(false)
+  const [passkeyPrefetchError, setPasskeyPrefetchError] = useState<string | null>(null)
+  const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
+
+  useEffect(() => {
+    if (route !== 'createPasskey' && route !== 'addAccountPasskey') {
+      passkeyPrefetchRef.current = null
+      setPasskeyPrefetchReady(false)
+      setPasskeyPrefetchError(null)
+      return
+    }
+
+    let cancelled = false
+    setPasskeyPrefetchReady(false)
+    setPasskeyPrefetchError(null)
+    passkeyPrefetchRef.current = null
+
+    void (async () => {
+      try {
+        if (route === 'createPasskey') {
+          const displayName = nextPasskeyAccountDisplayName(accounts)
+          const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_REG_BEGIN',
+            payload: { displayName },
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+          const optionsJSON = (begin.data as BackendWebauthnBeginResponse | undefined)?.options
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
+        } else {
+          const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_AUTH_BEGIN',
+            payload: undefined,
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+          const optionsJSON = begin.data?.options
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
+        }
+        if (!cancelled) setPasskeyPrefetchReady(true)
+      } catch (e) {
+        if (!cancelled) {
+          setPasskeyPrefetchError(e instanceof Error ? e.message : String(e))
+          passkeyPrefetchRef.current = null
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [route, accounts, passkeyPrefetchNonce])
 
   useEffect(() => {
     void sendToBackground<undefined, GetSetupStateResponse>({
@@ -252,15 +375,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setSetupState('has_account')
   }
 
-  async function refreshAccounts() {
+  async function refreshAccounts(): Promise<StoredAccount[] | undefined> {
     const res = await sendToBackground<undefined, GetAccountsResponse>({
       type: 'GET_ACCOUNTS',
       payload: undefined,
     })
-    if (!res.ok || !res.data) return
+    if (!res.ok || !res.data) return undefined
     setAccounts(res.data.accounts)
     setActiveAccountId(res.data.activeAccountId)
     setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
+    return res.data.accounts
   }
 
   async function loadPendingDapp() {
@@ -284,8 +408,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!allowed) await setAllowed()
 
       const g = (await getAddress()) as unknown
-      const gAddress =
-        typeof g === 'string' ? g : typeof (g as any)?.address === 'string' ? (g as any).address : undefined
+      const gAddress = readAddressFromFreighterGetAddressResult(g)
       if (!gAddress) throw new Error('Failed to read Freighter address.')
       const res = await sendToBackground<
         CreateOrConnectFreighterRequest,
@@ -307,7 +430,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setError(null)
     setLoading('Connecting to Phantom…')
     try {
-      const provider: any = (window as any).phantom?.solana
+      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
       if (!provider) throw new Error('Phantom not detected. Please install Phantom.')
 
       const conn = await provider.connect()
@@ -380,22 +503,80 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setError(null)
     setLoading('Creating passkey…')
     try {
-      const rpId = window.location.hostname
-      const options = createLocalRegistrationOptions(rpId)
-      const reg = await startRegistration(options as any)
-      const extracted = extractRegistrationKeyData(reg)
-
+      const pre = passkeyPrefetchRef.current
+      if (!pre || pre.kind !== 'registration') {
+        throw new Error(
+          passkeyPrefetchError ??
+            (passkeyPrefetchReady
+              ? 'Passkey session is stale. Use Go Back, then return to Create Passkey.'
+              : 'Still preparing passkey…')
+        )
+      }
+      const optionsJSON = pre.optionsJSON
+      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      const reg = (await webauthnCredential('registration', optionsJSON)) as Awaited<
+        ReturnType<typeof startRegistration>
+      >
       const res = await sendToBackground<
-        CreateOrConnectPasskeyRequest,
-        CreateOrConnectPasskeyResponse & { account: StoredAccount }
+        { response: unknown },
+        BackendWebauthnRegistrationFinishResponse & { account: StoredAccount }
       >({
-        type: 'CREATE_OR_CONNECT_PASSKEY',
-        payload: { keyDataHex: extracted.keyDataHex, credentialId: extracted.credentialId },
+        type: 'PASSKEY_REG_FINISH',
+        payload: { response: reg },
       })
-      if (!res.ok) throw new Error(friendlyError(res.error))
+      if (!res.ok) {
+        const errMsg = friendlyError(res.error)
+        throw new Error(
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: reg })
+        )
+      }
       await persistSetupHasAccount(res.data!.smartAccountAddress)
       await refreshAccounts()
       setRoute('passkeyCreated')
+    } catch (e) {
+      setPasskeyPrefetchNonce((n) => n + 1)
+      throw e
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  async function loginWithExistingPasskey() {
+    setError(null)
+    setLoading('Logging in with passkey…')
+    try {
+      const pre = passkeyPrefetchRef.current
+      if (!pre || pre.kind !== 'authentication') {
+        throw new Error(
+          passkeyPrefetchError ??
+            (passkeyPrefetchReady
+              ? 'Passkey session is stale. Use Go Back, then try again.'
+              : 'Still preparing passkey…')
+        )
+      }
+      const optionsJSON = pre.optionsJSON
+      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
+        ReturnType<typeof startAuthentication>
+      >
+      const finish = await sendToBackground<{ response: unknown }, BackendWebauthnAuthenticationFinishResponse>({
+        type: 'PASSKEY_AUTH_FINISH',
+        payload: { response: assertion },
+      })
+      if (!finish.ok) {
+        const errMsg = friendlyError(finish.error)
+        throw new Error(
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+        )
+      }
+
+      await persistSetupHasAccount(finish.data!.smartAccountAddress)
+      await refreshAccounts()
+      setChooseSignerForExistingWallet(false)
+      setRoute('home')
+    } catch (e) {
+      setPasskeyPrefetchNonce((n) => n + 1)
+      throw e
     } finally {
       setLoading(null)
     }
@@ -446,10 +627,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       await buildForActiveAccount()
 
       if (activeAccount.mode === 'freighter') {
+        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
         const b =
           builtDelegatedTx ??
           (
-            await sendToBackground<any, BuildDelegatedTxResponse>({
+            await sendToBackground<{ smartAccountAddress: string; gAddress: string }, BuildDelegatedTxResponse>({
               type: 'BUILD_DELEGATED_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -459,9 +641,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           ).data
         if (!b) throw new Error('Failed to build delegated transaction.')
         setLoading('Awaiting Freighter signature…')
-        const signed = await signAuthEntry(b.gAddressPreimageXdr as any)
-        const signedAuthEntryBase64 = (signed as any)?.signedAuthEntry as string | undefined
-        const signerAddress = signed?.signerAddress
+        const signed = await signAuthEntry(b.gAddressPreimageXdr as unknown as string)
+        const signedAuthEntryBase64 =
+          typeof (signed as unknown as { signedAuthEntry?: unknown }).signedAuthEntry === 'string'
+            ? ((signed as unknown as { signedAuthEntry: string }).signedAuthEntry as string)
+            : undefined
+        const signerAddress =
+          typeof (signed as unknown as { signerAddress?: unknown }).signerAddress === 'string'
+            ? ((signed as unknown as { signerAddress: string }).signerAddress as string)
+            : undefined
         if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
 
         setLoading('Submitting transaction…')
@@ -486,7 +674,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const b =
           builtDelegatedTx ??
           (
-            await sendToBackground<any, BuildDelegatedTxResponse>({
+            await sendToBackground<{ smartAccountAddress: string; gAddress: string }, BuildDelegatedTxResponse>({
               type: 'BUILD_DELEGATED_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -529,12 +717,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       }
 
       if (activeAccount.mode === 'phantom') {
-        const provider: any = (window as any).phantom?.solana
+        const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
         if (!provider) throw new Error('Phantom not detected.')
         const b =
           builtTx ??
           (
-            await sendToBackground<any, BuildTxResponse>({
+            await sendToBackground<{ smartAccountAddress: string; signerG?: string }, BuildTxResponse>({
               type: 'BUILD_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -548,7 +736,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const msgBytes = new TextEncoder().encode(prefixedMessage)
         setLoading('Awaiting Phantom signature…')
         const signed = await provider.signMessage(msgBytes)
-        const sigBytes: Uint8Array = signed?.signature ?? signed
+        const sigBytes: Uint8Array = signed instanceof Uint8Array ? signed : signed.signature ?? new Uint8Array()
+        if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
         const authSignatureHex = bytesToHex(sigBytes)
 
         setLoading('Submitting transaction…')
@@ -572,7 +761,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const b =
         builtTx ??
         (
-          await sendToBackground<any, BuildTxResponse>({
+          await sendToBackground<{ smartAccountAddress: string; signerG?: string }, BuildTxResponse>({
             type: 'BUILD_TX',
             payload: {
               smartAccountAddress: activeAccount.smartAccountAddress,
@@ -586,19 +775,35 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       }
 
       setLoading('Awaiting passkey authentication…')
-      const rpId = window.location.hostname
-      const authOpts = createLocalAuthenticationOptions({
-        rpId,
-        credentialId: activeAccount.passkeyCredentialId,
-        authDigestHex: b.authDigestHex,
+      const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+        type: 'PASSKEY_AUTH_BEGIN',
+        payload: undefined,
       })
-      const assertion = await startAuthentication(authOpts as any)
+      if (!begin.ok) throw new Error(friendlyError(begin.error))
+      const optionsJSON = (begin.data as BackendWebauthnBeginResponse | undefined)?.options
+      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
+        ReturnType<typeof startAuthentication>
+      >
+      // Best-effort: keep local parsing so we can derive sigDataXdr for submit.
       const parsed = parseAuthenticationResponse(assertion)
       const sigDataXdr = buildWebauthnSigDataXdrHex({
         authenticatorData: parsed.authenticatorData,
         clientDataJson: parsed.clientDataJson,
         signatureCompact: parsed.signatureCompact,
       })
+
+      // Attach login/session on backend (so /api/accounts is accurate), ignore response besides errors.
+      const finish = await sendToBackground<{ response: unknown }, BackendWebauthnAuthenticationFinishResponse>({
+        type: 'PASSKEY_AUTH_FINISH',
+        payload: { response: assertion },
+      })
+      if (!finish.ok) {
+        const errMsg = friendlyError(finish.error)
+        throw new Error(
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+        )
+      }
 
       setLoading('Submitting transaction…')
       const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
@@ -611,7 +816,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           contextRuleId: b.contextRuleId,
         },
       })
-      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+      if (!submitRes.ok) {
+        const errMsg = friendlyError(submitRes.error)
+        throw new Error(
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+        )
+      }
       setTxResult(submitRes.data ?? {})
       setRoute('txResult')
       return b.txXdr
@@ -671,8 +881,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     try {
       const res = await sendToBackground<undefined, undefined>({ type: 'LOGOUT', payload: undefined })
       if (!res.ok) throw new Error(friendlyError(res.error))
-      setAccounts([])
-      setActiveAccountId(undefined)
       setSetupState('new')
       setPendingDappRequests([])
       setRoute('welcome')
@@ -697,7 +905,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         <div className="flex items-center justify-between gap-2">
           {page === 'main' && route === 'home' ? (
             <AccountMenu
-              name="Crownz"
+              accountLabel={activeAccountLabel}
               accounts={accounts}
               activeAccountId={activeAccountId}
               onSelectAccount={(accountId) => {
@@ -707,6 +915,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 })
                   .then(() => refreshAccounts())
                   .catch(() => {})
+              }}
+              onAddAccount={() => setRoute('addAccount')}
+              onRenameAccount={(accountId) => {
+                const idx = accounts.findIndex((a) => a.id === accountId)
+                const acc = accounts[idx]
+                if (!acc) return
+                setRenameDraft(storedAccountLabel(acc, idx >= 0 ? idx : 0))
+                setRenameAccountId(accountId)
               }}
             />
           ) : (
@@ -728,7 +944,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         {page === 'settings' ? (
           <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
             <SettingsScreen
-              accountName={activeAccount?.smartAccountAddress ? 'Crownz' : 'Account'}
+              accountName={activeAccountLabel}
               accountAddress={activeAccount?.smartAccountAddress ?? '—'}
               theme={theme}
               onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -743,7 +959,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
         {page === 'main' ? (
           <>
-            {loading ? (
+            {loading && !routeKeepsUiMountedForWebauthn(route) ? (
               <div
                 className={[
                   'mt-4 flex flex-col items-center justify-center animate-screenIn',
@@ -764,7 +980,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && error ? (
+            {error && (!loading || routeKeepsUiMountedForWebauthn(route)) ? (
               <div className="mt-4 rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
                 <div className="font-extrabold">Something went wrong</div>
                 <div className="mt-2 text-muted">{error}</div>
@@ -848,14 +1064,28 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 </div>
 
                 <div className="mt-auto w-full space-y-3">
+                  {accounts.length > 0 ? (
+                    <button
+                      onClick={() => setRoute('home')}
+                      className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                    >
+                      Continue
+                    </button>
+                  ) : null}
                   <button
-                    onClick={() => setRoute('chooseSigner')}
+                    onClick={() => {
+                      setChooseSignerForExistingWallet(false)
+                      setRoute('chooseSigner')
+                    }}
                     className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   >
                     Create a New Wallet
                   </button>
                   <button
-                    onClick={() => setRoute('chooseSigner')}
+                    onClick={() => {
+                      setChooseSignerForExistingWallet(true)
+                      setRoute('chooseSigner')
+                    }}
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     I Have a Wallet
@@ -871,13 +1101,100 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
+            {!loading && route === 'addAccount' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <div className="text-center">
+                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
+                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Add account</h2>
+                  <p className="mt-2 text-sm text-muted">Choose how you want to add another signer</p>
+                </div>
+
+                <div className="mt-6 space-y-3 w-full">
+                  <button
+                    onClick={() => {
+                      setChooseSignerForExistingWallet(false)
+                      setRoute('addAccountPasskey')
+                    }}
+                    className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface/60 px-4 py-4 text-left hover:bg-surface/70"
+                  >
+                    <div>
+                      <div className="text-base font-extrabold">Passkey</div>
+                      <div className="mt-1 text-xs text-muted">Log in with an existing passkey</div>
+                    </div>
+                    <ExternalLink className={headerIconClass} strokeWidth={2} aria-hidden />
+                  </button>
+
+                  <button
+                    onClick={() => setRoute('importSeed')}
+                    className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface/60 px-4 py-4 text-left hover:bg-surface/70"
+                  >
+                    <div>
+                      <div className="text-base font-extrabold">Recovery phrase</div>
+                      <div className="mt-1 text-xs text-muted">Add a seed-based account</div>
+                    </div>
+                    <ExternalLink className={headerIconClass} strokeWidth={2} aria-hidden />
+                  </button>
+                </div>
+
+                <div className="mt-auto space-y-3 w-full">
+                  <button
+                    onClick={() => setRoute('home')}
+                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {route === 'addAccountPasskey' ? (
+              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <div className="text-center">
+                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
+                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Passkey login</h2>
+                  <p className="mt-2 text-sm text-muted">Use your existing passkey to connect</p>
+                </div>
+
+                {passkeyPrefetchError ? (
+                  <div className="mt-4 rounded-2xl border border-border bg-surface/60 px-3 py-3 text-xs text-muted">
+                    {passkeyPrefetchError}
+                  </div>
+                ) : null}
+
+                <div className="mt-auto space-y-3 w-full">
+                  <button
+                    disabled={Boolean(loading) || !passkeyPrefetchReady}
+                    onClick={() => void loginWithExistingPasskey().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
+                  >
+                    {!passkeyPrefetchReady
+                      ? 'Preparing…'
+                      : loading
+                        ? loading
+                        : 'Continue with Passkey'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLoading(null)
+                      setRoute(chooseSignerForExistingWallet ? 'chooseSigner' : 'addAccount')
+                    }}
+                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {!loading && route === 'chooseSigner' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Choose Signer</h2>
                   <p className="mt-2 text-sm text-muted">
-                    Select a signer to secure your smart account
+                    {chooseSignerForExistingWallet
+                      ? 'Pick how you usually unlock your Latch wallet.'
+                      : 'Select a signer to secure your smart account'}
                   </p>
                 </div>
 
@@ -933,10 +1250,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   <div className="mt-auto space-y-3 w-full">
                     {selectedSigner === 'passkey' ? (
                       <button
-                        onClick={() => setRoute('createPasskey')}
+                        onClick={() =>
+                          setRoute(chooseSignerForExistingWallet ? 'addAccountPasskey' : 'createPasskey')
+                        }
                         className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                       >
-                        Continue with Passkey
+                        {chooseSignerForExistingWallet ? 'Log in with Passkey' : 'Continue with Passkey'}
                       </button>
                     ) : (
                       <button
@@ -951,7 +1270,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                       </button>
                     )}
                     <button
-                      onClick={() => setRoute('welcome')}
+                      onClick={() => {
+                        setChooseSignerForExistingWallet(false)
+                        setRoute('welcome')
+                      }}
                       className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                     >
                       Go Back
@@ -961,7 +1283,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'createPasskey' ? (
+            {route === 'createPasskey' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
@@ -986,19 +1308,33 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   </div>
                 </div>
 
+                {passkeyPrefetchError ? (
+                  <div className="mt-4 rounded-2xl border border-border bg-surface/60 px-3 py-3 text-xs text-muted">
+                    {passkeyPrefetchError}
+                  </div>
+                ) : null}
+
                 <div className="mt-auto space-y-3">
                   <button
+                    disabled={Boolean(loading) || !passkeyPrefetchReady}
                     onClick={() =>
                       void beginPasskeyRegistration().catch((e) =>
                         setError(e instanceof Error ? e.message : String(e))
                       )
                     }
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
                   >
-                    Create Passkey
+                    {!passkeyPrefetchReady
+                      ? 'Preparing…'
+                      : loading
+                        ? loading
+                        : 'Create Passkey'}
                   </button>
                   <button
-                    onClick={() => setRoute('chooseSigner')}
+                    onClick={() => {
+                      setLoading(null)
+                      setRoute('chooseSigner')
+                    }}
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     Go Back
@@ -1181,7 +1517,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   </div>
                 ) : null}
                 <HomeScreen
-                  accountName="Crownz"
+                  accountName={activeAccountLabel}
                   onOpenHistory={() => setRoute('history')}
                   onOpenSwap={() => {
                     setSwapDraft({
@@ -1262,7 +1598,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'sendTx' ? (
+            {route === 'sendTx' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
@@ -1277,17 +1613,21 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
                 <div className="mt-auto space-y-3">
                   <button
+                    disabled={Boolean(loading)}
                     onClick={() =>
                       void signAndSubmit().catch((e) =>
                         setError(e instanceof Error ? e.message : String(e))
                       )
                     }
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
                   >
-                    Build & Sign
+                    {loading ? loading : 'Build & Sign'}
                   </button>
                   <button
-                    onClick={() => setRoute('home')}
+                    onClick={() => {
+                      setLoading(null)
+                      setRoute('home')
+                    }}
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     Back
@@ -1326,6 +1666,57 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
           </>
+        ) : null}
+
+        {renameAccountId ? (
+          <div
+            className="absolute inset-0 z-[100] flex justify-center bg-black/45 px-4 pt-[72px]"
+            role="presentation"
+            onClick={() => setRenameAccountId(null)}
+          >
+            <div
+              className="h-fit w-full max-w-[300px] rounded-2xl border border-border bg-surface/95 p-4 shadow-soft"
+              role="dialog"
+              aria-labelledby="rename-account-title"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div id="rename-account-title" className="text-sm font-extrabold">
+                Rename account
+              </div>
+              <input
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                className="mt-3 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                maxLength={32}
+                autoFocus
+              />
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRenameAccountId(null)}
+                  className="h-10 flex-1 rounded-full border border-border bg-bg text-sm font-extrabold text-fg hover:bg-surface/60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!renameAccountId) return
+                    void sendToBackground<{ accountId: string; label?: string }, undefined>({
+                      type: 'RENAME_ACCOUNT',
+                      payload: { accountId: renameAccountId, label: renameDraft.trim() || undefined },
+                    })
+                      .then(() => refreshAccounts())
+                      .then(() => setRenameAccountId(null))
+                      .catch(() => {})
+                  }}
+                  className="h-10 flex-1 rounded-full bg-primary text-sm font-extrabold text-black shadow-soft"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
         ) : null}
       </div>
     </div>
