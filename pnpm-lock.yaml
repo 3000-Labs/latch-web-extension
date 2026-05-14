@@ -145,10 +145,16 @@ importers:
       '@latch/types':
         specifier: workspace:*
         version: link:../types
+      '@stellar/stellar-sdk':
+        specifier: ^15.0.1
+        version: 15.0.1
     devDependencies:
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@22.19.18)(jiti@1.21.7)(less@4.6.4)(lightningcss@1.32.0)(sass@1.99.0)(yaml@2.8.3)
 
   packages/types:
     devDependencies:

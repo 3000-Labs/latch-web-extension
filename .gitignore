@@ -10,3 +10,12 @@ dist/
 .pnpm-store/
 docs/
 references/
+
+# Browser extension (Plasmo) — generated build output and store upload zip
+apps/extension/build/
+apps/extension/build/*.zip
+
+ACCOUNT_MIGRATION_SPIKE.md
+account-migration-discussion1.md
+account-migration-discussion2.md
+gaddress-to-smart-account-migration-flow.md

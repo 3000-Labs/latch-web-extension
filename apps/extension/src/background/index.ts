@@ -20,12 +20,17 @@ import type {
   CreateOrConnectPasskeyRequest,
   CreateOrConnectPhantomRequest,
   GetAccountsResponse,
+  GetAssetIconDataUrlsRequest,
+  GetSmartAccountBalancesRequest,
   GetDappPermissionsRequest,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ListPendingDappRequestsResponse,
   PendingDappRequest,
   SerializableError,
+  MigrationDiscoverRequest,
+  MigrationSweepTokenRequest,
+  MigrationSweepXlmRequest,
   ResolvePendingDappRequest,
   SetActiveAccountRequest,
   SetDappPermissionsRequest,
@@ -62,7 +67,11 @@ import {
   loadMnemonicVaultRecord,
   saveMnemonicVaultRecord
 } from "./mnemonicVault"
+import { getAssetIconDataUrlsBatch } from "./assetIcons"
 import { clearMnemonicSessionKeys, getMnemonicKeypair, registerMnemonicKeypair } from "./mnemonicSession"
+import { runMigrationDiscover } from "./migration/discover"
+import { runMigrationSweepToken, runMigrationSweepXlm } from "./migration/sweep"
+import { runGetSmartAccountBalances } from "./smartAccountBalances"
 import { deriveStellarKeypairFromMnemonic } from "./stellarMnemonic"
 
 import {
@@ -262,14 +271,20 @@ chrome.runtime.onMessage.addListener(
         case "GET_ACCOUNTS": {
           const data = await getAccounts()
           let activeAccountHasMnemonicVault: boolean | undefined
+          let activeAccountMnemonicSignerLoaded: boolean | undefined
           if (data.activeAccountId) {
             const active = data.accounts.find((a) => a.id === data.activeAccountId)
             if (active?.mode === "mnemonic") {
               const rec = await loadMnemonicVaultRecord(active.id)
               activeAccountHasMnemonicVault = Boolean(rec)
+              activeAccountMnemonicSignerLoaded = Boolean(getMnemonicKeypair(active.id))
             }
           }
-          const payload: GetAccountsResponse = { ...data, activeAccountHasMnemonicVault }
+          const payload: GetAccountsResponse = {
+            ...data,
+            activeAccountHasMnemonicVault,
+            activeAccountMnemonicSignerLoaded
+          }
           sendResponse(ok<GetAccountsResponse>(payload))
           return
         }
@@ -488,6 +503,41 @@ chrome.runtime.onMessage.addListener(
         case "SUBMIT_TX_WEBAUTHN": {
           const req = message.payload as SubmitWebauthnTxRequest
           const data = await submitTxWebauthn(req)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "MIGRATION_DISCOVER": {
+          const req = message.payload as MigrationDiscoverRequest
+          const data = await runMigrationDiscover(req.accountId)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "MIGRATION_SWEEP_XLM": {
+          const req = message.payload as MigrationSweepXlmRequest
+          const data = await runMigrationSweepXlm(req.accountId, req.pendingTokenSweepCount ?? 0)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "MIGRATION_SWEEP_TOKEN": {
+          const req = message.payload as MigrationSweepTokenRequest
+          const data = await runMigrationSweepToken(req.accountId, req.sacContractId)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "GET_SMART_ACCOUNT_BALANCES": {
+          const req = message.payload as GetSmartAccountBalancesRequest
+          const data = await runGetSmartAccountBalances(req.accountId)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "GET_ASSET_ICON_DATA_URLS": {
+          const req = message.payload as GetAssetIconDataUrlsRequest
+          const data = await getAssetIconDataUrlsBatch(req)
           sendResponse(ok(data))
           return
         }

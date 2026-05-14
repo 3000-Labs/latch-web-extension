@@ -55,6 +55,40 @@ export interface GetAccountsResponse {
   activeAccountId?: string
   /** Present when the active account is `mnemonic` and an encrypted seed exists (`remember`). */
   activeAccountHasMnemonicVault?: boolean
+  /**
+   * When active account is `mnemonic`, true if the seed signer is loaded in the service worker session
+   * (unlocked or just imported). False when a vault exists but the SW was restarted and the user must unlock.
+   */
+  activeAccountMnemonicSignerLoaded?: boolean
+}
+
+/** One row for smart-account (C) Soroban SAC balances shown on Home. */
+export interface SmartAccountBalanceRow {
+  code: string
+  issuer?: string
+  sacContractId: string
+  /** Human-readable amount (trimmed), Soroban SAC 7 decimals for display. */
+  amount: string
+  /** Optional data URL or https URL resolved in background for token image. */
+  iconUrl?: string | null
+}
+
+export interface GetSmartAccountBalancesRequest {
+  accountId: string
+}
+
+export interface GetSmartAccountBalancesResponse {
+  rows: SmartAccountBalanceRow[]
+}
+
+export interface GetAssetIconDataUrlsRequest {
+  /** Classic assets only (code + G issuer). Native XLM is handled in UI. */
+  assets: { code: string; issuer: string }[]
+}
+
+export interface GetAssetIconDataUrlsResponse {
+  /** Parallel to `assets`; null when unknown or failed. */
+  icons: (string | null)[]
 }
 
 export interface SetActiveAccountRequest {
@@ -282,6 +316,59 @@ export interface SerializableError {
   status?: number
 }
 
+/** G → smart account (C) asset migration — discovery only; sweep uses separate messages. */
+export type MigrationDiscoveryState =
+  | 'not_needed'
+  | 'not_started'
+  | 'complete'
+  | 'unsupported'
+
+export type MigrableAssetKind = 'native' | 'token'
+
+export interface MigrableAsset {
+  kind: MigrableAssetKind
+  code: string
+  issuer?: string
+  /** Human-readable amount for display / sweep input */
+  amount: string
+  /** Stellar Asset Contract contract id for this asset */
+  sacContractId: string
+}
+
+export interface MigrationDiscovery {
+  state: MigrationDiscoveryState
+  gAddress: string
+  cAddress: string
+  assets: MigrableAsset[]
+  /** When state is `unsupported` */
+  unsupportedReason?: 'not_mnemonic' | 'missing_addresses'
+}
+
+export interface MigrationDiscoverRequest {
+  accountId: string
+}
+
+export interface MigrationSweepResult {
+  success: boolean
+  txHash?: string
+  ledger?: number
+  error?: SerializableError
+}
+
+export interface MigrationSweepXlmRequest {
+  accountId: string
+  /**
+   * How many SAC token sweeps will run after this XLM sweep (migration UI passes this).
+   * Used to reserve XLM on G for their Soroban fees plus a minimum linger balance.
+   */
+  pendingTokenSweepCount?: number
+}
+
+export interface MigrationSweepTokenRequest {
+  accountId: string
+  sacContractId: string
+}
+
 // Message types for popup/content ↔ background communication
 export type MessageType =
   | 'SIGN_TRANSACTION'
@@ -315,6 +402,11 @@ export type MessageType =
   | 'RESOLVE_PENDING_DAPP_REQUEST'
   | 'DAPP_GET_PUBLIC_KEY'
   | 'DAPP_SIGN_TRANSACTION'
+  | 'MIGRATION_DISCOVER'
+  | 'MIGRATION_SWEEP_XLM'
+  | 'MIGRATION_SWEEP_TOKEN'
+  | 'GET_SMART_ACCOUNT_BALANCES'
+  | 'GET_ASSET_ICON_DATA_URLS'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -367,6 +459,11 @@ export type BackgroundRequestPayloadByType = {
   RESOLVE_PENDING_DAPP_REQUEST: ResolvePendingDappRequest
   DAPP_GET_PUBLIC_KEY: GetDappPermissionsRequest
   DAPP_SIGN_TRANSACTION: DappSignTransactionRequest
+  MIGRATION_DISCOVER: MigrationDiscoverRequest
+  MIGRATION_SWEEP_XLM: MigrationSweepXlmRequest
+  MIGRATION_SWEEP_TOKEN: MigrationSweepTokenRequest
+  GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesRequest
+  GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -401,4 +498,9 @@ export type BackgroundResponseDataByType = {
   RESOLVE_PENDING_DAPP_REQUEST: undefined
   DAPP_GET_PUBLIC_KEY: DappGetPublicKeyResponse
   DAPP_SIGN_TRANSACTION: DappSignTransactionResponse
+  MIGRATION_DISCOVER: MigrationDiscovery
+  MIGRATION_SWEEP_XLM: MigrationSweepResult
+  MIGRATION_SWEEP_TOKEN: MigrationSweepResult
+  GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesResponse
+  GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
 } & Record<string, unknown>

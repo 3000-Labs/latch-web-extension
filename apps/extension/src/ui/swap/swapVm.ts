@@ -2,6 +2,8 @@ export type SwapTokenVm = {
   id: string
   symbol: string
   name: string
+  /** Optional data URL from background (portfolio / icon resolver). */
+  iconUrl?: string | null
 }
 
 export type SwapDraft = {

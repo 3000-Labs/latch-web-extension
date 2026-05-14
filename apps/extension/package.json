@@ -7,6 +7,7 @@
     "build": "plasmo build",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run",
+    "package": "plasmo package",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -56,7 +57,13 @@
     ],
     "host_permissions": [
       "https://v0-latch-stellar.vercel.app/*",
-      "http://localhost:3000/*"
+      "http://localhost:3000/*",
+      "https://horizon-testnet.stellar.org/*",
+      "https://horizon.stellar.org/*",
+      "https://soroban-testnet.stellar.org/*",
+      "https://soroban-rpc.mainnet.stellar.org/*",
+      "http://localhost:8000/*",
+      "<all_urls>"
     ]
   }
 }

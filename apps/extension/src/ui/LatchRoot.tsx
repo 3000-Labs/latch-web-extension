@@ -1,6 +1,6 @@
 import '../style.css'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
   BackgroundMessage,
@@ -15,15 +15,20 @@ import type {
   CreateOrConnectPhantomRequest,
   CreateOrConnectPhantomResponse,
   GetAccountsResponse,
+  GetSmartAccountBalancesRequest,
+  GetSmartAccountBalancesResponse,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
+  MigrationDiscoverRequest,
+  MigrationDiscovery,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
   SetActiveAccountRequest,
   StoredAccount,
+  SmartAccountBalanceRow,
   SignDelegatedGAuthEntryRequest,
   SignDelegatedGAuthEntryResponse,
   SubmitDelegatedTxRequest,
@@ -50,8 +55,9 @@ import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
 import successAvatarUrl from 'url:../../assets/avatars/success.png'
 
 import { SectionCard } from './components/SectionCard'
-import { HomeScreen } from './screens/HomeScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
+import { HomeScreen } from './screens/HomeScreen'
+import { MigrationScreen } from './screens/MigrationScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
@@ -69,6 +75,7 @@ import {
 import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
 import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
+import { swapTokens } from './swap/swapVm'
 
 type Theme = 'dark' | 'light'
 type Surface = 'popup' | 'sidepanel'
@@ -91,6 +98,8 @@ type Route =
   | 'sendTx'
   | 'txResult'
   | 'dappApproval'
+  | 'migration'
+  | 'migrationSuccess'
 
 type SignerId = 'freighter' | 'phantom' | 'passkey'
 
@@ -271,12 +280,38 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
 
   const [activeAccountHasMnemonicVault, setActiveAccountHasMnemonicVault] = useState(false)
+  const [activeAccountMnemonicSignerLoaded, setActiveAccountMnemonicSignerLoaded] = useState(false)
+  const [unlockReturnRoute, setUnlockReturnRoute] = useState<'home' | 'migration' | null>(null)
+  const [portfolioRows, setPortfolioRows] = useState<SmartAccountBalanceRow[]>([])
+  const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [portfolioError, setPortfolioError] = useState<string | null>(null)
+  const [migrationDiscovery, setMigrationDiscovery] = useState<MigrationDiscovery | null | undefined>(undefined)
   const [seedPhraseText, setSeedPhraseText] = useState('')
   const [seedPhraseVisible, setSeedPhraseVisible] = useState(false)
   const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
   const [rememberSeed, setRememberSeed] = useState(false)
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
+
+  const homePortfolioTokens = useMemo(
+    () =>
+      portfolioRows.map((r) => ({
+        id: r.sacContractId,
+        symbol: r.code,
+        balance: r.amount,
+        iconUrl: r.iconUrl,
+      })),
+    [portfolioRows],
+  )
+
+  const swapTokenCatalog = useMemo(() => {
+    const xlmIcon = portfolioRows.find((r) => r.code === 'XLM')?.iconUrl
+    const usdtIcon = portfolioRows.find((r) => r.code === 'USDT')?.iconUrl
+    return swapTokens.map((t) => ({
+      ...t,
+      iconUrl: t.id === 'xlm' ? xlmIcon : t.id === 'usdt' ? usdtIcon : undefined,
+    }))
+  }, [portfolioRows])
 
   /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
   const passkeyPrefetchRef = useRef<
@@ -287,6 +322,32 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [passkeyPrefetchReady, setPasskeyPrefetchReady] = useState(false)
   const [passkeyPrefetchError, setPasskeyPrefetchError] = useState<string | null>(null)
   const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
+
+  useEffect(() => {
+    if (setupState !== 'has_account') {
+      setMigrationDiscovery(undefined)
+      return
+    }
+    if (page !== 'main') return
+    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    if (!acc?.id || acc.mode !== 'mnemonic' || !acc.gAddress?.trim() || !acc.smartAccountAddress?.trim()) {
+      setMigrationDiscovery(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const res = await sendToBackground<MigrationDiscoverRequest, MigrationDiscovery>({
+        type: 'MIGRATION_DISCOVER',
+        payload: { accountId: acc.id },
+      })
+      if (cancelled) return
+      if (res.ok && res.data) setMigrationDiscovery(res.data)
+      else setMigrationDiscovery(null)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [setupState, page, activeAccountId, accounts])
 
   useEffect(() => {
     if (route !== 'createPasskey' && route !== 'addAccountPasskey') {
@@ -358,6 +419,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
         setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
+        setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
         if (res.data.accounts.length > 0) setRoute('home')
       })
       .catch(() => {})
@@ -384,8 +446,39 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setAccounts(res.data.accounts)
     setActiveAccountId(res.data.activeAccountId)
     setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
+    setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
     return res.data.accounts
   }
+
+  const loadPortfolio = useCallback(async () => {
+    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    if (!acc?.id || !acc.smartAccountAddress?.trim()) {
+      setPortfolioRows([])
+      setPortfolioError(null)
+      return
+    }
+    setPortfolioLoading(true)
+    setPortfolioError(null)
+    try {
+      const res = await sendToBackground<GetSmartAccountBalancesRequest, GetSmartAccountBalancesResponse>({
+        type: 'GET_SMART_ACCOUNT_BALANCES',
+        payload: { accountId: acc.id },
+      })
+      if (!res.ok) {
+        setPortfolioError(res.error?.message ?? 'Could not load balances')
+        setPortfolioRows([])
+        return
+      }
+      setPortfolioRows(res.data?.rows ?? [])
+    } finally {
+      setPortfolioLoading(false)
+    }
+  }, [accounts, activeAccountId])
+
+  useEffect(() => {
+    if (setupState !== 'has_account' || page !== 'main' || route !== 'home') return
+    void loadPortfolio()
+  }, [setupState, page, route, loadPortfolio, activeAccountId])
 
   async function loadPendingDapp() {
     const res = await sendToBackground<unknown, ListPendingDappRequestsResponse>({
@@ -493,7 +586,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       })
       if (!res.ok) throw new Error(friendlyError(res.error))
       setUnlockVaultPassword('')
-      setRoute('home')
+      await refreshAccounts()
+      const dest = unlockReturnRoute ?? 'home'
+      setUnlockReturnRoute(null)
+      setRoute(dest)
     } finally {
       setLoading(null)
     }
@@ -903,7 +999,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         ].join(' ')}
       >
         <div className="flex items-center justify-between gap-2">
-          {page === 'main' && route === 'home' ? (
+          {page === 'main' && (route === 'home' || route === 'migration') ? (
             <AccountMenu
               accountLabel={activeAccountLabel}
               accounts={accounts}
@@ -953,6 +1049,17 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               sidepanelPreferenceSection={sidepanelPreferenceSection}
               onClose={() => setPage('main')}
               onLogout={() => void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+              onOpenMigrateAssets={
+                activeAccount?.mode === 'mnemonic' &&
+                activeAccount.gAddress?.trim() &&
+                activeAccount.smartAccountAddress?.trim() &&
+                migrationDiscovery?.state === 'not_started'
+                  ? () => {
+                      setPage('main')
+                      setRoute('migration')
+                    }
+                  : undefined
+              }
             />
           </div>
         ) : null}
@@ -1492,7 +1599,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setRoute('home')}
+                    onClick={() => {
+                      const dest = unlockReturnRoute === 'migration' ? 'migration' : 'home'
+                      setUnlockReturnRoute(null)
+                      setRoute(dest)
+                    }}
                     className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                   >
                     Cancel
@@ -1503,13 +1614,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
             {!loading && route === 'home' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                {activeAccount?.mode === 'mnemonic' && activeAccountHasMnemonicVault ? (
+                {activeAccount?.mode === 'mnemonic' &&
+                activeAccountHasMnemonicVault &&
+                !activeAccountMnemonicSignerLoaded ? (
                   <div className="mb-3 rounded-2xl border border-primary/40 bg-surface/80 px-3 py-3 text-xs shadow-soft">
                     <div className="font-extrabold text-fg">Saved recovery phrase is locked</div>
                     <div className="mt-1 text-muted">Unlock to sign transactions after the extension restarts.</div>
                     <button
                       type="button"
-                      onClick={() => setRoute('unlockMnemonic')}
+                      onClick={() => {
+                        setUnlockReturnRoute('home')
+                        setRoute('unlockMnemonic')
+                      }}
                       className="mt-2 h-9 w-full rounded-full bg-primary text-sm font-extrabold text-black"
                     >
                       Unlock
@@ -1519,6 +1635,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <HomeScreen
                   accountName={activeAccountLabel}
                   onOpenHistory={() => setRoute('history')}
+                  onOpenMigrateAssets={
+                    migrationDiscovery?.state === 'not_started'
+                      ? () => setRoute('migration')
+                      : undefined
+                  }
+                  portfolioTokens={homePortfolioTokens}
+                  portfolioLoading={portfolioLoading}
+                  portfolioError={portfolioError}
                   onOpenSwap={() => {
                     setSwapDraft({
                       payTokenId: 'usdt',
@@ -1531,6 +1655,46 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     setRoute('swap')
                   }}
                 />
+              </div>
+            ) : null}
+
+            {!loading && route === 'migration' && activeAccount?.id ? (
+              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <MigrationScreen
+                  surface={surface}
+                  accountId={activeAccount.id}
+                  onBack={() => setRoute('home')}
+                  onDone={() => setRoute('migrationSuccess')}
+                  onNeedUnlock={() => {
+                    setUnlockReturnRoute('migration')
+                    setRoute('unlockMnemonic')
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'migrationSuccess' ? (
+              <div
+                className={['mt-4 flex min-h-0 flex-1 flex-col items-center animate-screenIn', flowHeightClass].join(
+                  ' ',
+                )}
+              >
+                <img src={successAvatarUrl} alt="" className="h-16 w-16 object-contain" />
+                <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight">Migration complete</h2>
+                <p className="mt-3 max-w-[280px] text-center text-sm leading-relaxed text-muted">
+                  Your transactions were submitted to the network. Balances may take a moment to update on-chain.
+                </p>
+                <button
+                  type="button"
+                  className="mt-8 h-12 w-full max-w-xs rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                  onClick={() => {
+                    setMigrationDiscovery(undefined)
+                    void loadPortfolio()
+                    setRoute('home')
+                  }}
+                >
+                  Back to home
+                </button>
               </div>
             ) : null}
 
@@ -1559,6 +1723,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <SwapScreen
                   surface={surface}
                   initialState={swapDraft ?? undefined}
+                  swapTokenCatalog={swapTokenCatalog}
                   onBack={() => setRoute('home')}
                   onContinue={(q, d) => {
                     setSwapDraft(d)

@@ -1,14 +1,13 @@
 import React from 'react'
 import { ChevronDown } from 'lucide-react'
 
+import { TokenAvatar } from '../../components/TokenAvatar'
 import type { SwapTokenVm } from '../swapVm'
 
 export function TokenPill({ token, onClick }: { token: SwapTokenVm; onClick?: () => void }) {
   return (
     <button type="button" onClick={onClick} className="flex items-center gap-3 rounded-xl">
-      <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/20 text-primary">
-        <span className="text-sm font-extrabold">{token.symbol.slice(0, 1)}</span>
-      </span>
+      <TokenAvatar symbol={token.symbol} iconUrl={token.iconUrl} className="h-8 w-8" />
       <span className="leading-tight">
         <div className="flex items-center gap-1 text-sm font-extrabold">
           <span>{token.name}</span>

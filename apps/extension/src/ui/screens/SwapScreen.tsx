@@ -2,11 +2,11 @@ import React, { useMemo, useState } from 'react'
 import { ChevronDown, ChevronLeft } from 'lucide-react'
 
 import { SectionCard } from '../components/SectionCard'
-import type { SwapDraft, SwapQuoteVm } from '../swap/swapVm'
+import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from '../swap/swapVm'
 import {
   formatUsdApprox,
   mockQuote,
-  swapTokens,
+  swapTokens as defaultSwapTokens,
   toPositiveNumberOrNull,
   truncateAddress,
 } from '../swap/swapVm'
@@ -20,11 +20,14 @@ export function SwapScreen({
   initialState,
   onBack,
   onContinue,
+  swapTokenCatalog = defaultSwapTokens,
 }: {
   surface: 'popup' | 'sidepanel'
   initialState?: SwapDraft
   onBack: () => void
   onContinue: (quote: SwapQuoteVm, draft: SwapDraft) => void
+  /** Optional catalog with resolved token icons (e.g. from portfolio). */
+  swapTokenCatalog?: SwapTokenVm[]
 }) {
   const [payTokenId, setPayTokenId] = useState(initialState?.payTokenId ?? 'usdt')
   const [receiveTokenId, setReceiveTokenId] = useState(initialState?.receiveTokenId ?? 'xlm')
@@ -35,12 +38,12 @@ export function SwapScreen({
   const [approved, setApproved] = useState(initialState?.approved ?? false)
 
   const payToken = useMemo(
-    () => swapTokens.find((t) => t.id === payTokenId) ?? swapTokens[0],
-    [payTokenId]
+    () => swapTokenCatalog.find((t) => t.id === payTokenId) ?? swapTokenCatalog[0],
+    [payTokenId, swapTokenCatalog],
   )
   const receiveToken = useMemo(
-    () => swapTokens.find((t) => t.id === receiveTokenId) ?? swapTokens[1],
-    [receiveTokenId]
+    () => swapTokenCatalog.find((t) => t.id === receiveTokenId) ?? swapTokenCatalog[1],
+    [receiveTokenId, swapTokenCatalog],
   )
 
   const payN = toPositiveNumberOrNull(payAmount)

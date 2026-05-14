@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import {
+  ArrowLeftRight,
   Bell,
   ChevronRight,
   CircleHelp,
@@ -92,6 +93,7 @@ export function SettingsScreen({
   sidepanelPreferenceSection,
   onClose,
   onLogout,
+  onOpenMigrateAssets,
 }: {
   accountName: string
   accountAddress: string
@@ -102,6 +104,7 @@ export function SettingsScreen({
   sidepanelPreferenceSection: React.ReactNode
   onClose: () => void
   onLogout: () => void
+  onOpenMigrateAssets?: () => void
 }) {
   const [networkEnabled, setNetworkEnabled] = useState(false)
 
@@ -141,6 +144,13 @@ export function SettingsScreen({
               label="Recovery Phrase"
               leftIcon={<KeyRound className={rowIconClass} strokeWidth={2} aria-hidden />}
             />
+            {onOpenMigrateAssets ? (
+              <ListRow
+                label="Migrate classic assets"
+                leftIcon={<ArrowLeftRight className={rowIconClass} strokeWidth={2} aria-hidden />}
+                onClick={onOpenMigrateAssets}
+              />
+            ) : null}
           </div>
         </div>
 
