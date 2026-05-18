@@ -1,4 +1,6 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+
+import stellarIconUrl from 'url:../../../assets/icons/stellar.svg'
 
 export function TokenAvatar({
   symbol,
@@ -12,7 +14,14 @@ export function TokenAvatar({
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const letter = (symbol?.trim()?.[0] ?? '?').toUpperCase()
-  const showImg = Boolean(iconUrl) && !imgFailed
+  const isXlm = symbol.trim().toUpperCase() === 'XLM'
+  const bundledSrc = isXlm ? stellarIconUrl : null
+  const resolvedSrc = iconUrl && !imgFailed ? iconUrl : bundledSrc && !imgFailed ? bundledSrc : null
+  const showImg = Boolean(resolvedSrc)
+
+  useEffect(() => {
+    setImgFailed(false)
+  }, [iconUrl, symbol])
 
   return (
     <div
@@ -23,7 +32,7 @@ export function TokenAvatar({
     >
       {showImg ? (
         <img
-          src={iconUrl!}
+          src={resolvedSrc!}
           alt=""
           className="h-full w-full object-cover"
           onError={() => setImgFailed(true)}
@@ -34,3 +43,4 @@ export function TokenAvatar({
     </div>
   )
 }
+

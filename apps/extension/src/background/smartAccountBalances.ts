@@ -2,9 +2,10 @@ import { loadSmartAccountPortfolioRows } from '@latch/stellar'
 
 import type { GetSmartAccountBalancesResponse, SmartAccountBalanceRow } from '@latch/types'
 
-import { resolveIconDataUrlForClassicAsset } from './assetIcons'
+import { resolveIconUrlForAsset } from './assetIcons'
 import { getStellarNetworkFromEnv, horizonUrlFromEnv, networkPassphraseFromEnv, sorobanRpcUrlFromEnv } from './migration/env'
 import { getAccounts } from './storage'
+import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
 
 export async function runGetSmartAccountBalances(accountId: string): Promise<GetSmartAccountBalancesResponse> {
   const { accounts } = await getAccounts()
@@ -30,24 +31,29 @@ export async function runGetSmartAccountBalances(accountId: string): Promise<Get
 
   const iconResults = await Promise.all(
     core.map((row) =>
-      row.issuer
-        ? resolveIconDataUrlForClassicAsset({
-            network,
-            horizonUrl,
-            code: row.code,
-            issuer: row.issuer,
-          })
-        : Promise.resolve(null),
+      resolveIconUrlForAsset({
+        network,
+        horizonUrl,
+        code: row.code,
+        issuer: row.issuer,
+        sacContractId: row.sacContractId,
+      }),
     ),
   )
 
-  const rows: SmartAccountBalanceRow[] = core.map((row, i) => ({
-    code: row.code,
-    issuer: row.issuer,
-    sacContractId: row.sacContractId,
-    amount: row.amount,
-    iconUrl: iconResults[i] ?? null,
-  }))
+  const rows: SmartAccountBalanceRow[] = core.map((row, i) => {
+    const balanceUsd = computeBalanceUsd(row.amount, row.code)
+    return {
+      code: row.code,
+      issuer: row.issuer,
+      sacContractId: row.sacContractId,
+      amount: row.amount,
+      iconUrl: iconResults[i] ?? null,
+      balanceUsd: balanceUsd ?? undefined,
+    }
+  })
 
-  return { rows }
+  const totalBalanceUsd = computeTotalBalanceUsd(rows) ?? undefined
+
+  return { rows, totalBalanceUsd }
 }
