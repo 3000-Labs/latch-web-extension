@@ -96,7 +96,7 @@ export async function createAccount(params: {
     gAddress: params.gAddress,
     phantomPublicKeyHex: params.phantomPublicKeyHex,
     passkeyCredentialId: params.passkeyCredentialId,
-    passkeyKeyDataHex: params.passkeyKeyDataHex,
+    passkeyKeyDataHex: params.passkeyKeyDataHex ?? existing?.passkeyKeyDataHex,
     label: params.label ?? existing?.label
   })
 }

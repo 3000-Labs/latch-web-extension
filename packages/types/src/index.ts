@@ -67,10 +67,95 @@ export interface SmartAccountBalanceRow {
   code: string
   issuer?: string
   sacContractId: string
+  /** Catalog id from Latch API (e.g. `native`, `USDC`) for build-send. */
+  assetId?: string
+  /** SAC display decimals from API catalog. */
+  decimals?: number
   /** Human-readable amount (trimmed), Soroban SAC 7 decimals for display. */
   amount: string
-  /** Optional data URL or https URL resolved in background for token image. */
+  /** data: URL resolved in background (CSP-safe for extension UI). */
   iconUrl?: string | null
+  /** USD value from interim hardcoded prices (display string, 2 dp). */
+  balanceUsd?: string
+}
+
+/** Balance entry from `GET /api/smart-account/balances`. */
+export interface ApiSmartAccountBalance {
+  assetId: string
+  symbol: string
+  name?: string
+  contractId: string
+  decimals: number
+  balance: string
+  balanceRaw?: string
+}
+
+export interface GetSmartAccountBalancesApiResponse {
+  smartAccountAddress: string
+  balances: ApiSmartAccountBalance[]
+}
+
+export type SendSignerType = 'passkey' | 'phantom' | 'freighter'
+
+export interface BuildSendTxRequest {
+  smartAccountAddress: string
+  signerType: SendSignerType
+  recipient: string
+  amount: string
+  assetId?: string
+  contractId?: string
+  signerG?: string
+}
+
+export interface BuildSendAssetInfo {
+  assetId: string
+  symbol: string
+  contractId: string
+  decimals: number
+}
+
+export interface BuildSendTxResponse {
+  txXdr: string
+  authEntryXdr: string
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  contextRuleId: number | string
+  authDigestHex: string
+  signaturePayloadHex?: string
+  validUntilLedger: number
+  simulationResultXdr?: string
+  asset?: BuildSendAssetInfo
+  recipient?: string
+  amount?: string
+  amountRaw?: string
+  /** Freighter / delegated path */
+  smartAccountAuthEntryXdr?: string
+  gAddressPreimageXdr?: string
+  gAddressEntryTemplateXdr?: string
+  estimatedFeeXlm?: string
+  estimatedFeeUsd?: string
+  feeLabel?: string
+  [k: string]: unknown
+}
+
+export interface SetupSendRulesRequest {
+  smartAccountAddress: string
+  signerType: SendSignerType
+  assetId?: string
+  assetIds?: string[]
+  publicKeyHex?: string
+  /** WebAuthn verifier C-address (must match Latch API `NEXT_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS`). */
+  verifierAddress?: string
+  keyDataHex?: string
+  gAddress?: string
+}
+
+export interface SetupSendRulesResponse extends BuildSendTxResponse {
+  alreadyConfigured?: boolean
+  message?: string
+  configuredAsset?: BuildSendAssetInfo
+  remainingSetupCount?: number
+  instructions?: string
 }
 
 export interface GetSmartAccountBalancesRequest {
@@ -79,11 +164,37 @@ export interface GetSmartAccountBalancesRequest {
 
 export interface GetSmartAccountBalancesResponse {
   rows: SmartAccountBalanceRow[]
+  totalBalanceUsd?: string
+}
+
+export type SmartAccountTransactionKind = 'sent' | 'received' | 'deposit' | 'swap'
+export type SmartAccountTransactionStatus = 'completed' | 'pending'
+
+export interface SmartAccountTransactionRow {
+  id: string
+  transactionHash: string
+  createdAt: string
+  direction: 'sent' | 'received'
+  assetCode: string
+  amount: string
+  amountLabel: string
+  amountUsd: string | null
+  status: SmartAccountTransactionStatus
+  kind: SmartAccountTransactionKind
+  from: string
+  to: string
+}
+
+export interface GetSmartAccountTransactionsRequest {
+  accountId: string
+}
+
+export interface GetSmartAccountTransactionsResponse {
+  items: SmartAccountTransactionRow[]
 }
 
 export interface GetAssetIconDataUrlsRequest {
-  /** Classic assets only (code + G issuer). Native XLM is handled in UI. */
-  assets: { code: string; issuer: string }[]
+  assets: { code: string; issuer?: string; sacContractId?: string }[]
 }
 
 export interface GetAssetIconDataUrlsResponse {
@@ -162,9 +273,21 @@ export interface CreateOrConnectPasskeyResponse {
   alreadyDeployed: boolean
 }
 
+/** SAC transfer intent for smart-account outbound send. */
+export interface BuildTransferIntent {
+  sacContractId: string
+  assetCode: string
+  assetIssuer?: string
+  destination: string
+  /** Human-readable amount (typically 7 dp for SAC). */
+  amount: string
+  memo?: string
+}
+
 export interface BuildTxRequest {
   smartAccountAddress: string
   signerG?: string
+  transfer?: BuildTransferIntent
 }
 
 export interface BuildTxResponse {
@@ -173,6 +296,9 @@ export interface BuildTxResponse {
   authDigestHex: string
   contextRuleId: string
   validUntilLedger: number
+  estimatedFeeXlm?: string
+  estimatedFeeUsd?: string
+  feeLabel?: string
   // allow backend to add more fields without breaking
   [k: string]: unknown
 }
@@ -180,6 +306,7 @@ export interface BuildTxResponse {
 export interface BuildDelegatedTxRequest {
   smartAccountAddress: string
   gAddress: string
+  transfer?: BuildTransferIntent
 }
 
 export interface BuildDelegatedTxResponse {
@@ -188,6 +315,9 @@ export interface BuildDelegatedTxResponse {
   gAddressPreimageXdr: string
   gAddressEntryTemplateXdr: string
   authDigestHex: string
+  estimatedFeeXlm?: string
+  estimatedFeeUsd?: string
+  feeLabel?: string
 }
 
 export interface SubmitPhantomTxRequest {
@@ -196,12 +326,14 @@ export interface SubmitPhantomTxRequest {
   authSignatureHex: string
   prefixedMessage: string
   publicKeyHex: string
+  contextRuleId: number | string
 }
 
 export interface SubmitDelegatedTxRequest {
   txXdr: string
   smartAccountAuthEntryXdr: string
   gAddressEntryTemplateXdr: string
+  /** Base64 of raw 64-byte Ed25519 signature (not full signed auth entry XDR). */
   signedAuthEntryBase64: string
   signerAddress: string
 }
@@ -215,6 +347,9 @@ export interface SubmitWebauthnTxRequest {
 }
 
 export interface SubmitTxResponse {
+  transactionHash?: string
+  hash?: string
+  status?: string
   // backend response is not specified; accept opaque
   [k: string]: unknown
 }
@@ -406,7 +541,10 @@ export type MessageType =
   | 'MIGRATION_SWEEP_XLM'
   | 'MIGRATION_SWEEP_TOKEN'
   | 'GET_SMART_ACCOUNT_BALANCES'
+  | 'GET_SMART_ACCOUNT_TRANSACTIONS'
   | 'GET_ASSET_ICON_DATA_URLS'
+  | 'BUILD_SEND_TX'
+  | 'SETUP_SEND_RULES'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -463,7 +601,10 @@ export type BackgroundRequestPayloadByType = {
   MIGRATION_SWEEP_XLM: MigrationSweepXlmRequest
   MIGRATION_SWEEP_TOKEN: MigrationSweepTokenRequest
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesRequest
+  GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsRequest
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
+  BUILD_SEND_TX: BuildSendTxRequest
+  SETUP_SEND_RULES: SetupSendRulesRequest
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -502,5 +643,8 @@ export type BackgroundResponseDataByType = {
   MIGRATION_SWEEP_XLM: MigrationSweepResult
   MIGRATION_SWEEP_TOKEN: MigrationSweepResult
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesResponse
+  GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsResponse
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
+  BUILD_SEND_TX: BuildSendTxResponse
+  SETUP_SEND_RULES: SetupSendRulesResponse
 } & Record<string, unknown>

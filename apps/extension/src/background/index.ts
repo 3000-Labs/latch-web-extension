@@ -15,13 +15,16 @@ import type {
   BackendWebauthnAuthenticationFinishRequest,
   BackendWebauthnRegistrationFinishRequest,
   BuildDelegatedTxRequest,
+  BuildSendTxRequest,
   BuildTxRequest,
+  SetupSendRulesRequest,
   CreateOrConnectFreighterRequest,
   CreateOrConnectPasskeyRequest,
   CreateOrConnectPhantomRequest,
   GetAccountsResponse,
   GetAssetIconDataUrlsRequest,
   GetSmartAccountBalancesRequest,
+  GetSmartAccountTransactionsRequest,
   GetDappPermissionsRequest,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
@@ -46,7 +49,9 @@ import type {
 import {
   BackendError,
   buildDelegatedTx,
+  buildSendTx,
   buildTx,
+  setupSendRules,
   createOrConnectFreighter,
   createOrConnectPasskey,
   createOrConnectPhantom,
@@ -72,6 +77,7 @@ import { clearMnemonicSessionKeys, getMnemonicKeypair, registerMnemonicKeypair }
 import { runMigrationDiscover } from "./migration/discover"
 import { runMigrationSweepToken, runMigrationSweepXlm } from "./migration/sweep"
 import { runGetSmartAccountBalances } from "./smartAccountBalances"
+import { runGetSmartAccountTransactions } from "./smartAccountTransactions"
 import { deriveStellarKeypairFromMnemonic } from "./stellarMnemonic"
 
 import {
@@ -535,9 +541,30 @@ chrome.runtime.onMessage.addListener(
           return
         }
 
+        case "GET_SMART_ACCOUNT_TRANSACTIONS": {
+          const req = message.payload as GetSmartAccountTransactionsRequest
+          const data = await runGetSmartAccountTransactions(req.accountId)
+          sendResponse(ok(data))
+          return
+        }
+
         case "GET_ASSET_ICON_DATA_URLS": {
           const req = message.payload as GetAssetIconDataUrlsRequest
           const data = await getAssetIconDataUrlsBatch(req)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "BUILD_SEND_TX": {
+          const req = message.payload as BuildSendTxRequest
+          const data = await buildSendTx(req)
+          sendResponse(ok(data))
+          return
+        }
+
+        case "SETUP_SEND_RULES": {
+          const req = message.payload as SetupSendRulesRequest
+          const data = await setupSendRules(req)
           sendResponse(ok(data))
           return
         }

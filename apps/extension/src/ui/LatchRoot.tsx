@@ -9,7 +9,11 @@ import type {
   BackendWebauthnBeginResponse,
   BackendWebauthnRegistrationFinishResponse,
   BuildDelegatedTxResponse,
+  BuildSendTxRequest,
+  BuildSendTxResponse,
   BuildTxResponse,
+  SetupSendRulesRequest,
+  SetupSendRulesResponse,
   CreateOrConnectFreighterRequest,
   CreateOrConnectFreighterResponse,
   CreateOrConnectPhantomRequest,
@@ -17,6 +21,10 @@ import type {
   GetAccountsResponse,
   GetSmartAccountBalancesRequest,
   GetSmartAccountBalancesResponse,
+  GetSmartAccountTransactionsRequest,
+  GetSmartAccountTransactionsResponse,
+  GetAssetIconDataUrlsRequest,
+  GetAssetIconDataUrlsResponse,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
@@ -46,6 +54,8 @@ import {
   signAuthEntry,
 } from '@stellar/freighter-api'
 import { Networks } from '@stellar/stellar-sdk'
+
+import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
 import { ExternalLink, Menu } from 'lucide-react'
@@ -55,8 +65,11 @@ import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
 import successAvatarUrl from 'url:../../assets/avatars/success.png'
 
 import { SectionCard } from './components/SectionCard'
-import { HistoryScreen } from './screens/HistoryScreen'
+import { HistoryScreen } from './screens/history/HistoryScreen'
 import { HomeScreen } from './screens/HomeScreen'
+import { ImportSeedScreen } from './screens/import-seed/ImportSeedScreen'
+import { useSeedPhraseWords } from './screens/import-seed/useSeedPhraseWords'
+import { TransactionDetailScreen } from './screens/transaction-detail/TransactionDetailScreen'
 import { MigrationScreen } from './screens/MigrationScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SwapScreen } from './screens/SwapScreen'
@@ -66,16 +79,34 @@ import { storedAccountLabel } from './lib/storedAccountLabel'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
-  buildWebauthnSigDataXdrHex,
+  buildPasskeySigDataXdrFromAssertion,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
-  parseAuthenticationResponse,
   nextPasskeyAccountDisplayName,
+  passkeyAuthenticationOptionsForAuthDigest,
 } from './webauthn/passkey'
 import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
 import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
 import { swapTokens } from './swap/swapVm'
+import {
+  buildTransactionDetail,
+  groupHistoryItems,
+  iconUrlForCode,
+  mapTransactionToHistoryItem,
+} from './lib/historyFormat'
+import type { HistorySectionVm } from './types/history'
+import type { TransactionDetailVm } from './types/transaction-detail'
+import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from './types/send'
+import { SendFlow } from './screens/send/SendFlow'
+import {
+  buildSendRequestFromDraft,
+  buildSetupRequestFromDraft,
+  contextRuleIdString,
+  isDelegatedSendBuild,
+  isNoContextRuleError,
+  passkeySetupPrerequisiteError,
+} from './lib/sendTx'
 
 type Theme = 'dark' | 'light'
 type Surface = 'popup' | 'sidepanel'
@@ -90,13 +121,14 @@ type Route =
   | 'addAccount'
   | 'addAccountPasskey'
   | 'importSeed'
+  | 'importSeedEncrypt'
   | 'unlockMnemonic'
   | 'home'
   | 'history'
+  | 'transactionDetail'
   | 'swap'
   | 'swapConfirm'
-  | 'sendTx'
-  | 'txResult'
+  | 'send'
   | 'dappApproval'
   | 'migration'
   | 'migrationSuccess'
@@ -108,7 +140,7 @@ type SignerId = 'freighter' | 'phantom' | 'passkey'
  * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.
  */
 function routeKeepsUiMountedForWebauthn(route: Route): boolean {
-  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'sendTx'
+  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send'
 }
 
 const STORAGE_KEYS = {
@@ -274,23 +306,33 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
   const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
-  const [txResult, setTxResult] = useState<SubmitTxResponse | null>(null)
-
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
+
+  const [sendStep, setSendStep] = useState<SendStep>('selectToken')
+  const [sendDraft, setSendDraft] = useState<SendDraft>(INITIAL_SEND_DRAFT)
+  const [sendResult, setSendResult] = useState<SendResult | null>(null)
+  const [sendProgressLabel, setSendProgressLabel] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
 
   const [activeAccountHasMnemonicVault, setActiveAccountHasMnemonicVault] = useState(false)
   const [activeAccountMnemonicSignerLoaded, setActiveAccountMnemonicSignerLoaded] = useState(false)
   const [unlockReturnRoute, setUnlockReturnRoute] = useState<'home' | 'migration' | null>(null)
   const [portfolioRows, setPortfolioRows] = useState<SmartAccountBalanceRow[]>([])
+  const [totalBalanceUsd, setTotalBalanceUsd] = useState<string | null>(null)
   const [portfolioLoading, setPortfolioLoading] = useState(false)
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
+  const [historySections, setHistorySections] = useState<HistorySectionVm[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [transactionDetail, setTransactionDetail] = useState<TransactionDetailVm | null>(null)
+  const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
+  const [pendingMnemonic, setPendingMnemonic] = useState('')
+  const seedWords = useSeedPhraseWords()
   const [migrationDiscovery, setMigrationDiscovery] = useState<MigrationDiscovery | null | undefined>(undefined)
-  const [seedPhraseText, setSeedPhraseText] = useState('')
-  const [seedPhraseVisible, setSeedPhraseVisible] = useState(false)
   const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
-  const [rememberSeed, setRememberSeed] = useState(false)
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
+  const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
 
   const homePortfolioTokens = useMemo(
@@ -299,19 +341,47 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         id: r.sacContractId,
         symbol: r.code,
         balance: r.amount,
+        balanceUsd: r.balanceUsd ?? null,
         iconUrl: r.iconUrl,
       })),
     [portfolioRows],
   )
 
+  const networkLabel =
+    process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet'
+
+  const [swapIconByCode, setSwapIconByCode] = useState<Record<string, string | null>>({})
+
+  useEffect(() => {
+    if (setupState !== 'has_account') return
+    let cancelled = false
+    void (async () => {
+      const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>({
+        type: 'GET_ASSET_ICON_DATA_URLS',
+        payload: { assets: swapTokens.map((t) => ({ code: t.symbol })) },
+      })
+      if (cancelled || !res.ok || !res.data) return
+      const map: Record<string, string | null> = {}
+      swapTokens.forEach((t, i) => {
+        map[t.symbol] = res.data!.icons[i] ?? null
+      })
+      setSwapIconByCode(map)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [setupState])
+
   const swapTokenCatalog = useMemo(() => {
-    const xlmIcon = portfolioRows.find((r) => r.code === 'XLM')?.iconUrl
-    const usdtIcon = portfolioRows.find((r) => r.code === 'USDT')?.iconUrl
-    return swapTokens.map((t) => ({
-      ...t,
-      iconUrl: t.id === 'xlm' ? xlmIcon : t.id === 'usdt' ? usdtIcon : undefined,
-    }))
-  }, [portfolioRows])
+    return swapTokens.map((t) => {
+      const fromPortfolio = portfolioRows.find((r) => r.code === t.symbol)?.iconUrl
+      const fromResolver = swapIconByCode[t.symbol]
+      return {
+        ...t,
+        iconUrl: fromPortfolio ?? fromResolver ?? null,
+      }
+    })
+  }, [portfolioRows, swapIconByCode])
 
   /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
   const passkeyPrefetchRef = useRef<
@@ -470,15 +540,51 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         return
       }
       setPortfolioRows(res.data?.rows ?? [])
+      setTotalBalanceUsd(res.data?.totalBalanceUsd ?? null)
     } finally {
       setPortfolioLoading(false)
     }
   }, [accounts, activeAccountId])
 
+  const loadHistory = useCallback(async () => {
+    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    if (!acc?.id) {
+      setHistorySections([])
+      return
+    }
+    setHistoryLoading(true)
+    setHistoryError(null)
+    try {
+      const res = await sendToBackground<
+        GetSmartAccountTransactionsRequest,
+        GetSmartAccountTransactionsResponse
+      >({
+        type: 'GET_SMART_ACCOUNT_TRANSACTIONS',
+        payload: { accountId: acc.id },
+      })
+      if (!res.ok) {
+        setHistoryError(res.error?.message ?? 'Could not load transactions')
+        setHistorySections([])
+        return
+      }
+      const items = (res.data?.items ?? []).map((row) =>
+        mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRows, row.assetCode)),
+      )
+      setHistorySections(groupHistoryItems(items))
+    } finally {
+      setHistoryLoading(false)
+    }
+  }, [accounts, activeAccountId, portfolioRows])
+
   useEffect(() => {
     if (setupState !== 'has_account' || page !== 'main' || route !== 'home') return
     void loadPortfolio()
   }, [setupState, page, route, loadPortfolio, activeAccountId])
+
+  useEffect(() => {
+    if (route !== 'history') return
+    void loadHistory()
+  }, [route, loadHistory])
 
   async function loadPendingDapp() {
     const res = await sendToBackground<unknown, ListPendingDappRequestsResponse>({
@@ -553,10 +659,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setLoading('Importing wallet…')
     try {
       const req: ImportMnemonicAccountRequest = {
-        mnemonic: seedPhraseText,
+        mnemonic: pendingMnemonic,
         bip39Passphrase: seedExtensionPassphrase || undefined,
-        remember: rememberSeed,
-        encryptionPassword: rememberSeed ? seedEncryptionPassword : undefined,
+        remember: true,
+        encryptionPassword: seedEncryptionPassword,
       }
       const res = await sendToBackground<ImportMnemonicAccountRequest, ImportMnemonicAccountResponse>({
         type: 'IMPORT_MNEMONIC_ACCOUNT',
@@ -565,10 +671,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!res.ok) throw new Error(friendlyError(res.error))
       await persistSetupHasAccount(res.data!.smartAccountAddress)
       await refreshAccounts()
-      setSeedPhraseText('')
+      seedWords.reset()
+      setPendingMnemonic('')
       setSeedExtensionPassphrase('')
       setSeedEncryptionPassword('')
-      setRememberSeed(false)
+      setSeedEncryptionConfirm('')
+      setImportSeedStep('phrase')
       setRoute('home')
     } finally {
       setLoading(null)
@@ -697,7 +805,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!res.ok) throw new Error(friendlyError(res.error))
       setBuiltDelegatedTx(res.data!)
       setBuiltTx(null)
-      return
+      return res.data!
     }
 
     const res = await sendToBackground<
@@ -713,6 +821,238 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (!res.ok) throw new Error(friendlyError(res.error))
     setBuiltTx(res.data!)
     setBuiltDelegatedTx(null)
+    return res.data!
+  }
+
+  function resetSendFlow() {
+    setSendDraft(INITIAL_SEND_DRAFT)
+    setSendStep('selectToken')
+    setSendResult(null)
+    setSendError(null)
+    setSendProgressLabel(null)
+  }
+
+  function openSendFlow() {
+    resetSendFlow()
+    setRoute('send')
+    void loadPortfolio()
+  }
+
+  function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
+    if (!data) return undefined
+    if (typeof data.transactionHash === 'string') return data.transactionHash
+    if (typeof data.hash === 'string') return data.hash
+    return undefined
+  }
+
+  async function signAndSubmitBuilt(build: BuildSendTxResponse): Promise<SubmitTxResponse> {
+    if (!activeAccount) throw new Error('No active account')
+
+    setSendProgressLabel('Signing…')
+
+    if (
+      (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
+      isDelegatedSendBuild(build)
+    ) {
+      if (activeAccount.mode === 'freighter') {
+        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
+        const networkPassphrase =
+          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+        if (!build.gAddressEntryTemplateXdr) {
+          throw new Error('Missing delegated auth entry template from build response.')
+        }
+        const signed = await signAuthEntry(build.gAddressEntryTemplateXdr, {
+          networkPassphrase,
+          address: activeAccount.gAddress,
+        })
+        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
+        const signerAddress = signed.signerAddress
+        const signedAuthEntryBase64 = signed.signedAuthEntry
+          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
+          : undefined
+        if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
+        setSendProgressLabel('Submitting…')
+        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
+          type: 'SUBMIT_TX_DELEGATED',
+          payload: {
+            txXdr: build.txXdr,
+            smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
+            gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+            signedAuthEntryBase64,
+            signerAddress,
+          },
+        })
+        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+        return submitRes.data ?? {}
+      }
+
+      const signRes = await sendToBackground<
+        SignDelegatedGAuthEntryRequest,
+        SignDelegatedGAuthEntryResponse
+      >({
+        type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
+        payload: {
+          accountId: activeAccount.id,
+          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+          networkPassphrase: Networks.TESTNET,
+        },
+      })
+      if (!signRes.ok) throw new Error(friendlyError(signRes.error))
+      setSendProgressLabel('Submitting…')
+      const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
+        type: 'SUBMIT_TX_DELEGATED',
+        payload: {
+          txXdr: build.txXdr,
+          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
+          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+          signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
+          signerAddress: signRes.data!.signerAddress,
+        },
+      })
+      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+      return submitRes.data ?? {}
+    }
+
+    if (activeAccount.mode === 'phantom') {
+      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
+      if (!provider) throw new Error('Phantom not detected.')
+      const digest = build.authDigestHex.toLowerCase()
+      const prefixedMessage = `Stellar Smart Account Auth:\n${digest}`
+      const msgBytes = new TextEncoder().encode(prefixedMessage)
+      const signed = await provider.signMessage(msgBytes)
+      const sigBytes: Uint8Array = signed instanceof Uint8Array ? signed : signed.signature ?? new Uint8Array()
+      if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
+      setSendProgressLabel('Submitting…')
+      const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
+        type: 'SUBMIT_TX_PHANTOM',
+        payload: {
+          txXdr: build.txXdr,
+          authEntryXdr: build.authEntryXdr,
+          authSignatureHex: bytesToHex(sigBytes),
+          prefixedMessage,
+          publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
+          contextRuleId: contextRuleIdString(build),
+        },
+      })
+      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+      return submitRes.data ?? {}
+    }
+
+    if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
+      throw new Error('Missing passkey data for this account.')
+    }
+    if (!build.authDigestHex?.trim()) {
+      throw new Error('Missing auth digest from transaction build.')
+    }
+    const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
+      credentialId: activeAccount.passkeyCredentialId,
+      authDigestHex: build.authDigestHex,
+    })
+    const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
+      ReturnType<typeof startAuthentication>
+    >
+    const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
+    setSendProgressLabel('Submitting…')
+    const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
+      type: 'SUBMIT_TX_WEBAUTHN',
+      payload: {
+        txXdr: build.txXdr,
+        authEntryXdr: build.authEntryXdr,
+        sigDataXdr,
+        keyDataHex: activeAccount.passkeyKeyDataHex,
+        contextRuleId: contextRuleIdString(build),
+      },
+    })
+    if (!submitRes.ok) {
+      const errMsg = friendlyError(submitRes.error)
+      throw new Error(
+        await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+      )
+    }
+    return submitRes.data ?? {}
+  }
+
+  async function executeSendWithSetupLoop(draft: SendDraft): Promise<SendResult> {
+    if (!activeAccount) throw new Error('No active account')
+    const buildBody = buildSendRequestFromDraft(draft, activeAccount)
+    const setupBody = buildSetupRequestFromDraft(draft, activeAccount)
+    if (!buildBody) throw new Error('Invalid send details')
+    if (!setupBody) {
+      throw new Error(passkeySetupPrerequisiteError(activeAccount) ?? 'Invalid send details')
+    }
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      setSendProgressLabel('Building…')
+      const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
+        type: 'BUILD_SEND_TX',
+        payload: buildBody,
+      })
+
+      if (buildRes.ok && buildRes.data) {
+        const submitData = await signAndSubmitBuilt(buildRes.data)
+        return {
+          status: 'success',
+          hash: extractTransactionHash(submitData),
+          submittedAt: new Date().toISOString(),
+        }
+      }
+
+      if (isNoContextRuleError(buildRes.error)) {
+        setSendProgressLabel('Setting up…')
+        const setupRes = await sendToBackground<SetupSendRulesRequest, SetupSendRulesResponse>({
+          type: 'SETUP_SEND_RULES',
+          payload: setupBody,
+        })
+        if (!setupRes.ok) throw new Error(friendlyError(setupRes.error))
+        const setup = setupRes.data!
+        if (setup.alreadyConfigured) continue
+        await signAndSubmitBuilt(setup)
+        if ((setup.remainingSetupCount ?? 0) > 0) continue
+        continue
+      }
+
+      throw new Error(friendlyError(buildRes.error))
+    }
+
+    throw new Error('Send setup did not complete')
+  }
+
+  async function fetchSendFeeEstimate(): Promise<BuildSendTxResponse | null> {
+    if (!activeAccount) return null
+    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount)
+    if (!buildBody) return null
+    try {
+      const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
+        type: 'BUILD_SEND_TX',
+        payload: buildBody,
+      })
+      if (buildRes.ok && buildRes.data) return buildRes.data
+      return null
+    } catch {
+      return null
+    }
+  }
+
+  async function handleSubmitSend() {
+    setSendError(null)
+    setSendProgressLabel('Building…')
+    try {
+      const result = await executeSendWithSetupLoop(sendDraft)
+      setSendResult(result)
+      setSendStep('success')
+      void loadPortfolio()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error('[latch:send]', message, e)
+      setSendResult({
+        status: 'failure',
+        errorMessage: message,
+        submittedAt: new Date().toISOString(),
+      })
+      setSendStep('failure')
+    } finally {
+      setSendProgressLabel(null)
+    }
   }
 
   async function signAndSubmit(): Promise<string> {
@@ -737,15 +1077,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           ).data
         if (!b) throw new Error('Failed to build delegated transaction.')
         setLoading('Awaiting Freighter signature…')
-        const signed = await signAuthEntry(b.gAddressPreimageXdr as unknown as string)
-        const signedAuthEntryBase64 =
-          typeof (signed as unknown as { signedAuthEntry?: unknown }).signedAuthEntry === 'string'
-            ? ((signed as unknown as { signedAuthEntry: string }).signedAuthEntry as string)
-            : undefined
-        const signerAddress =
-          typeof (signed as unknown as { signerAddress?: unknown }).signerAddress === 'string'
-            ? ((signed as unknown as { signerAddress: string }).signerAddress as string)
-            : undefined
+        const networkPassphrase =
+          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+        if (!b.gAddressEntryTemplateXdr) {
+          throw new Error('Missing delegated auth entry template from build response.')
+        }
+        const signed = await signAuthEntry(b.gAddressEntryTemplateXdr, {
+          networkPassphrase,
+          address: activeAccount.gAddress,
+        })
+        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
+        const signerAddress = signed.signerAddress
+        const signedAuthEntryBase64 = signed.signedAuthEntry
+          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
+          : undefined
         if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
 
         setLoading('Submitting transaction…')
@@ -760,8 +1105,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           },
         })
         if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setTxResult(submitRes.data ?? {})
-        setRoute('txResult')
+        setRoute('home')
         return b.txXdr
       }
 
@@ -807,8 +1151,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           },
         })
         if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setTxResult(submitRes.data ?? {})
-        setRoute('txResult')
+        setRoute('home')
         return b.txXdr
       }
 
@@ -828,7 +1171,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           ).data
         if (!b) throw new Error('Failed to build transaction.')
 
-        const prefixedMessage = `Stellar Smart Account Auth:\n${b.authDigestHex}`
+        const prefixedMessage = `Stellar Smart Account Auth:\n${b.authDigestHex.toLowerCase()}`
         const msgBytes = new TextEncoder().encode(prefixedMessage)
         setLoading('Awaiting Phantom signature…')
         const signed = await provider.signMessage(msgBytes)
@@ -845,11 +1188,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             authSignatureHex,
             prefixedMessage,
             publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
+            contextRuleId: b.contextRuleId,
           },
         })
         if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setTxResult(submitRes.data ?? {})
-        setRoute('txResult')
+        setRoute('home')
         return b.txXdr
       }
 
@@ -870,36 +1213,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         throw new Error('Missing passkey data for this account.')
       }
 
+      if (!b.authDigestHex?.trim()) {
+        throw new Error('Missing auth digest from transaction build.')
+      }
       setLoading('Awaiting passkey authentication…')
-      const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-        type: 'PASSKEY_AUTH_BEGIN',
-        payload: undefined,
+      const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
+        credentialId: activeAccount.passkeyCredentialId,
+        authDigestHex: b.authDigestHex,
       })
-      if (!begin.ok) throw new Error(friendlyError(begin.error))
-      const optionsJSON = (begin.data as BackendWebauthnBeginResponse | undefined)?.options
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
       const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
         ReturnType<typeof startAuthentication>
       >
-      // Best-effort: keep local parsing so we can derive sigDataXdr for submit.
-      const parsed = parseAuthenticationResponse(assertion)
-      const sigDataXdr = buildWebauthnSigDataXdrHex({
-        authenticatorData: parsed.authenticatorData,
-        clientDataJson: parsed.clientDataJson,
-        signatureCompact: parsed.signatureCompact,
-      })
-
-      // Attach login/session on backend (so /api/accounts is accurate), ignore response besides errors.
-      const finish = await sendToBackground<{ response: unknown }, BackendWebauthnAuthenticationFinishResponse>({
-        type: 'PASSKEY_AUTH_FINISH',
-        payload: { response: assertion },
-      })
-      if (!finish.ok) {
-        const errMsg = friendlyError(finish.error)
-        throw new Error(
-          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
-        )
-      }
+      const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
 
       setLoading('Submitting transaction…')
       const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
@@ -918,8 +1243,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
         )
       }
-      setTxResult(submitRes.data ?? {})
-      setRoute('txResult')
+      setRoute('home')
       return b.txXdr
     } finally {
       setLoading(null)
@@ -1483,91 +1807,44 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'importSeed' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">Import recovery phrase</h2>
-                  <p className="mt-2 text-xs text-muted">
-                    Your phrase stays on this device. Only your public Stellar address is sent to Latch.
-                  </p>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <label className="block text-xs font-bold text-muted">Recovery phrase (12–24 words)</label>
-                  <button
-                    type="button"
-                    onClick={() => setSeedPhraseVisible((v) => !v)}
-                    className="rounded-full px-3 py-1 text-xs font-extrabold text-fg/80 hover:bg-surface/60 hover:text-fg"
-                    aria-pressed={seedPhraseVisible}
-                  >
-                    {seedPhraseVisible ? 'Hide' : 'View'}
-                  </button>
-                </div>
-                <textarea
-                  value={seedPhraseText}
-                  onChange={(e) => setSeedPhraseText(e.target.value)}
-                  rows={4}
-                  autoComplete="off"
-                  style={
-                    ({
-                      WebkitTextSecurity: seedPhraseVisible ? 'none' : 'disc',
-                    }) as React.CSSProperties
-                  }
-                  className="mt-1 w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
-                  placeholder="word1 word2 …"
-                />
-
-                <label className="mt-3 block text-xs font-bold text-muted">BIP-39 passphrase (optional)</label>
-                <input
-                  type="password"
-                  value={seedExtensionPassphrase}
-                  onChange={(e) => setSeedExtensionPassphrase(e.target.value)}
-                  autoComplete="new-password"
-                  className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
-                />
-
-                <label className="mt-3 flex items-center gap-2 text-sm font-bold">
-                  <input
-                    type="checkbox"
-                    checked={rememberSeed}
-                    onChange={(e) => setRememberSeed(e.target.checked)}
-                  />
-                  Remember on this device (encrypted)
-                </label>
-                {rememberSeed ? (
-                  <>
-                    <label className="mt-2 block text-xs font-bold text-muted">Encryption password</label>
-                    <input
-                      type="password"
-                      value={seedEncryptionPassword}
-                      onChange={(e) => setSeedEncryptionPassword(e.target.value)}
-                      autoComplete="new-password"
-                      className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
-                    />
-                  </>
-                ) : null}
-
-                <div className="mt-auto space-y-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void beginMnemonicImport().catch((e) =>
-                        setError(e instanceof Error ? e.message : String(e))
-                      )
+            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
+              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <ImportSeedScreen
+                  surface={surface}
+                  step={route === 'importSeedEncrypt' ? 'encrypt' : importSeedStep}
+                  words={seedWords.words}
+                  onWordChange={seedWords.setWordAt}
+                  onPasteWords={seedWords.fillFromPaste}
+                  isValidPhrase={seedWords.isValid}
+                  onBack={() => {
+                    if (route === 'importSeedEncrypt') {
+                      setRoute('importSeed')
+                      setImportSeedStep('phrase')
+                    } else {
+                      setRoute('welcome')
                     }
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Import & connect
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoute('welcome')}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    Go Back
-                  </button>
-                </div>
+                  }}
+                  onProceedToEncrypt={() => {
+                    setPendingMnemonic(seedWords.mnemonic)
+                    setImportSeedStep('encrypt')
+                    setRoute('importSeedEncrypt')
+                  }}
+                  encryptionPassword={seedEncryptionPassword}
+                  encryptionConfirm={seedEncryptionConfirm}
+                  onEncryptionPasswordChange={setSeedEncryptionPassword}
+                  onEncryptionConfirmChange={setSeedEncryptionConfirm}
+                  onImport={() =>
+                    void beginMnemonicImport().catch((e) =>
+                      setError(e instanceof Error ? e.message : String(e)),
+                    )
+                  }
+                  onEncryptBack={() => {
+                    setRoute('importSeed')
+                    setImportSeedStep('phrase')
+                  }}
+                  importError={error}
+                  busy={loading != null}
+                />
               </div>
             ) : null}
 
@@ -1643,6 +1920,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   portfolioTokens={homePortfolioTokens}
                   portfolioLoading={portfolioLoading}
                   portfolioError={portfolioError}
+                  totalBalanceUsd={totalBalanceUsd}
                   onOpenSwap={() => {
                     setSwapDraft({
                       payTokenId: 'usdt',
@@ -1654,6 +1932,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     setSwapQuote(null)
                     setRoute('swap')
                   }}
+                  onOpenSend={openSendFlow}
                 />
               </div>
             ) : null}
@@ -1699,21 +1978,29 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'history' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
                 <HistoryScreen
+                  surface={surface}
+                  sections={historySections}
+                  loading={historyLoading}
+                  error={historyError}
                   onBack={() => setRoute('home')}
+                  onRefresh={() => void loadHistory()}
                   onSelectItem={(it) => {
-                    if (it.kind !== 'swap') return
-                    setSwapDraft({
-                      payTokenId: it.asset.includes('XLM') ? 'xlm' : 'usdt',
-                      receiveTokenId: it.asset.includes('XLM') ? 'usdt' : 'xlm',
-                      payAmount: '1',
-                      useExchangeBalance: false,
-                      approved: true,
-                    })
-                    setSwapQuote(null)
-                    setRoute('swap')
+                    const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
+                    setRoute('transactionDetail')
                   }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'transactionDetail' && transactionDetail ? (
+              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <TransactionDetailScreen
+                  surface={surface}
+                  detail={transactionDetail}
+                  onBack={() => setRoute('history')}
                 />
               </div>
             ) : null}
@@ -1763,73 +2050,39 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {route === 'sendTx' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Send</h2>
-                  <p className="mt-2 text-sm text-muted">Build → sign → submit</p>
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
-                  <div className="font-extrabold">Active account</div>
-                  <div className="mt-2 text-muted">{activeAccount?.smartAccountAddress ?? '—'}</div>
-                </div>
-
-                <div className="mt-auto space-y-3">
-                  <button
-                    disabled={Boolean(loading)}
-                    onClick={() =>
-                      void signAndSubmit().catch((e) =>
-                        setError(e instanceof Error ? e.message : String(e))
-                      )
-                    }
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
-                  >
-                    {loading ? loading : 'Build & Sign'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setLoading(null)
-                      setRoute('home')
-                    }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    Back
-                  </button>
-                </div>
+            {!loading && route === 'send' ? (
+              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+                <SendFlow
+                  surface={surface}
+                  step={sendStep}
+                  draft={sendDraft}
+                  result={sendResult}
+                  portfolioRows={portfolioRows}
+                  portfolioLoading={portfolioLoading}
+                  portfolioError={portfolioError}
+                  networkLabel={networkLabel}
+                  sendProgressLabel={sendProgressLabel}
+                  sendError={sendError}
+                  onDraftChange={(patch) => setSendDraft((d) => ({ ...d, ...patch }))}
+                  onStepChange={setSendStep}
+                  onBackFromSend={() => {
+                    resetSendFlow()
+                    setRoute('home')
+                  }}
+                  onFetchFeeEstimate={fetchSendFeeEstimate}
+                  onSubmitSend={() => void handleSubmitSend()}
+                  onContinueHome={() => {
+                    resetSendFlow()
+                    setRoute('home')
+                  }}
+                  onTryAgainFromFailure={() => {
+                    setSendError(sendResult?.errorMessage ?? null)
+                    setSendStep('summary')
+                  }}
+                />
               </div>
             ) : null}
 
-            {!loading && route === 'txResult' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Submitted</h2>
-                  <p className="mt-2 text-sm text-muted">Transaction submission response</p>
-                </div>
-
-                <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 text-xs shadow-soft">
-                  <pre className="whitespace-pre-wrap break-all text-fg/90">
-                    {JSON.stringify(txResult ?? {}, null, 2)}
-                  </pre>
-                </div>
-
-                <div className="mt-auto space-y-3">
-                  <button
-                    onClick={() => {
-                      setBuiltTx(null)
-                      setBuiltDelegatedTx(null)
-                      setTxResult(null)
-                      setRoute('home')
-                    }}
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Back to Home
-                  </button>
-                </div>
-              </div>
-            ) : null}
           </>
         ) : null}
 

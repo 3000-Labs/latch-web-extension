@@ -9,8 +9,12 @@ import {
   formatWebauthnBrowserError,
   getWebauthnRpIdFromBeginOptions,
   nextPasskeyAccountDisplayName,
-  readAuthenticatorRpIdHashHexFromCredentialJSON
+  readAuthenticatorRpIdHashHexFromCredentialJSON,
+  buildWebauthnSigDataXdrHex,
+  passkeyAuthenticationOptionsForAuthDigest,
+  toLowSCompactSignatureP256
 } from "./passkey"
+import { base64UrlToBytes, bytesToBase64Url, hexToBytes } from "./utils"
 
 function account(mode: StoredAccount["mode"], id: string): StoredAccount {
   return { id, mode, smartAccountAddress: "SADDR", createdAt: 0 }
@@ -65,6 +69,37 @@ describe("webauthn/passkey", () => {
     const msg = formatWebauthnBrowserError(err)
     expect(msg).toContain("Details:")
     expect(msg).toContain('rp.id to "ghpalnblflhpeggnlilhhmohbdinlfne"')
+  })
+
+  it("passkeyAuthenticationOptionsForAuthDigest uses auth digest as WebAuthn challenge", () => {
+    const digest = "21e5a6e8c3d0940bdd4f01ba07ce73bd5898c8116911d444ed7e4a4b631ee975"
+    const opts = passkeyAuthenticationOptionsForAuthDigest({
+      credentialId: "cred-id",
+      authDigestHex: digest,
+      rpId: "ghpalnblflhpeggnlilhhmohbdinlfne"
+    })
+    expect(opts.rpId).toBe("ghpalnblflhpeggnlilhhmohbdinlfne")
+    expect(opts.challenge).toBe(bytesToBase64Url(hexToBytes(digest)))
+    expect(base64UrlToBytes(opts.challenge)).toEqual(hexToBytes(digest))
+    expect(opts.allowCredentials).toEqual([{ id: "cred-id", type: "public-key" }])
+  })
+
+  it("buildWebauthnSigDataXdrHex returns hex XDR", () => {
+    const hex = buildWebauthnSigDataXdrHex({
+      authenticatorData: new Uint8Array(37),
+      clientDataJson: new Uint8Array(20),
+      signatureCompact: new Uint8Array(64)
+    })
+    expect(hex).toMatch(/^[0-9a-f]+$/)
+    expect(hex.length).toBeGreaterThan(0)
+  })
+
+  it("toLowSCompactSignatureP256 returns 64-byte compact sig (noble/curves v2)", () => {
+    const der = new Uint8Array([0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01])
+    const out = toLowSCompactSignatureP256(der)
+    expect(out).toHaveLength(64)
+    expect(out[31]).toBe(1)
+    expect(out[63]).toBe(1)
   })
 
   it("extractRegistrationKeyData builds keyDataHex = uncompressedPk||credentialIdBytes", () => {

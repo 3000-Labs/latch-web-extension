@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react'
+import { ArrowDown, ArrowUp, Clock, Eye, EyeOff, Plus, SlidersHorizontal } from 'lucide-react'
 
 import swapIconUrl from 'url:../../../assets/icons/swap-icon.svg'
 
@@ -13,40 +13,41 @@ export type HomePortfolioToken = {
   id: string
   symbol: string
   balance: string
+  balanceUsd?: string | null
   iconUrl?: string | null
-}
-
-function formatPrimaryTotal(tokens: HomePortfolioToken[]): string {
-  const xlm = tokens.find((t) => t.symbol === 'XLM')
-  if (xlm) return `${xlm.balance} XLM`
-  if (tokens.length === 0) return '—'
-  const t = tokens[0]!
-  return `${t.balance} ${t.symbol}`
 }
 
 export function HomeScreen({
   accountName: _accountName,
-  onOpenHistory: _onOpenHistory,
+  onOpenHistory,
+  onOpenSend,
   onOpenSwap,
   onOpenMigrateAssets,
   portfolioTokens,
   portfolioLoading,
   portfolioError,
+  totalBalanceUsd,
 }: {
   accountName: string
   onOpenHistory: () => void
+  onOpenSend?: () => void
   onOpenSwap: () => void
-  /** When set, shows a banner for classic → smart account migration */
   onOpenMigrateAssets?: () => void
   portfolioTokens: HomePortfolioToken[]
   portfolioLoading: boolean
   portfolioError: string | null
+  totalBalanceUsd?: string | null
 }) {
   const [hidden, setHidden] = useState(false)
   const [tab, setTab] = useState<'tokens' | 'collectibles'>('tokens')
 
-  const totalPrimary = useMemo(() => formatPrimaryTotal(portfolioTokens), [portfolioTokens])
-  const totalDisplay = hidden ? '•••' : portfolioLoading ? '…' : portfolioError ? '—' : totalPrimary
+  const totalDisplay = useMemo(() => {
+    if (hidden) return '•••'
+    if (portfolioLoading) return '…'
+    if (portfolioError) return '—'
+    if (totalBalanceUsd) return `$${totalBalanceUsd}`
+    return '—'
+  }, [hidden, portfolioLoading, portfolioError, totalBalanceUsd])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -67,6 +68,7 @@ export function HomeScreen({
         <div className="flex items-center justify-center gap-2 text-sm font-bold text-muted">
           <span>Total Balance</span>
           <button
+            type="button"
             className="text-fg/70 hover:text-fg"
             aria-label={hidden ? 'Show balance' : 'Hide balance'}
             onClick={() => setHidden((v) => !v)}
@@ -79,9 +81,6 @@ export function HomeScreen({
           </button>
         </div>
         <div className="mt-2 text-[36px] font-bold tracking-tight">{totalDisplay}</div>
-        {!hidden && !portfolioLoading && !portfolioError ? (
-          <div className="mt-1 text-xs font-bold text-muted">On-chain (smart account)</div>
-        ) : null}
         {portfolioError ? (
           <div className="mt-2 text-xs font-bold text-red-300">{portfolioError}</div>
         ) : null}
@@ -89,7 +88,7 @@ export function HomeScreen({
 
       <div className="mt-8 flex items-center justify-center gap-2">
         <ActionIconButton label="Add" icon={<Plus {...iconProps} />} />
-        <ActionIconButton label="Send" icon={<ArrowUp {...iconProps} />} />
+        <ActionIconButton label="Send" icon={<ArrowUp {...iconProps} />} onClick={onOpenSend} />
         <ActionIconButton label="Receive" icon={<ArrowDown {...iconProps} />} />
         <ActionIconButton
           label="Swap"
@@ -105,6 +104,7 @@ export function HomeScreen({
       <div className="mt-7 flex items-end justify-between">
         <div className="flex items-center gap-4">
           <button
+            type="button"
             className={[
               'text-lg font-extrabold',
               tab === 'tokens' ? 'text-fg' : 'text-muted hover:text-fg/80',
@@ -114,6 +114,7 @@ export function HomeScreen({
             Tokens
           </button>
           <button
+            type="button"
             className={[
               'text-lg font-extrabold',
               tab === 'collectibles' ? 'text-fg' : 'text-muted hover:text-fg/80',
@@ -123,13 +124,24 @@ export function HomeScreen({
             Collectibles
           </button>
         </div>
-        <button
-          className="rounded-full border border-border px-3 py-2 text-xs font-extrabold text-fg/80 hover:bg-surface/60"
-          aria-label="Filters"
-          title="Filters"
-        >
-          <SlidersHorizontal className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onOpenHistory}
+            className="rounded-full border border-border px-3 py-2 text-xs font-extrabold text-fg/80 hover:bg-surface/60"
+            aria-label="History"
+          >
+            <Clock className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="rounded-full border border-border px-3 py-2 text-xs font-extrabold text-fg/80 hover:bg-surface/60"
+            aria-label="Filters"
+            title="Filters"
+          >
+            <SlidersHorizontal className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+          </button>
+        </div>
       </div>
 
       {tab === 'collectibles' ? (
@@ -163,7 +175,9 @@ export function HomeScreen({
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-extrabold text-muted">—</div>
+                  <div className="text-sm font-extrabold">
+                    {hidden ? '•••' : t.balanceUsd != null ? `$${t.balanceUsd}` : '—'}
+                  </div>
                   <div className="text-xs font-bold text-muted">USD</div>
                 </div>
               </button>

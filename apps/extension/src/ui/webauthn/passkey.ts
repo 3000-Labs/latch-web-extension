@@ -135,10 +135,12 @@ function bigintTo32Bytes(x: bigint): Uint8Array {
   return out
 }
 
+/** Scalar field order n for P-256 (noble/curves v2: use `Point.Fn.ORDER`, not `CURVE.n`). */
+const P256_ORDER = p256.Point.Fn.ORDER
+
 export function toLowSCompactSignatureP256(derSignature: Uint8Array): Uint8Array {
   const { r, s } = derToRs(derSignature)
-  const n = p256.CURVE.n
-  const lowS = s > n / 2n ? n - s : s
+  const lowS = s > P256_ORDER / 2n ? P256_ORDER - s : s
   const rBytes = bigintTo32Bytes(r)
   const sBytes = bigintTo32Bytes(lowS)
   return concatBytes(rBytes, sBytes)
@@ -154,10 +156,10 @@ export function buildWebauthnSigDataXdrHex(args: {
     ["client_data", args.clientDataJson],
     ["signature", args.signatureCompact]
   ].map(([k, v]) =>
-    xdr.ScMapEntry({
+    new xdr.ScMapEntry({
       key: xdr.ScVal.scvSymbol(k),
-      val: xdr.ScVal.scvBytes(v as Uint8Array)
-    })
+      val: xdr.ScVal.scvBytes(v as Uint8Array),
+    }),
   )
 
   const scVal = xdr.ScVal.scvMap(entries)
@@ -195,6 +197,47 @@ export function createLocalAuthenticationOptions(args: { rpId: string; credentia
     timeout: 60_000,
     userVerification: "required"
   } as const
+}
+
+/** Chrome extension id used as WebAuthn `rpId` for smart-account auth (not session login). */
+export function extensionWebauthnRpId(): string {
+  const extId =
+    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+      ? chrome.runtime.id
+      : ""
+  if (!extId) {
+    throw new Error("WebAuthn for transactions requires the Chrome extension context.")
+  }
+  return extId
+}
+
+/**
+ * WebAuthn options for signing a smart-account auth entry.
+ * Challenge must be the build response `authDigestHex` (not PASSKEY_AUTH_BEGIN session challenge).
+ */
+export function passkeyAuthenticationOptionsForAuthDigest(args: {
+  credentialId: string
+  authDigestHex: string
+  rpId?: string
+}) {
+  const hex = args.authDigestHex.trim().replace(/^0x/i, "")
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
+    throw new Error("Invalid auth digest from transaction build.")
+  }
+  return createLocalAuthenticationOptions({
+    rpId: args.rpId ?? extensionWebauthnRpId(),
+    credentialId: args.credentialId,
+    authDigestHex: hex,
+  })
+}
+
+export function buildPasskeySigDataXdrFromAssertion(assertion: unknown): string {
+  const parsed = parseAuthenticationResponse(assertion)
+  return buildWebauthnSigDataXdrHex({
+    authenticatorData: parsed.authenticatorData,
+    clientDataJson: parsed.clientDataJson,
+    signatureCompact: parsed.signatureCompact,
+  })
 }
 
 export function parseAuthenticationResponse(authResponse: any): Omit<PasskeyAssertionResult, "sigDataXdrHex"> {

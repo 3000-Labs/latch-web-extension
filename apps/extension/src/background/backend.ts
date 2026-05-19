@@ -7,8 +7,13 @@ import type {
   BackendWebauthnRegistrationFinishResponse,
   BuildDelegatedTxRequest,
   BuildDelegatedTxResponse,
+  BuildSendTxRequest,
+  BuildSendTxResponse,
   BuildTxRequest,
   BuildTxResponse,
+  GetSmartAccountBalancesApiResponse,
+  SetupSendRulesRequest,
+  SetupSendRulesResponse,
   CreateOrConnectFreighterRequest,
   CreateOrConnectFreighterResponse,
   CreateOrConnectPasskeyRequest,
@@ -24,7 +29,6 @@ import type {
 } from "@latch/types"
 
 const DEFAULT_LATCH_API_URL = "https://v0-latch-stellar.vercel.app"
-// const DEFAULT_LATCH_API_URL = "http://localhost:3000"
 
 /** Plasmo inlines `process.env.PLASMO_PUBLIC_*` at build time; keep a direct `process.env` reference. */
 function latchApiBaseUrl(): string {
@@ -99,12 +103,30 @@ async function jsonFetch<TRes>(path: string, init?: RequestInit & { timeoutMs?: 
     })
 
     const text = await res.text()
-    const data = text ? (JSON.parse(text) as unknown) : undefined
+    let data: unknown
+    if (text) {
+      const trimmed = text.trimStart()
+      if (trimmed.startsWith("<")) {
+        throw new BackendError(
+          `API returned HTML instead of JSON (${res.status}). Check PLASMO_PUBLIC_LATCH_API_URL (${BASE_URL}) and that ${path} exists on your Latch API.`,
+          { status: res.status }
+        )
+      }
+      try {
+        data = JSON.parse(text) as unknown
+      } catch {
+        throw new BackendError(
+          `API response was not valid JSON (${res.status}). Check PLASMO_PUBLIC_LATCH_API_URL (${BASE_URL}) and route ${path}.`,
+          { status: res.status }
+        )
+      }
+    }
 
     if (!res.ok) {
+      const body = data as { error?: string; message?: string; code?: string } | undefined
       throw new BackendError(
-        (data as any)?.error ?? (data as any)?.message ?? `Request failed: ${res.status}`,
-        { status: res.status, details: data }
+        body?.error ?? body?.message ?? `Request failed: ${res.status}`,
+        { status: res.status, code: body?.code, details: data }
       )
     }
 
@@ -212,6 +234,32 @@ export async function setBackendActiveAccount(args: { smartAccountAddress: strin
   return await jsonFetch<{ ok: true }>("/api/accounts/set-active", {
     method: "POST",
     body: JSON.stringify(args)
+  })
+}
+
+export async function getSmartAccountBalancesFromApi(
+  smartAccountAddress: string,
+  all = false
+): Promise<GetSmartAccountBalancesApiResponse> {
+  const q = new URLSearchParams({ smartAccountAddress })
+  if (all) q.set("all", "1")
+  return await jsonFetch<GetSmartAccountBalancesApiResponse>(
+    `/api/smart-account/balances?${q.toString()}`,
+    { method: "GET" }
+  )
+}
+
+export async function buildSendTx(req: BuildSendTxRequest): Promise<BuildSendTxResponse> {
+  return await jsonFetch<BuildSendTxResponse>("/api/transaction/build-send", {
+    method: "POST",
+    body: JSON.stringify(req)
+  })
+}
+
+export async function setupSendRules(req: SetupSendRulesRequest): Promise<SetupSendRulesResponse> {
+  return await jsonFetch<SetupSendRulesResponse>("/api/smart-account/setup-send-rules", {
+    method: "POST",
+    body: JSON.stringify(req)
   })
 }
 

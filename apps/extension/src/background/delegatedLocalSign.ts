@@ -1,5 +1,7 @@
 import { authorizeEntry, xdr, type Keypair } from '@stellar/stellar-sdk'
 
+import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
+
 function readSignatureExpirationLedger(entry: xdr.SorobanAuthorizationEntry): number {
   return entry.credentials().address().signatureExpirationLedger()
 }
@@ -15,8 +17,9 @@ export async function signDelegatedGAddressEntry(args: {
   const entry = xdr.SorobanAuthorizationEntry.fromXDR(args.gAddressEntryTemplateXdr, 'base64')
   const validUntil = readSignatureExpirationLedger(entry)
   const signed = await authorizeEntry(entry, args.signer, validUntil, args.networkPassphrase)
+  const signedEntryBase64 = signed.toXDR('base64')
   return {
-    signedAuthEntryBase64: signed.toXDR('base64'),
+    signedAuthEntryBase64: normalizeDelegatedSignatureBase64(signedEntryBase64),
     signerAddress: args.signer.publicKey(),
   }
 }
