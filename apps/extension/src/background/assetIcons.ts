@@ -2,14 +2,10 @@ import { StellarToml, StrKey } from '@stellar/stellar-sdk'
 
 import type { GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse } from '@latch/types'
 
-import {
-  fetchCombinedTokenLists,
-  iconFromTokenLists,
-  NATIVE_XLM_ICON_URL,
-} from './assetTokenLists'
+import { coinCapIconUrl, fetchTokenMap, iconFromTokenMap } from './assetTokenLists'
 import { getStellarNetworkFromEnv, horizonUrlFromEnv } from './migration/env'
 
-const CACHE_PREFIX = 'latch.assetIconDataUrl.v3'
+const CACHE_PREFIX = 'latch.assetIconDataUrl.v4'
 const MAX_ICON_BYTES = 200_000
 
 function cacheKey(network: string, code: string, issuerOrNative: string) {
@@ -104,34 +100,35 @@ async function resolveHttpsIconUrl(params: {
   signal?: AbortSignal
 }): Promise<string | null> {
   const code = params.code
+  const codeUpper = code.toUpperCase()
 
-  if (code === 'XLM' && !params.issuer) {
-    const lists = await fetchCombinedTokenLists(params.network)
-    return iconFromTokenLists(lists, { code: 'XLM', sacContractId: params.sacContractId }) ?? NATIVE_XLM_ICON_URL
+  if (codeUpper === 'XLM' && !params.issuer) {
+    return null
   }
 
-  if (params.issuer && StrKey.isValidEd25519PublicKey(params.issuer)) {
-    const lists = await fetchCombinedTokenLists(params.network)
-    const fromList = iconFromTokenLists(lists, {
-      code,
-      issuer: params.issuer,
-      sacContractId: params.sacContractId,
-    })
-    if (fromList) return fromList
+  const map = await fetchTokenMap(params.network)
+  const fromList = iconFromTokenMap(map, {
+    code,
+    issuer: params.issuer,
+    sacContractId: params.sacContractId,
+  })
+  if (fromList) return fromList
 
-    return resolveIconUrlFromToml({
+  if (params.issuer && StrKey.isValidEd25519PublicKey(params.issuer)) {
+    const fromToml = await resolveIconUrlFromToml({
       horizonUrl: params.horizonUrl,
       code,
       issuer: params.issuer,
       signal: params.signal,
     })
+    if (fromToml) return fromToml
   }
 
-  const lists = await fetchCombinedTokenLists(params.network)
-  return iconFromTokenLists(lists, {
-    code,
-    sacContractId: params.sacContractId,
-  })
+  if (codeUpper !== 'XLM') {
+    return coinCapIconUrl(code)
+  }
+
+  return null
 }
 
 /**
@@ -148,6 +145,10 @@ export async function resolveIconDataUrlForAsset(params: {
   signal?: AbortSignal
 }): Promise<string | null> {
   const cacheId = params.issuer ?? 'native'
+
+  if (params.code.toUpperCase() === 'XLM' && !params.issuer) {
+    return null
+  }
 
   const cached = await getCachedIconDataUrl(params.network, params.code, cacheId)
   if (cached) return cached

@@ -11,7 +11,6 @@ import type {
   BuildSendTxResponse,
   BuildTxRequest,
   BuildTxResponse,
-  GetSmartAccountBalancesApiResponse,
   SetupSendRulesRequest,
   SetupSendRulesResponse,
   CreateOrConnectFreighterRequest,
@@ -235,18 +234,6 @@ export async function setBackendActiveAccount(args: { smartAccountAddress: strin
     method: "POST",
     body: JSON.stringify(args)
   })
-}
-
-export async function getSmartAccountBalancesFromApi(
-  smartAccountAddress: string,
-  all = false
-): Promise<GetSmartAccountBalancesApiResponse> {
-  const q = new URLSearchParams({ smartAccountAddress })
-  if (all) q.set("all", "1")
-  return await jsonFetch<GetSmartAccountBalancesApiResponse>(
-    `/api/smart-account/balances?${q.toString()}`,
-    { method: "GET" }
-  )
 }
 
 export async function buildSendTx(req: BuildSendTxRequest): Promise<BuildSendTxResponse> {

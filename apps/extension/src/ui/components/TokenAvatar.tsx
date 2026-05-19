@@ -16,7 +16,15 @@ export function TokenAvatar({
   const letter = (symbol?.trim()?.[0] ?? '?').toUpperCase()
   const isXlm = symbol.trim().toUpperCase() === 'XLM'
   const bundledSrc = isXlm ? stellarIconUrl : null
-  const resolvedSrc = iconUrl && !imgFailed ? iconUrl : bundledSrc && !imgFailed ? bundledSrc : null
+  // Native XLM always uses the bundled Stellar mark (ignore list/CoinCap data URLs).
+  const resolvedSrc =
+    isXlm && bundledSrc && !imgFailed
+      ? bundledSrc
+      : iconUrl && !imgFailed
+        ? iconUrl
+        : bundledSrc && !imgFailed
+          ? bundledSrc
+          : null
   const showImg = Boolean(resolvedSrc)
 
   useEffect(() => {
