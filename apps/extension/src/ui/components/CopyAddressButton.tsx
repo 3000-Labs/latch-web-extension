@@ -24,17 +24,29 @@ export function CopyAddressButton({
 
   const disabled = !address || address === '—'
 
+  const stopMenuSelect = menuAnchor
+    ? (e: React.PointerEvent | React.MouseEvent) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    : undefined
+
   return (
     <button
       type="button"
       disabled={disabled}
-      onPointerDown={menuAnchor ? (e) => e.preventDefault() : undefined}
+      data-account-menu-copy={menuAnchor ? 'true' : undefined}
+      onPointerDown={stopMenuSelect}
       className={[
         'shrink-0 text-primary hover:opacity-90 disabled:pointer-events-none disabled:opacity-30',
         className ?? '',
       ].join(' ')}
       aria-label={copied ? 'Copied' : 'Copy address'}
-      onClick={() => {
+      onClick={(e) => {
+        if (menuAnchor) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
         if (disabled) return
         void navigator.clipboard.writeText(address).then(() => {
           setCopied(true)

@@ -78,20 +78,42 @@ export function AccountMenu({
         {accounts.map((a, idx) => (
           <DropdownMenuItem
             key={a.id}
-            onSelect={() => onSelectAccount(a.id)}
+            // We prevent Radix's default "select" behavior so the row itself never
+            // switches accounts / closes the menu. Switching is handled only by the
+            // left-side button (account info area).
+            onSelect={(e) => e.preventDefault()}
             className={activeAccountId === a.id ? 'bg-bg/40' : undefined}
           >
-            <div className="flex w-full min-w-0 flex-col gap-1">
-              <div className="flex w-full items-start justify-between gap-2">
+            <div className="flex w-full min-w-0 items-start justify-between gap-2">
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => {
+                  setMenuOpen(false)
+                  onSelectAccount(a.id)
+                }}
+              >
                 <div className="min-w-0 truncate text-sm font-extrabold text-fg">
                   {storedAccountLabel(a, idx)}
                 </div>
+                <div className="mt-1 flex w-full items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-bold text-muted/90">
+                    {shortAddr(a.smartAccountAddress)}
+                  </span>
+                </div>
+                <div className="mt-1 truncate text-[11px] font-bold text-muted/80">
+                  {signerDetailLine(a)}
+                </div>
+              </button>
+
+              <div className="flex shrink-0 flex-col items-end gap-1">
                 <button
                   type="button"
                   className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg/70 hover:bg-bg/50 hover:text-fg"
                   aria-label="Rename account"
                   onPointerDown={(e) => e.preventDefault()}
                   onClick={(e) => {
+                    e.preventDefault()
                     e.stopPropagation()
                     setMenuOpen(false)
                     onRenameAccount(a.id)
@@ -99,15 +121,7 @@ export function AccountMenu({
                 >
                   <Pencil className="h-[16px] w-[16px]" strokeWidth={2} aria-hidden />
                 </button>
-              </div>
-              <div className="flex w-full items-center gap-2">
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] font-bold text-muted/90">
-                  {shortAddr(a.smartAccountAddress)}
-                </span>
                 <CopyAddressButton address={a.smartAccountAddress} menuAnchor />
-              </div>
-              <div className="truncate text-[11px] font-bold text-muted/80">
-                {signerDetailLine(a)}
               </div>
             </div>
           </DropdownMenuItem>

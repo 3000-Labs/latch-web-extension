@@ -71,11 +71,16 @@ import { ImportSeedScreen } from './screens/import-seed/ImportSeedScreen'
 import { useSeedPhraseWords } from './screens/import-seed/useSeedPhraseWords'
 import { TransactionDetailScreen } from './screens/transaction-detail/TransactionDetailScreen'
 import { MigrationScreen } from './screens/MigrationScreen'
+import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
 import { AccountMenu } from './components/AccountMenu'
 import { storedAccountLabel } from './lib/storedAccountLabel'
+import {
+  isMigrationHomePromoCompleted,
+  markMigrationHomePromoCompleted,
+} from './lib/migrationHomePrefs'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
@@ -143,6 +148,35 @@ type SignerId = 'freighter' | 'phantom' | 'passkey'
  */
 function routeKeepsUiMountedForWebauthn(route: Route): boolean {
   return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send'
+}
+
+const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
+  'home',
+  'history',
+  'transactionDetail',
+  'swap',
+  'swapConfirm',
+  'send',
+  'receive',
+  'migration',
+  'migrationSuccess',
+  'dappApproval',
+]
+
+function resolveMainRoute(args: { needsMnemonicUnlock: boolean; preferred?: Route }): Route {
+  if (args.needsMnemonicUnlock) return 'unlockMnemonic'
+  return args.preferred ?? 'home'
+}
+
+function needsMnemonicUnlockFromAccounts(
+  accounts: StoredAccount[],
+  activeAccountId: string | undefined,
+  hasVault: boolean | undefined,
+  signerLoaded: boolean | undefined
+): boolean {
+  if (!activeAccountId || !hasVault || signerLoaded !== false) return false
+  const active = accounts.find((a) => a.id === activeAccountId)
+  return active?.mode === 'mnemonic'
 }
 
 const STORAGE_KEYS = {
@@ -341,6 +375,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
+  const [migrationHomePromoCompleted, setMigrationHomePromoCompleted] = useState(false)
+
+  const needsMnemonicUnlock = useMemo(
+    () =>
+      activeAccount?.mode === 'mnemonic' &&
+      activeAccountHasMnemonicVault &&
+      !activeAccountMnemonicSignerLoaded,
+    [activeAccount, activeAccountHasMnemonicVault, activeAccountMnemonicSignerLoaded]
+  )
+
+  const showHomeMigrationPromo =
+    migrationDiscovery?.state === 'not_started' &&
+    Boolean(activeAccount?.id) &&
+    !migrationHomePromoCompleted
 
   const homePortfolioTokens = useMemo(
     () =>
@@ -434,6 +482,36 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [setupState, page, activeAccountId, accounts])
 
   useEffect(() => {
+    const accountId = activeAccount?.id
+    if (!accountId) {
+      setMigrationHomePromoCompleted(false)
+      return
+    }
+    let cancelled = false
+    void isMigrationHomePromoCompleted(accountId).then((completed) => {
+      if (!cancelled) setMigrationHomePromoCompleted(completed)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [activeAccount?.id])
+
+  useEffect(() => {
+    if (!needsMnemonicUnlock) return
+    if (page === 'settings') setPage('main')
+    if (ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(route)) {
+      setRoute('unlockMnemonic')
+    }
+  }, [needsMnemonicUnlock, route, page])
+
+  useEffect(() => {
+    if (route !== 'migrationSuccess' || !activeAccount?.id) return
+    void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
+      setMigrationHomePromoCompleted(true)
+    })
+  }, [route, activeAccount?.id])
+
+  useEffect(() => {
     if (route !== 'createPasskey' && route !== 'addAccountPasskey') {
       passkeyPrefetchRef.current = null
       setPasskeyPrefetchReady(false)
@@ -507,7 +585,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         setActiveAccountId(res.data.activeAccountId)
         setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
         setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
-        if (res.data.accounts.length > 0) setRoute('home')
+        if (res.data.accounts.length > 0) {
+          const locked = needsMnemonicUnlockFromAccounts(
+            res.data.accounts,
+            res.data.activeAccountId,
+            res.data.activeAccountHasMnemonicVault,
+            res.data.activeAccountMnemonicSignerLoaded
+          )
+          setRoute(resolveMainRoute({ needsMnemonicUnlock: locked }))
+        }
       })
       .catch(() => {})
 
@@ -515,8 +601,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [])
 
   useEffect(() => {
-    if (setupState === 'has_account' && accounts.length > 0) setRoute('home')
-  }, [setupState, accounts.length])
+    if (setupState === 'has_account' && accounts.length > 0) {
+      setRoute((prev) =>
+        resolveMainRoute({
+          needsMnemonicUnlock,
+          preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : 'home',
+        })
+      )
+    }
+  }, [setupState, accounts.length, needsMnemonicUnlock])
 
   async function persistSetupHasAccount(publicKey: string) {
     const req: SetSetupStateRequest = { setupState: 'has_account', accountPublicKey: publicKey }
@@ -524,7 +617,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setSetupState('has_account')
   }
 
-  async function refreshAccounts(): Promise<StoredAccount[] | undefined> {
+  async function refreshAccounts(): Promise<
+    { accounts: StoredAccount[]; needsMnemonicUnlock: boolean } | undefined
+  > {
     const res = await sendToBackground<undefined, GetAccountsResponse>({
       type: 'GET_ACCOUNTS',
       payload: undefined,
@@ -534,7 +629,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setActiveAccountId(res.data.activeAccountId)
     setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
     setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
-    return res.data.accounts
+    const locked = needsMnemonicUnlockFromAccounts(
+      res.data.accounts,
+      res.data.activeAccountId,
+      res.data.activeAccountHasMnemonicVault,
+      res.data.activeAccountMnemonicSignerLoaded
+    )
+    return { accounts: res.data.accounts, needsMnemonicUnlock: locked }
   }
 
   const loadPortfolio = useCallback(async () => {
@@ -721,7 +822,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       await refreshAccounts()
       const dest = unlockReturnRoute ?? 'home'
       setUnlockReturnRoute(null)
-      setRoute(dest)
+      setRoute(resolveMainRoute({ needsMnemonicUnlock: false, preferred: dest }))
     } finally {
       setLoading(null)
     }
@@ -1384,7 +1485,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         ].join(' ')}
       >
         <div className="flex items-center justify-between gap-2">
-          {page === 'main' && (route === 'home' || route === 'migration') ? (
+          {page === 'main' &&
+          !needsMnemonicUnlock &&
+          (route === 'home' || route === 'migration') ? (
             <AccountMenu
               accountLabel={activeAccountLabel}
               accounts={accounts}
@@ -1395,6 +1498,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   payload: { accountId },
                 })
                   .then(() => refreshAccounts())
+                  .then((result) => {
+                    if (!result) return
+                    setRoute((prev) =>
+                      resolveMainRoute({
+                        needsMnemonicUnlock: result.needsMnemonicUnlock,
+                        preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : 'home',
+                      })
+                    )
+                  })
                   .catch(() => {})
               }}
               onAddAccount={() => setRoute('addAccount')}
@@ -1410,19 +1522,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             <div className="h-10 w-10" />
           )}
           <div className="flex items-center justify-end gap-2">
-            <IconButton
-              aria-label="Menu"
-              title="Menu"
-              onClick={() => {
-                setPage('settings')
-              }}
-            >
-              <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
-            </IconButton>
+            {!needsMnemonicUnlock ? (
+              <IconButton
+                aria-label="Menu"
+                title="Menu"
+                onClick={() => {
+                  setPage('settings')
+                }}
+              >
+                <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
+              </IconButton>
+            ) : (
+              <div className="h-8 w-8" />
+            )}
           </div>
         </div>
 
-        {page === 'settings' ? (
+        {page === 'settings' && !needsMnemonicUnlock ? (
           <div
             className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(
               ' '
@@ -1931,76 +2047,27 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
             {!loading && route === 'unlockMnemonic' ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">
-                    Unlock saved phrase
-                  </h2>
-                  <p className="mt-2 text-xs text-muted">
-                    Enter the password you chose when enabling Remember.
-                  </p>
-                </div>
-                <input
-                  type="password"
-                  value={unlockVaultPassword}
-                  onChange={(e) => setUnlockVaultPassword(e.target.value)}
-                  autoComplete="current-password"
-                  className="mt-6 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg shadow-inner outline-none focus:border-primary"
+                <UnlockMnemonicScreen
+                  password={unlockVaultPassword}
+                  onPasswordChange={setUnlockVaultPassword}
+                  onUnlock={() =>
+                    void unlockMnemonicVault().catch((e) =>
+                      setError(e instanceof Error ? e.message : String(e))
+                    )
+                  }
+                  error={error}
+                  busy={loading != null}
                 />
-                <div className="mt-auto space-y-3 pt-6">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      void unlockMnemonicVault().catch((e) =>
-                        setError(e instanceof Error ? e.message : String(e))
-                      )
-                    }
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Unlock
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const dest = unlockReturnRoute === 'migration' ? 'migration' : 'home'
-                      setUnlockReturnRoute(null)
-                      setRoute(dest)
-                    }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    Cancel
-                  </button>
-                </div>
               </div>
             ) : null}
 
-            {!loading && route === 'home' ? (
+            {!loading && route === 'home' && !needsMnemonicUnlock ? (
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
-                {activeAccount?.mode === 'mnemonic' &&
-                activeAccountHasMnemonicVault &&
-                !activeAccountMnemonicSignerLoaded ? (
-                  <div className="mb-3 rounded-2xl border border-primary/40 bg-surface/80 px-3 py-3 text-xs shadow-soft">
-                    <div className="font-extrabold text-fg">Saved recovery phrase is locked</div>
-                    <div className="mt-1 text-muted">
-                      Unlock to sign transactions after the extension restarts.
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUnlockReturnRoute('home')
-                        setRoute('unlockMnemonic')
-                      }}
-                      className="mt-2 h-9 w-full rounded-full bg-primary text-sm font-extrabold text-black"
-                    >
-                      Unlock
-                    </button>
-                  </div>
-                ) : null}
                 <HomeScreen
                   accountName={activeAccountLabel}
                   onOpenHistory={() => setRoute('history')}
                   onOpenMigrateAssets={
-                    migrationDiscovery?.state === 'not_started'
+                    showHomeMigrationPromo
                       ? () => setRoute('migration')
                       : undefined
                   }
@@ -2035,7 +2102,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <MigrationScreen
                   surface={surface}
                   accountId={activeAccount.id}
-                  onBack={() => setRoute('home')}
+                  onBack={() =>
+                    setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
+                  }
                   onDone={() => setRoute('migrationSuccess')}
                   onNeedUnlock={() => {
                     setUnlockReturnRoute('migration')
@@ -2064,9 +2133,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   type="button"
                   className="mt-8 h-12 w-full max-w-xs rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   onClick={() => {
+                    if (activeAccount?.id) {
+                      void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
+                        setMigrationHomePromoCompleted(true)
+                      })
+                    }
                     setMigrationDiscovery(undefined)
                     void loadPortfolio()
-                    setRoute('home')
+                    setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
                   }}
                 >
                   Back to home
