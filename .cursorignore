@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.plasmo/
+.turbo/
+.next/
+*.tsbuildinfo
+.env
+.env.local
+.DS_Store
+.pnpm-store/

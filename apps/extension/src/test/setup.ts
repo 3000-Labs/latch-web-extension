@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, vi } from "vitest"
-import { createChromeMock } from "./chromeMock"
+import { afterEach, beforeEach, vi } from 'vitest'
+import { createChromeMock } from './chromeMock'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -13,4 +13,3 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
 })
-

@@ -6,12 +6,15 @@
   "types": "./src/index.ts",
   "scripts": {
     "lint": "eslint src --ext .ts,.tsx",
-    "build": "tsc --noEmit"
+    "build": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@latch/types": "workspace:*"
+    "@latch/types": "workspace:*",
+    "@stellar/stellar-sdk": "^15.0.1"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
   }
 }

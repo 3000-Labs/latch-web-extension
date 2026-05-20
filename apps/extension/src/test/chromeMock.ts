@@ -5,7 +5,9 @@ type StorageArea = {
 
 export function createChromeMock() {
   const store = new Map<string, any>()
-  const onMessageListeners: Array<(message: any, sender: any, sendResponse: (res: any) => void) => void> = []
+  const onMessageListeners: Array<
+    (message: any, sender: any, sendResponse: (res: any) => void) => void
+  > = []
 
   const local: StorageArea = {
     async get(keys) {
@@ -27,46 +29,45 @@ export function createChromeMock() {
     },
     async set(items) {
       for (const [k, v] of Object.entries(items)) store.set(k, v)
-    }
+    },
   }
 
   return {
     storage: {
       local,
       onChanged: {
-        addListener() {}
-      }
+        addListener() {},
+      },
     },
     runtime: {
       async sendMessage(message: any) {
         const listener = onMessageListeners[onMessageListeners.length - 1]
-        if (!listener) throw new Error("No chrome.runtime.onMessage listener registered")
+        if (!listener) throw new Error('No chrome.runtime.onMessage listener registered')
         return await new Promise((resolve) => listener(message, {}, resolve))
       },
       onMessage: {
         addListener(cb: any) {
           onMessageListeners.push(cb)
-        }
+        },
       },
       onInstalled: {
-        addListener() {}
+        addListener() {},
       },
       onStartup: {
-        addListener() {}
-      }
+        addListener() {},
+      },
     },
     action: {
       async setPopup() {},
-      async openPopup() {}
+      async openPopup() {},
     },
     windows: {
       async getLastFocused() {
         return { id: 1 }
-      }
+      },
     },
     sidePanel: {
-      async open() {}
-    }
+      async open() {},
+    },
   }
 }
-

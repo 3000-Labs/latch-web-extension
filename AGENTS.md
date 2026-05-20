@@ -25,10 +25,19 @@ packages/
 | Context        | File                                      | Rule                                                               |
 | -------------- | ----------------------------------------- | ------------------------------------------------------------------ |
 | Popup          | `apps/extension/src/popup/index.tsx`      | Primary UI surface. No key material. Sends messages to background. |
+| Side panel     | `apps/extension/src/sidepanel/index.tsx`  | Same rules as popup: no key material; messages to background only. |
 | Background SW  | `apps/extension/src/background/index.ts`  | ONLY context allowed to hold keys / sign.                          |
 | Content Script | `apps/extension/src/contents/injector.ts` | Proxy only. Bridges dapp ↔ background.                             |
 
 **Never import `@latch/crypto` outside the background service worker.**
+
+### Popup vs side panel (feature parity)
+
+- Wallet UX is implemented in **`apps/extension/src/ui/LatchRoot.tsx`** (and screens under `apps/extension/src/ui/screens/*`). Both **popup** and **side panel** mount the same `LatchRoot` tree with a `surface` prop (`"popup"` | `"sidepanel"`) for layout only.
+- **Do not ship flows that work in one surface but not the other** unless you document an explicit, product-approved exception in this file. Onboarding, passkey create/login, settings, and signing flows must behave the same in popup and side panel.
+- Avoid long `await` chains between a **user click** and **`navigator.credentials`** (WebAuthn): transient user activation is easier to lose in the side panel than in the popup; keep pre-credential work minimal.
+- **Do not swap the whole route for a generic loading screen** between the click and WebAuthn: unmounting the control that received the gesture can prevent the passkey UI from appearing (especially in the side panel). Keep passkey-related screens mounted and use inline disabled/busy state instead (see `routeKeepsUiMountedForWebauthn` in `LatchRoot.tsx`).
+- **Side panel WebAuthn**: Chrome often does not complete `navigator.credentials` in the side panel (hangs with no OS prompt). Latch **prefetches** `/begin` on the Create / Passkey-login screens, then runs `startRegistration` / `startAuthentication` in a small **`tabs/passkey-bridge`** extension popup (`chrome.windows` + `chrome.storage.session` handoff). The action toolbar **popup** keeps in-page WebAuthn. Both surfaces use the same backend finish calls.
 
 ## Tech Stack
 
@@ -42,14 +51,21 @@ packages/
 
 - All inter-context communication via `chrome.runtime.sendMessage`
 - Message types defined in `@latch/types` (`MessageType`, `BackgroundMessage`, `BackgroundResponse`)
-- Network config via `PLASMO_PUBLIC_*` env vars
+- Network config via `PLASMO_PUBLIC_*` env vars (including **`PLASMO_PUBLIC_LATCH_API_URL`** for the Latch HTTP API base URL in [`apps/extension/src/background/backend.ts`](apps/extension/src/background/backend.ts); defaults to `https://v0-latch-stellar.vercel.app`. Local dev: set to `http://localhost:3000` and ensure `apps/extension/package.json` `manifest.host_permissions` includes that origin.)
 - Stellar network: testnet by default during development
+- All icons SVGs should never be written from scratch, prefer importing icons that fit the task.
+- Use lucide icons or icon svgs if provided
+- Keep UI code clean and modular: avoid large monolithic screen files. Prefer extracting reusable UI building blocks into `apps/extension/src/ui/components/*` or feature-local folders (e.g. `apps/extension/src/ui/swap/components/*`) once a screen grows beyond a few small helpers.
+- **Pixel-perfect UI from designs is mandatory**:
+  - Do not invent spacing, typography, shadows, gradients, layouts, or components that are not explicitly shown in the design.
+  - Prefer using the exact design-provided image/assets when pixel accuracy is required.
+  - If any design detail is ambiguous or missing (dimensions, states, interactions), **ask for clarification** before implementing.
 
 ## Data fetching & API requests (Plasmo / MV3 best practices)
 
 ### Golden rule: fetch in the right context
 
-- **Popup/UI (`apps/extension/src/popup/*`, `apps/extension/src/ui/*`)**: UI-only. No secrets. **Do not** talk to RPCs/APIs directly except for truly public, low-risk reads (and even then, prefer the background for consistency).
+- **Popup / side panel UI (`apps/extension/src/popup/*`, `apps/extension/src/sidepanel/*`, `apps/extension/src/ui/*`)**: UI-only. No secrets. **Do not** talk to RPCs/APIs directly except for truly public, low-risk reads (and even then, prefer the background for consistency).
 - **Content script (`apps/extension/src/contents/*`)**: proxy only. **Never** fetch from the page context and never embed business logic. Bridge dapp ↔ background.
 - **Background service worker (`apps/extension/src/background/index.ts`)**: **the place for network + privileged work**:
   - signing, vault access, key derivation
@@ -59,7 +75,7 @@ packages/
 ### Architecture: one network “edge” in the background
 
 - **Single entrypoint**: implement all outbound HTTP/RPC calls behind a small background “API layer” (e.g. `apps/extension/src/background/api/*`).
-- **UI talks in messages, not URLs**: popup asks for *intent* (“get balances”, “simulate tx”, “create passkey”) via typed messages; background returns typed responses.
+- **UI talks in messages, not URLs**: popup asks for _intent_ (“get balances”, “simulate tx”, “create passkey”) via typed messages; background returns typed responses.
 - **No duplicated clients**: avoid creating separate fetch/RPC clients in popup, sidepanel, and background. Centralize in background and expose a message API.
 
 ### Fetch implementation guidance (clean + reliable)
@@ -84,27 +100,39 @@ packages/
 
 ### What NOT to do (networking)
 
-- Don’t fetch from `apps/extension/src/popup/*` for anything that depends on user state, auth, or signing.
+- Don’t fetch from `apps/extension/src/popup/*` or `apps/extension/src/sidepanel/*` for anything that depends on user state, auth, or signing.
 - Don’t add fetch logic to content scripts or the injected page bridge.
 - Don’t scatter ad-hoc `fetch()` calls across UI components; route them through background handlers.
 - Don’t store secrets/tokens in `chrome.storage` from the UI; secrets live only in the vault and are accessed only in background.
 
-## Refined UI + UX Patterns (popup-only)
+## Refined UI + UX Patterns (extension surfaces)
 
-### Popup onboarding flow
+### Onboarding flow (popup and side panel)
 
-We implement onboarding as a **popup-only** state machine in `apps/extension/src/popup/index.tsx`.
+Onboarding and home UI live in **`apps/extension/src/ui/LatchRoot.tsx`**, mounted from **`popup/index.tsx`** and **`sidepanel/index.tsx`** with the same behavior (see [Popup vs side panel](#popup-vs-side-panel-feature-parity)).
 
 State is stored in `chrome.storage.local` (no secrets):
 
 - `latch.setupState`: `"new" | "onboarding_done" | "has_account"`
 - `latch.accountPublicKey`: optional (public info only)
 
-The popup should render onboarding screens until `setupState === "has_account"`, then render the “dashboard/home” UI.
+Render onboarding until `setupState === "has_account"`, then the dashboard/home UI.
+
+### WebAuthn / passkey (Chrome extension)
+
+The background sends **`chromeExtensionId`** (`chrome.runtime.id` in the service worker) on WebAuthn-related API calls so the **Latch API** can issue and verify credentials for the **`chrome-extension://`** origin.
+
+**Contract for the Latch API** (registration begin/finish, authentication begin/finish, and any route that verifies WebAuthn assertions, e.g. submit-webauthn):
+
+- Accept optional **`chromeExtensionId`** on the JSON body when the client is the extension.
+- When `chromeExtensionId` is present, set **`rp.id` / `rpId`** in issued WebAuthn options to that value (not `localhost` or a website hostname).
+- On **`verifyRegistrationResponse` / `verifyAuthenticationResponse`** (or equivalent), set **`expectedRPID`** to **`chromeExtensionId`** and **`expectedOrigin`** to **`chrome-extension://<chromeExtensionId>`** (use the same values on **finish** as on **begin**; prefer the **`chromeExtensionId` on the finish body** if session storage is unreliable).
+
+The extension merges **`chromeExtensionId`** into begin, registration finish, authentication finish, and **`submitTxWebauthn`** request bodies from [`backend.ts`](apps/extension/src/background/backend.ts). The UI asserts server-issued **`rp.id` / `rpId`** matches **`chrome.runtime.id`** before calling `startRegistration` / `startAuthentication` (see [`passkey.ts`](apps/extension/src/ui/webauthn/passkey.ts)).
 
 ## Styling: TailwindCSS (extension-friendly)
 
-We standardize on **TailwindCSS** for extension UI (popup and any future extension pages) because it:
+We standardize on **TailwindCSS** for extension UI (popup, side panel, and other extension pages) because it:
 
 - compiles to static CSS at build time (MV3/CSP friendly)
 - accelerates design-heavy UI iteration
@@ -113,7 +141,7 @@ Guidelines:
 
 - Tailwind config lives at `apps/extension/tailwind.config.ts`
 - PostCSS config lives at `apps/extension/postcss.config.js`
-- Global Tailwind entry CSS at `apps/extension/src/style.css` and imported from `apps/extension/src/popup/index.tsx`
+- Global Tailwind entry CSS at `apps/extension/src/style.css` (imported from `apps/extension/src/ui/LatchRoot.tsx`, shared by popup and side panel entrypoints)
 - Ensure Tailwind `content` includes `./src/**/*.{ts,tsx}` so unused classes purge correctly.
 
 ### Font: SF Pro

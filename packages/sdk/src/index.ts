@@ -37,7 +37,8 @@ declare global {
 }
 
 function requireLatch(): NonNullable<Window['latch']> {
-  if (typeof window === 'undefined') throw new Error('Latch SDK must be used in a browser environment')
+  if (typeof window === 'undefined')
+    throw new Error('Latch SDK must be used in a browser environment')
   if (!window.latch) throw new Error('Latch extension not detected')
   return window.latch
 }
@@ -55,7 +56,7 @@ export function getLatchSDK(): LatchSDK {
     },
     async getNetwork() {
       return await requireLatch().getNetwork()
-    }
+    },
   }
 }
 

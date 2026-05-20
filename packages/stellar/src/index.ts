@@ -6,7 +6,42 @@
 
 export type { Network } from '@latch/types'
 
-// TODO: simulate transaction (Soroban RPC simulateTransaction)
-// TODO: submit transaction (Horizon submitTransaction)
-// TODO: poll transaction status
-// TODO: XDR / ScVal helpers
+export type { HorizonAccountRecord, HorizonBalanceLine } from './horizonTypes'
+export { isHorizonCreditBalance } from './horizonTypes'
+
+export {
+  migrableAssetsFromHorizonAccount,
+  parseHorizonAccountJson,
+  stellarMinReserveXlm,
+} from './migrationBalances'
+
+export { buildClassicNativePaymentTx } from './classicXlmPayment'
+export { buildUnsignedSacTransferTx } from './sacTransfer'
+
+export {
+  createRpcServer,
+  DEFAULT_SOROBAN_BASE_FEE,
+  sendAndPollSoroban,
+  simulateAndAssembleSoroban,
+} from './sorobanPipeline'
+
+export {
+  createHorizonServer,
+  pollHorizonTransaction,
+  submitClassicTransaction,
+} from './horizonClassic'
+
+export { humanAmountStringToRawUnits } from './amountRaw'
+export { fetchSacBalanceRaw, formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
+export {
+  fetchHorizonAccountJson,
+  loadSmartAccountPortfolioRows,
+  portfolioProbesFromHorizonAccount,
+} from './smartAccountPortfolio'
+export type { SmartAccountPortfolioRow, PortfolioTokenProbe } from './smartAccountPortfolio'
+export {
+  buildSacProbesForHistory,
+  fetchSmartAccountPayments,
+  stellarAddressEquals,
+} from './smartAccountTransactions'
+export type { SmartAccountPayment } from './smartAccountTransactions'

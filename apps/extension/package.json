@@ -7,6 +7,7 @@
     "build": "plasmo build",
     "lint": "eslint src --ext .ts,.tsx",
     "test": "vitest run",
+    "package": "plasmo package",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -16,14 +17,24 @@
     "@latch/ui": "workspace:*",
     "@noble/curves": "^2.2.0",
     "@noble/hashes": "^2.2.0",
+    "@radix-ui/react-dropdown-menu": "^2.1.16",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@scure/bip39": "^2.2.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^15.0.1",
     "bs58": "^6.0.0",
     "cbor-x": "^1.6.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "ed25519-hd-key": "^2.0.0",
+    "lucide-react": "^0.474.0",
     "plasmo": "^0.90.5",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.321",
@@ -38,14 +49,26 @@
   "manifest": {
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
-    "version": "0.0.1",
+    "version": "0.0.3",
     "permissions": [
       "storage",
-      "alarms",
-      "sidePanel"
+      "scripting",
+      "sidePanel",
+      "windows"
     ],
     "host_permissions": [
-      "https://v0-latch-stellar.vercel.app/*"
-    ]
+      "https://v0-latch-stellar.vercel.app/*",
+      "https://horizon-testnet.stellar.org/*",
+      "https://horizon.stellar.org/*",
+      "https://soroban-testnet.stellar.org/*",
+      "https://soroban-rpc.mainnet.stellar.org/*",
+      "https://*/*",
+      "http://localhost:3000/*",
+      "http://localhost:8000/*",
+      "https://latch-backend.onrender.com/*"
+    ],
+    "content_security_policy": {
+      "extension_pages": "script-src 'self' http://localhost; object-src 'self'; img-src 'self' data: https: http: blob:;"
+    }
   }
 }
