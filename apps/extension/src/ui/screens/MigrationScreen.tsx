@@ -300,14 +300,14 @@ export function MigrationScreen({
           </div>
 
           {activeAssetLabel && txPhase !== 'idle' ? (
-            <div className="rounded-2xl border border-border bg-surface/80 p-3">
-              <div className="text-center text-xs font-extrabold text-muted">
+            <div className="rounded-[16px] bg-[#161616] px-3 py-4 mt-2">
+              <div className="text-center text-[13px] font-semibold text-[#8E8E93]">
                 Current transaction
               </div>
-              <div className="mt-1 text-center text-sm font-extrabold text-fg">
+              <div className="mt-1 text-center text-[16px] font-bold text-white">
                 {activeAssetLabel}
               </div>
-              <div className="mt-4">
+              <div className="mt-5 pb-2">
                 <TransactionStepper steps={steps} />
               </div>
             </div>

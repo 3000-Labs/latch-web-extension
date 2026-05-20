@@ -19,7 +19,7 @@ function formatDetailDate(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(undefined, {
-    month: 'long',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
@@ -50,7 +50,7 @@ export function TransactionDetailScreen({
   ]
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto pb-4">
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto px-2 pb-4 pt-2">
       <TransactionDetailHeader onBack={onBack} />
       <TransactionDetailHero
         assetCode={detail.assetCode}

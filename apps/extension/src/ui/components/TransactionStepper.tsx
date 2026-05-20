@@ -1,3 +1,4 @@
+import React from 'react'
 import stepCompleteUrl from 'url:../../../assets/migration/step-complete.png'
 import stepPendingUrl from 'url:../../../assets/migration/step-pending.png'
 
@@ -7,44 +8,37 @@ export interface TransactionStepperStep {
   id: string
   label: string
   status: TransactionStepperStepStatus
-  /** Shown under label — use `~~` for unknown / pending time */
   timeLabel?: string
 }
 
 export function TransactionStepper({ steps }: { steps: TransactionStepperStep[] }) {
+  // If the last step is not complete, we might want the line to be gray, but in the design it's a solid orange line connecting the completed steps.
+  // For simplicity and matching the exact mockup, we render a solid orange line.
   return (
-    <div className="flex w-full items-start">
+    <div className="relative flex w-full items-start justify-between px-2">
+      {/* Base orange connecting line */}
+      <div 
+        className="absolute top-[14px] left-[15%] right-[15%] h-[4px] bg-[#FFAD00] z-0" 
+        aria-hidden 
+      />
+
       {steps.map((s, i) => (
-        <div key={s.id} className="flex min-w-0 flex-1 items-start">
-          {i > 0 ? (
-            <div
-              className={[
-                'mt-[14px] h-[2px] min-w-[8px] flex-1 rounded-full',
-                steps[i - 1]!.status === 'complete' ? 'bg-primary' : 'bg-border',
-              ].join(' ')}
-              aria-hidden
-            />
-          ) : null}
-          <div className="flex w-[92px] shrink-0 flex-col items-center px-0.5">
-            <img
-              src={s.status === 'complete' ? stepCompleteUrl : stepPendingUrl}
-              alt=""
-              className={[
-                'h-7 w-7 object-contain',
-                s.status === 'failed'
-                  ? 'rounded-full ring-2 ring-red-500/70 ring-offset-1 ring-offset-bg'
-                  : '',
-              ].join(' ')}
-            />
-            <div
-              className={[
-                'mt-2 text-center text-[10px] font-extrabold leading-tight',
-                s.status === 'complete' ? 'text-fg' : 'text-muted',
-              ].join(' ')}
-            >
-              {s.label}
-            </div>
-            <div className="mt-0.5 text-center text-[9px] text-muted">{s.timeLabel ?? '~~'}</div>
+        <div key={s.id} className="relative z-10 flex w-[90px] flex-col items-center">
+          <img
+            src={s.status === 'complete' ? stepCompleteUrl : stepPendingUrl}
+            alt=""
+            className="h-[32px] w-[32px] object-contain"
+          />
+          <div
+            className={[
+              'mt-2 text-center text-[13px] font-semibold leading-snug',
+              s.status === 'complete' ? 'text-white' : 'text-[#8E8E93]',
+            ].join(' ')}
+          >
+            {s.label}
+          </div>
+          <div className="mt-1 text-center text-[11px] text-[#8E8E93]">
+            {s.timeLabel ?? '~~'}
           </div>
         </div>
       ))}

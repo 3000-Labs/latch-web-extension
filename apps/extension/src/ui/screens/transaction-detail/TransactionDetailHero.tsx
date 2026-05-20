@@ -14,15 +14,17 @@ export function TransactionDetailHero({
   status: 'completed' | 'pending'
 }) {
   return (
-    <div className="mt-6 flex flex-col items-center">
-      <TokenAvatar symbol={assetCode} iconUrl={iconUrl} className="h-14 w-14 rounded-2xl" />
-      <div className="mt-4 text-[32px] font-bold tracking-tight text-fg">{amountUsd}</div>
+    <div className="mt-8 flex flex-col items-center">
+      <div className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-xl bg-[#0C1E19]">
+        <TokenAvatar symbol={assetCode} iconUrl={iconUrl} className="h-6 w-6 rounded-none" />
+      </div>
+      <div className="mt-5 text-[44px] font-bold tracking-tight text-white leading-none">{amountUsd}</div>
       {status === 'completed' ? (
-        <span className="mt-2 rounded-full bg-emerald-900/80 px-3 py-1 text-xs font-bold text-emerald-300">
+        <span className="mt-4 rounded-lg bg-[#34C759]/15 px-3 py-1 text-[13px] font-semibold text-[#34C759]">
           Completed
         </span>
       ) : (
-        <span className="mt-2 rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted">
+        <span className="mt-4 rounded-lg bg-[#FFAD00]/15 px-3 py-1 text-[13px] font-semibold text-[#FFAD00]">
           Pending
         </span>
       )}

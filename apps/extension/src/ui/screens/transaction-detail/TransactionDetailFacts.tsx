@@ -23,13 +23,13 @@ export function TransactionDetailFacts({
   networkLabel: string
 }) {
   return (
-    <div className="mt-6">
+    <div className="mt-4 rounded-[16px] bg-[#161616] px-4">
       <TransactionDetailFactRow label="Date" value={dateLabel} />
       <TransactionDetailFactRow label="From" value={shortenAddr(from)} copyable />
       <TransactionDetailFactRow label="To" value={shortenAddr(to)} copyable />
       <TransactionDetailFactRow label="Network Fee" value={networkFee} />
       <TransactionDetailFactRow label="Block Number" value={blockNumber} />
-      <TransactionDetailFactRow label="Network" value={networkLabel} />
+      <TransactionDetailFactRow label="Network" value={networkLabel} isLast />
     </div>
   )
 }
