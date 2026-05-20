@@ -3,15 +3,6 @@ import React, { useRef } from 'react'
 import { cryptoToFiat, fiatToCrypto } from '../../lib/sendAmount'
 import type { SendInputMode } from '../../types/send'
 
-function AmountCursor() {
-  return (
-    <span
-      className="mx-0.5 inline-block h-10 w-0.5 shrink-0 animate-pulse bg-primary align-middle"
-      aria-hidden
-    />
-  )
-}
-
 export function SendAmountDisplay({
   amount,
   inputMode,
@@ -48,18 +39,18 @@ export function SendAmountDisplay({
       >
         {inputMode === 'fiat' ? (
           <>
-            <span className="text-[48px] font-extrabold leading-none text-fg">$</span>
+            <span className="text-[56px] font-bold leading-none text-white mr-2">$</span>
             <input
               ref={inputRef}
               type="text"
               inputMode="decimal"
               value={amount}
               onChange={(e) => handleChange(e.target.value)}
-              className="min-w-[1ch] max-w-[240px] bg-transparent text-[48px] font-extrabold leading-none text-fg outline-none"
+              placeholder="0.00"
+              className="min-w-[1ch] max-w-[240px] bg-transparent text-[56px] font-bold leading-none text-white outline-none caret-[#FFAD00] placeholder:text-[#8E8E93]"
               style={{ width: `${Math.max(1, displayAmount.length)}ch` }}
               aria-label="Amount in dollars"
             />
-            <AmountCursor />
           </>
         ) : (
           <>
@@ -69,22 +60,22 @@ export function SendAmountDisplay({
               inputMode="decimal"
               value={amount}
               onChange={(e) => handleChange(e.target.value)}
+              placeholder="0"
               className={[
-                'min-w-[1ch] max-w-[240px] bg-transparent text-[48px] font-extrabold leading-none outline-none',
-                displayAmount === '0' && !amount ? 'text-fg/40' : 'text-fg',
+                'min-w-[1ch] max-w-[240px] bg-transparent text-[56px] font-bold leading-none outline-none caret-[#FFAD00] placeholder:text-[#8E8E93]',
+                !amount ? 'text-[#8E8E93]' : 'text-white',
               ].join(' ')}
               style={{ width: `${Math.max(1, displayAmount.length)}ch` }}
               aria-label={`Amount in ${symbol}`}
             />
-            <AmountCursor />
-            <span className="text-[48px] font-extrabold leading-none text-fg">{symbol}</span>
+            <span className="text-[56px] font-bold leading-none text-white ml-3">{symbol}</span>
           </>
         )}
       </div>
       <button
         type="button"
         onClick={onToggleMode}
-        className="mt-2 text-sm font-bold text-muted hover:text-fg/80"
+        className="mt-6 text-[15px] text-[#8E8E93] hover:text-white transition-colors"
       >
         {inputMode === 'fiat' ? `${secondaryCrypto} ${symbol}` : `$${secondaryFiat ?? '0.00'}`}
       </button>

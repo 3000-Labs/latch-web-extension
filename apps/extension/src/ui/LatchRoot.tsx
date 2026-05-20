@@ -107,6 +107,7 @@ import type { TransactionDetailVm } from './types/transaction-detail'
 import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from './types/send'
 import { SendFlow } from './screens/send/SendFlow'
 import { ReceiveFlow } from './screens/receive/ReceiveFlow'
+import { saveToAddressBook } from './screens/send/useAddressBook'
 import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
@@ -1210,6 +1211,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const result = await executeSendWithSetupLoop(sendDraft)
       setSendResult(result)
       setSendStep('success')
+      if (result.status === 'success') {
+        void saveToAddressBook({
+          address: sendDraft.recipientAddress,
+          name: sendDraft.recipientName,
+        }).catch(() => {})
+      }
       void loadPortfolio()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)

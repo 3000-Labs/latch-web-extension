@@ -1,7 +1,5 @@
 import React from 'react'
 
-import { formatDisplayAmount2dp } from '../../lib/formatDisplay'
-
 export function SendAvailableBalanceRow({
   balance,
   symbol,
@@ -12,17 +10,17 @@ export function SendAvailableBalanceRow({
   onMax: () => void
 }) {
   return (
-    <div className="flex shrink-0 items-end justify-between gap-3">
+    <div className="flex shrink-0 items-end justify-between gap-3 mt-6 px-1">
       <div>
-        <div className="text-xs font-bold text-muted">Available To Send</div>
-        <div className="mt-1 text-sm font-extrabold text-fg">
-          {formatDisplayAmount2dp(balance)} {symbol}
+        <div className="text-[13px] text-[#8E8E93] mb-1">Available To Send</div>
+        <div className="text-[15px] font-bold text-white">
+          {balance} {symbol}
         </div>
       </div>
       <button
         type="button"
         onClick={onMax}
-        className="rounded-xl border border-border bg-surface/40 px-4 py-2 text-sm font-extrabold text-fg hover:bg-surface/60"
+        className="rounded-[10px] bg-[#333333] px-5 py-2 text-[13px] font-semibold text-white hover:bg-[#444444] transition-colors"
       >
         Max
       </button>

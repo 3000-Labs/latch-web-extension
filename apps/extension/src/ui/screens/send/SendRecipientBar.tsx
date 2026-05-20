@@ -17,18 +17,18 @@ export function SendRecipientBar({
     : `{${truncateMiddle(recipientAddress)}}`
 
   return (
-    <div className="mt-4 flex shrink-0 items-center justify-between gap-2">
-      <p className="min-w-0 truncate text-sm">
-        <span className="font-bold text-muted">To: </span>
-        <span className="font-extrabold text-fg">{label}</span>
+    <div className="mt-6 flex shrink-0 items-center justify-between gap-2 px-1">
+      <p className="min-w-0 truncate text-[15px]">
+        <span className="text-[#8E8E93]">To: </span>
+        <span className="font-semibold text-white">{label}</span>
       </p>
       <button
         type="button"
         onClick={onEdit}
-        className="grid h-8 w-8 shrink-0 place-items-center text-fg/60 hover:text-fg"
+        className="grid h-8 w-8 shrink-0 place-items-center text-[#8E8E93] hover:text-white"
         aria-label="Edit recipient"
       >
-        <Pencil className="h-4 w-4" strokeWidth={2} aria-hidden />
+        <Pencil className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
       </button>
     </div>
   )

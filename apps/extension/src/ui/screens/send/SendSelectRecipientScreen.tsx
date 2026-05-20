@@ -39,7 +39,7 @@ export function SendSelectRecipientScreen({
           onKeyDown={(e) => {
             if (e.key === 'Enter') tryContinue()
           }}
-          onBlur={() => tryContinue()}
+          onBlur={() => {}}
         />
         <SendAddressBookSection
           entries={entries}
@@ -48,6 +48,21 @@ export function SendSelectRecipientScreen({
             onContinue()
           }}
         />
+      </div>
+      <div className="mt-4 shrink-0">
+        <button
+          type="button"
+          disabled={!valid}
+          onClick={tryContinue}
+          className={[
+            'h-12 w-full rounded-full text-base font-extrabold shadow-soft transition-all duration-200',
+            valid
+              ? 'bg-primary text-black hover:brightness-105 active:scale-[0.98]'
+              : 'bg-surface/60 text-muted cursor-not-allowed',
+          ].join(' ')}
+        >
+          Continue
+        </button>
       </div>
     </div>
   )
