@@ -1,7 +1,5 @@
 import React, { useMemo } from 'react'
 
-import type { SmartAccountBalanceRow } from '@latch/types'
-
 import {
   fiatToCrypto,
   hasValidDecimalPlaces,

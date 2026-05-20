@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import {
   ArrowLeftRight,
   Bell,
@@ -45,8 +45,6 @@ export function SettingsScreen({
   onLogout: () => void
   onOpenMigrateAssets?: () => void
 }) {
-  const [networkEnabled, setNetworkEnabled] = useState(false)
-
   return (
     <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
       <SettingsHeader onClose={onClose} />

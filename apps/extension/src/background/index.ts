@@ -94,7 +94,6 @@ import {
   listPendingDappRequests,
   addPendingDappRequest,
   removePendingDappRequest,
-  clearSession,
   disconnectSessionForLogoutDev,
   migrateLegacyPublicKeyIfNeeded,
   renameAccount,

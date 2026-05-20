@@ -49,7 +49,7 @@
   "manifest": {
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "permissions": [
       "storage",
       "scripting",
@@ -64,7 +64,8 @@
       "https://soroban-rpc.mainnet.stellar.org/*",
       "https://*/*",
       "http://localhost:3000/*",
-      "http://localhost:8000/*"
+      "http://localhost:8000/*",
+      "https://latch-backend.onrender.com/*"
     ],
     "content_security_policy": {
       "extension_pages": "script-src 'self' http://localhost; object-src 'self'; img-src 'self' data: https: http: blob:;"

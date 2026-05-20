@@ -3,7 +3,6 @@ import { fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
 
 import {
-  getStellarNetworkFromEnv,
   horizonUrlFromEnv,
   networkPassphraseFromEnv,
   sorobanRpcUrlFromEnv,

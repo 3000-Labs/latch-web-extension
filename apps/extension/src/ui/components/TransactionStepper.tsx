@@ -22,7 +22,7 @@ export function TransactionStepper({ steps }: { steps: TransactionStepperStep[] 
         aria-hidden 
       />
 
-      {steps.map((s, i) => (
+      {steps.map((s) => (
         <div key={s.id} className="relative z-10 flex w-[90px] flex-col items-center">
           <img
             src={s.status === 'complete' ? stepCompleteUrl : stepPendingUrl}

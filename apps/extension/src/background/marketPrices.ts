@@ -20,7 +20,7 @@ const FRESH_TTL_MS = 60_000
 const MAX_STALE_MS = 10 * 60_000
 
 let memoryCache: Snapshot | null = null
-let inflight: Map<string, Promise<Snapshot>> = new Map()
+const inflight: Map<string, Promise<Snapshot>> = new Map()
 
 function normalizeCodes(tokens: string[]): string[] {
   const uniq = new Set<string>()
