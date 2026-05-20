@@ -33,7 +33,15 @@ export {
 
 export { humanAmountStringToRawUnits } from './amountRaw'
 export { fetchSacBalanceRaw, formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
-export { loadSmartAccountPortfolioRows } from './smartAccountPortfolio'
+export {
+  fetchHorizonAccountJson,
+  loadSmartAccountPortfolioRows,
+  portfolioProbesFromHorizonAccount,
+} from './smartAccountPortfolio'
 export type { SmartAccountPortfolioRow, PortfolioTokenProbe } from './smartAccountPortfolio'
-export { fetchSmartAccountPayments } from './smartAccountTransactions'
+export {
+  buildSacProbesForHistory,
+  fetchSmartAccountPayments,
+  stellarAddressEquals,
+} from './smartAccountTransactions'
 export type { SmartAccountPayment } from './smartAccountTransactions'

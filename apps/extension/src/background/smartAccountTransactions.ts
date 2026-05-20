@@ -1,4 +1,4 @@
-import { fetchSmartAccountPayments } from '@latch/stellar'
+import { fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
 
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
 
@@ -11,9 +11,11 @@ function classifyKind(
   cAddress: string,
   gAddress?: string,
 ): SmartAccountTransactionRow['kind'] {
-  if (tx.to === cAddress && gAddress && tx.from === gAddress) return 'deposit'
-  if (tx.from === cAddress) return 'sent'
-  if (tx.to === cAddress) return 'received'
+  if (stellarAddressEquals(tx.to, cAddress) && gAddress && stellarAddressEquals(tx.from, gAddress)) {
+    return 'deposit'
+  }
+  if (stellarAddressEquals(tx.from, cAddress)) return 'sent'
+  if (stellarAddressEquals(tx.to, cAddress)) return 'received'
   return 'received'
 }
 
@@ -37,7 +39,7 @@ export async function runGetSmartAccountTransactions(
   const items: SmartAccountTransactionRow[] = payments.map((p) => {
     const code = p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET')
     const kind = classifyKind(p, c, g)
-    const isSent = p.from === c
+    const isSent = stellarAddressEquals(p.from, c)
     const sign = isSent ? '-' : '+'
     const amountNum = parseFloat(p.amount)
     const amountLabel = Number.isFinite(amountNum)
