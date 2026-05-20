@@ -5,12 +5,7 @@ import { wordlist } from '@scure/bip39/wordlists/english.js'
 const WORD_COUNT = 12
 
 function splitPastedMnemonic(text: string): string[] {
-  return text
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, WORD_COUNT)
+  return text.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, WORD_COUNT)
 }
 
 export function useSeedPhraseWords() {
@@ -38,7 +33,14 @@ export function useSeedPhraseWords() {
     return parts.length > 0
   }, [])
 
-  const mnemonic = useMemo(() => words.map((w) => w.trim()).filter(Boolean).join(' '), [words])
+  const mnemonic = useMemo(
+    () =>
+      words
+        .map((w) => w.trim())
+        .filter(Boolean)
+        .join(' '),
+    [words]
+  )
 
   const allFilled = useMemo(() => words.every((w) => w.trim().length > 0), [words])
 
@@ -51,5 +53,14 @@ export function useSeedPhraseWords() {
     setWords(Array.from({ length: WORD_COUNT }, () => ''))
   }, [])
 
-  return { words, setWordAt, fillFromPaste, mnemonic, allFilled, isValid, reset, wordCount: WORD_COUNT }
+  return {
+    words,
+    setWordAt,
+    fillFromPaste,
+    mnemonic,
+    allFilled,
+    isValid,
+    reset,
+    wordCount: WORD_COUNT,
+  }
 }

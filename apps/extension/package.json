@@ -30,6 +30,7 @@
     "ed25519-hd-key": "^2.0.0",
     "lucide-react": "^0.474.0",
     "plasmo": "^0.90.5",
+    "qrcode.react": "^4.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.5.0",
@@ -49,7 +50,12 @@
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
     "version": "0.0.2",
-    "permissions": ["storage", "scripting", "sidePanel", "windows"],
+    "permissions": [
+      "storage",
+      "scripting",
+      "sidePanel",
+      "windows"
+    ],
     "host_permissions": [
       "https://v0-latch-stellar.vercel.app/*",
       "https://horizon-testnet.stellar.org/*",

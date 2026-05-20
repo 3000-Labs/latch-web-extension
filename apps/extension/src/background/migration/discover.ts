@@ -1,9 +1,6 @@
 import type { MigrationDiscovery } from '@latch/types'
 
-import {
-  migrableAssetsFromHorizonAccount,
-  parseHorizonAccountJson,
-} from '@latch/stellar'
+import { migrableAssetsFromHorizonAccount, parseHorizonAccountJson } from '@latch/stellar'
 
 import { BackendError } from '../backend'
 import { getAccounts } from '../storage'

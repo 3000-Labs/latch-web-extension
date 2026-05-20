@@ -76,7 +76,9 @@ export function SendEnterAmountScreen({
         onAmountChange={(amount) => onDraftChange({ amount })}
         onToggleMode={toggleMode}
       />
-      <div className={['mt-4 shrink-0 space-y-4', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
+      <div
+        className={['mt-4 shrink-0 space-y-4', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}
+      >
         <SendQuickAmountButtons onSelect={handlePresetUsd} />
         <SendAvailableBalanceRow balance={token.amount} symbol={token.code} onMax={handleMax} />
       </div>

@@ -17,14 +17,14 @@ export function ReceiveQrScreen({
     <div className="flex min-h-0 flex-1 flex-col animate-screenIn pb-6 justify-between">
       <div>
         <ReceiveQrHeader tokenName={token.name} onBack={onBack} />
-        
+
         <div className="flex flex-col items-center mt-4">
           <ReceiveQrCodeCard value={token.address} logoUrl={token.iconUrl} />
-          
+
           <h1 className="text-[26px] font-extrabold tracking-tight text-center text-fg mt-4">
             Your {token.name} Address
           </h1>
-          
+
           <p className="text-sm text-center text-muted mt-2 leading-relaxed max-w-[280px]">
             Use this address to receive tokens <br />
             on <span className="font-extrabold text-fg">{token.name}</span>.

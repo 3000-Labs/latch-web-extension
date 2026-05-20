@@ -26,8 +26,8 @@ export type SwapQuoteVm = {
 }
 
 export const swapTokens: SwapTokenVm[] = [
-  { id: "usdt", symbol: "USDT", name: "Tether" },
-  { id: "xlm", symbol: "XLM", name: "Stellar" }
+  { id: 'usdt', symbol: 'USDT', name: 'Tether' },
+  { id: 'xlm', symbol: 'XLM', name: 'Stellar' },
 ]
 
 export function truncateAddress(addr: string, left = 6, right = 4) {
@@ -36,7 +36,7 @@ export function truncateAddress(addr: string, left = 6, right = 4) {
 }
 
 export function toPositiveNumberOrNull(text: string): number | null {
-  const cleaned = text.replace(/[^\d.]/g, "")
+  const cleaned = text.replace(/[^\d.]/g, '')
   if (cleaned.length === 0) return null
   const n = Number(cleaned)
   if (!Number.isFinite(n) || n <= 0) return null
@@ -44,8 +44,8 @@ export function toPositiveNumberOrNull(text: string): number | null {
 }
 
 export function formatCompactAmount(n: number, decimals = 2) {
-  if (!Number.isFinite(n)) return "--"
-  if (n === 0) return "0"
+  if (!Number.isFinite(n)) return '--'
+  if (n === 0) return '0'
   const abs = Math.abs(n)
   if (abs < 1) return n.toFixed(Math.min(6, Math.max(2, decimals + 2)))
   if (abs < 1000) return n.toFixed(decimals)
@@ -54,11 +54,15 @@ export function formatCompactAmount(n: number, decimals = 2) {
 }
 
 export function formatUsdApprox(amountUsd: number) {
-  if (!Number.isFinite(amountUsd)) return "≈ --"
+  if (!Number.isFinite(amountUsd)) return '≈ --'
   return `≈ $${amountUsd.toFixed(2)}`
 }
 
-export function mockQuote(draft: SwapDraft, payToken: SwapTokenVm, receiveToken: SwapTokenVm): SwapQuoteVm {
+export function mockQuote(
+  draft: SwapDraft,
+  payToken: SwapTokenVm,
+  receiveToken: SwapTokenVm
+): SwapQuoteVm {
   const pay = toPositiveNumberOrNull(draft.payAmount) ?? 0
 
   // UI-only deterministic mock values (small “edge” so it looks realistic).
@@ -70,13 +74,12 @@ export function mockQuote(draft: SwapDraft, payToken: SwapTokenVm, receiveToken:
   const receiveUsd = pay === 0 ? NaN : pay * 1.00306
 
   return {
-    provider: "LiquidMesh",
+    provider: 'LiquidMesh',
     rateLine: `1 ${payToken.symbol} > 0.00084221 ${receiveToken.symbol}`,
     slippageLine: `Auto | ${slippagePct}%`,
     minReceivedLine: `${minReceived.toFixed(6)} ${receiveToken.symbol}`,
     networkFeeLine: `~ ${feeXlm.toFixed(5)} Stellar`,
-    receiveAmountLine: pay === 0 ? "--" : `+${receive.toFixed(8)} ${receiveToken.symbol}`,
-    receiveUsdApproxLine: pay === 0 ? "" : `≈ $${receiveUsd.toFixed(5)} (+0.25%)`
+    receiveAmountLine: pay === 0 ? '--' : `+${receive.toFixed(8)} ${receiveToken.symbol}`,
+    receiveUsdApproxLine: pay === 0 ? '' : `≈ $${receiveUsd.toFixed(5)} (+0.25%)`,
   }
 }
-

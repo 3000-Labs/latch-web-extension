@@ -452,11 +452,7 @@ export interface SerializableError {
 }
 
 /** G → smart account (C) asset migration — discovery only; sweep uses separate messages. */
-export type MigrationDiscoveryState =
-  | 'not_needed'
-  | 'not_started'
-  | 'complete'
-  | 'unsupported'
+export type MigrationDiscoveryState = 'not_needed' | 'not_started' | 'complete' | 'unsupported'
 
 export type MigrableAssetKind = 'native' | 'token'
 

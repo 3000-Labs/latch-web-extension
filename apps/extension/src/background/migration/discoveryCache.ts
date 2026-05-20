@@ -10,7 +10,10 @@ function key(accountId: string, gAddress: string) {
   return `${getStellarNetworkFromEnv()}:${accountId}:${gAddress}`
 }
 
-export function getCachedDiscovery(accountId: string, gAddress: string): MigrationDiscovery | undefined {
+export function getCachedDiscovery(
+  accountId: string,
+  gAddress: string
+): MigrationDiscovery | undefined {
   const k = key(accountId, gAddress)
   const row = cache.get(k)
   if (!row) return undefined

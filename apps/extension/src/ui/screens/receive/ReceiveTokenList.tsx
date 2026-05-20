@@ -21,7 +21,7 @@ export function ReceiveTokenList({
 }) {
   const tokensList: ReceiveToken[] = useMemo(() => {
     const wellKnownCodes = ['XLM', 'USDC', 'EURC']
-    
+
     const wellKnownConfigs: Record<string, { name: string; defaultIcon: string | null }> = {
       XLM: { name: 'Stellar', defaultIcon: stellarIcon },
       USDC: { name: 'USD Coin', defaultIcon: 'https://assets.coincap.io/assets/icons/usdc@2x.png' },
@@ -32,7 +32,7 @@ export function ReceiveTokenList({
     const list: ReceiveToken[] = wellKnownCodes.map((code) => {
       const config = wellKnownConfigs[code]
       const row = portfolioRows.find((r) => r.code.toUpperCase() === code)
-      
+
       return {
         id: code.toLowerCase(),
         name: config.name,
@@ -65,26 +65,16 @@ export function ReceiveTokenList({
     const q = search.trim().toLowerCase()
     if (!q) return tokensList
     return tokensList.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.symbol.toLowerCase().includes(q)
+      (t) => t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q)
     )
   }, [tokensList, search])
 
   if (portfolioLoading) {
-    return (
-      <div className="py-12 text-center text-sm font-bold text-muted">
-        Loading balances...
-      </div>
-    )
+    return <div className="py-12 text-center text-sm font-bold text-muted">Loading balances...</div>
   }
 
   if (portfolioError) {
-    return (
-      <div className="py-12 text-center text-sm font-bold text-red-400">
-        {portfolioError}
-      </div>
-    )
+    return <div className="py-12 text-center text-sm font-bold text-red-400">{portfolioError}</div>
   }
 
   if (filtered.length === 0) {
@@ -98,11 +88,7 @@ export function ReceiveTokenList({
   return (
     <div className="space-y-3 pb-6">
       {filtered.map((token) => (
-        <ReceiveTokenCard
-          key={token.id}
-          token={token}
-          onSelect={() => onSelect(token)}
-        />
+        <ReceiveTokenCard key={token.id} token={token} onSelect={() => onSelect(token)} />
       ))}
     </div>
   )

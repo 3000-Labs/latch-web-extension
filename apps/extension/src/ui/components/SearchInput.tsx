@@ -1,10 +1,10 @@
-import React from "react"
-import { Search } from "lucide-react"
+import React from 'react'
+import { Search } from 'lucide-react'
 
 export function SearchInput({
   value,
   onChange,
-  placeholder
+  placeholder,
 }: {
   value: string
   onChange: (next: string) => void
@@ -16,7 +16,7 @@ export function SearchInput({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder ?? "Search"}
+        placeholder={placeholder ?? 'Search'}
         className="w-full bg-transparent text-sm font-bold outline-none placeholder:text-fg/40"
       />
     </div>

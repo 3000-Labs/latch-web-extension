@@ -17,15 +17,15 @@ export function ReceiptConfirmFacts({
   return (
     <div className="space-y-1 my-8">
       <ReceiptConfirmFactRow label="Date" value={date} />
-      
+
       <ReceiptConfirmFactRow
         label="Status"
         value={status}
         valueClassName={isSucceeded ? 'text-green-500' : 'text-fg'}
       />
-      
+
       <ReceiptConfirmFactRow label="From" value={fromAddress} />
-      
+
       <ReceiptConfirmFactRow label="Network" value={network} />
     </div>
   )

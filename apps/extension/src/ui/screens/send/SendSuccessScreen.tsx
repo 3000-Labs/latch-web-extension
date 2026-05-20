@@ -22,7 +22,9 @@ export function SendSuccessScreen({
 }) {
   const token = draft.token!
   const cryptoAmount =
-    draft.inputMode === 'crypto' ? draft.amount : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
+    draft.inputMode === 'crypto'
+      ? draft.amount
+      : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center">
@@ -34,9 +36,7 @@ export function SendSuccessScreen({
           recipientName={draft.recipientName}
           recipientAddress={draft.recipientAddress}
         />
-        {result.hash ? (
-          <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} />
-        ) : null}
+        {result.hash ? <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} /> : null}
       </div>
       <div className={['w-full shrink-0', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
         <SendContinueButton onContinue={onContinue} />

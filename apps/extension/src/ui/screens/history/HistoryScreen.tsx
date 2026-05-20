@@ -52,7 +52,7 @@ export function HistoryScreen({
   const isEmpty = !loading && !error && view.length === 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
       <HistoryHeader onBack={onBack} />
       <div className="mt-5">
         <HistorySearchRow value={query} onChange={setQuery} onFilterClick={onRefresh} />
@@ -61,9 +61,11 @@ export function HistoryScreen({
         <HistoryFilterChips active={filter} onChange={setFilter} />
       </div>
 
-      <div className="mt-5 min-h-0 flex-1 overflow-auto pb-1">
+      <div className="mt-5 min-h-0 flex-1 overflow-auto pb-1 pr-1">
         {loading ? (
-          <SectionCard className="text-center text-sm font-bold text-muted">Loading transactions…</SectionCard>
+          <SectionCard className="text-center text-sm font-bold text-muted">
+            Loading transactions…
+          </SectionCard>
         ) : error ? (
           <SectionCard className="text-center text-sm font-bold text-red-300">{error}</SectionCard>
         ) : isEmpty ? (

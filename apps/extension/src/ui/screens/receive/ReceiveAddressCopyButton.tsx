@@ -11,9 +11,7 @@ export function ReceiveAddressCopyButton({ address }: { address: string }) {
     }
   }, [])
 
-  const displayAddress = address
-    ? `${address.slice(0, 9)}...${address.slice(-6)}`
-    : ''
+  const displayAddress = address ? `${address.slice(0, 9)}...${address.slice(-6)}` : ''
 
   const handleCopy = () => {
     if (!address) return

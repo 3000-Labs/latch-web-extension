@@ -42,7 +42,12 @@ async function horizonGet(url: string, signal?: AbortSignal): Promise<unknown> {
   }
 }
 
-async function sorobanRpc(rpcUrl: string, method: string, params: object, signal?: AbortSignal): Promise<unknown> {
+async function sorobanRpc(
+  rpcUrl: string,
+  method: string,
+  params: object,
+  signal?: AbortSignal
+): Promise<unknown> {
   const res = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -149,11 +154,11 @@ async function fetchGAddressHistory(
   horizonUrl: string,
   gAddress: string,
   cAddress: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<SmartAccountPayment[]> {
   const resp = (await horizonGet(
     `${horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(gAddress)}/operations?limit=50&order=desc`,
-    signal,
+    signal
   )) as { _embedded?: { records?: unknown[] } } | null
 
   const allOps = (resp?._embedded?.records ?? []) as Record<string, unknown>[]
@@ -164,9 +169,9 @@ async function fetchGAddressHistory(
     invokeOps.map((op) =>
       horizonGet(
         `${horizonUrl.replace(/\/$/, '')}/operations/${String(op.id)}/effects`,
-        signal,
-      ).then((r) => (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? []),
-    ),
+        signal
+      ).then((r) => (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? [])
+    )
   )
 
   const results: SmartAccountPayment[] = []
@@ -208,7 +213,7 @@ async function fetchContractEventsPaginated(
   rpcUrl: string,
   sacContractId: string,
   startLedger: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<Record<string, unknown>[]> {
   const collected: Record<string, unknown>[] = []
   let cursor: string | undefined
@@ -222,7 +227,7 @@ async function fetchContractEventsPaginated(
         filters: [{ type: 'contract', contractIds: [sacContractId] }],
         pagination: { limit: EVENT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
       },
-      signal,
+      signal
     )) as SorobanEventsPage
 
     if (resp?.error) return collected
@@ -241,7 +246,7 @@ async function fetchSacTransferEventsForContract(
   cAddress: string,
   probe: PortfolioTokenProbe,
   latestLedger: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<SmartAccountPayment[]> {
   const sacContractId = probe.sacContractId
   const isNative = probe.code.toUpperCase() === 'XLM' && !probe.issuer
@@ -260,9 +265,7 @@ async function fetchSacTransferEventsForContract(
       const txHash = String(event.txHash ?? event.transactionHash ?? '')
       const eventId = event.id != null ? String(event.id) : ''
       return {
-        id:
-          eventId ||
-          `${txHash}:${sacContractId}:${index}:${from}:${to}:${amountRaw.toString()}`,
+        id: eventId || `${txHash}:${sacContractId}:${index}:${from}:${to}:${amountRaw.toString()}`,
         transactionHash: txHash,
         type: 'sac_transfer',
         from,
@@ -300,7 +303,7 @@ async function fetchSacTransferEventsForProbes(
   rpcUrl: string,
   cAddress: string,
   probes: PortfolioTokenProbe[],
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<SmartAccountPayment[]> {
   const latestLedgerResp = (await sorobanRpc(rpcUrl, 'getLatestLedger', {}, signal)) as {
     result?: { sequence?: number }
@@ -311,8 +314,8 @@ async function fetchSacTransferEventsForProbes(
 
   const settled = await Promise.allSettled(
     probes.map((probe) =>
-      fetchSacTransferEventsForContract(rpcUrl, cAddress, probe, latestLedger, signal),
-    ),
+      fetchSacTransferEventsForContract(rpcUrl, cAddress, probe, latestLedger, signal)
+    )
   )
 
   const seen = new Set<string>()
@@ -352,7 +355,7 @@ export async function fetchSmartAccountPayments(params: {
       rpcUrl: params.rpcUrl,
       networkPassphrase: params.networkPassphrase,
       cAddress: params.cAddress,
-      gAddress: params.gAddress,
+      gAddress: params.gAddress ?? undefined,
       horizonUrl: params.horizonUrl,
       signal: params.signal,
     })

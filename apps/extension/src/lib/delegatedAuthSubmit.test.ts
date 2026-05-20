@@ -9,12 +9,12 @@ async function signedTemplateEntryBase64(): Promise<string> {
     credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
       new xdr.SorobanAddressCredentials({
         address: xdr.ScAddress.scAddressTypeAccount(
-          xdr.PublicKey.publicKeyTypeEd25519(signer.rawPublicKey()),
+          xdr.PublicKey.publicKeyTypeEd25519(signer.rawPublicKey())
         ),
         nonce: xdr.Int64.fromString('0'),
         signatureExpirationLedger: 9_999_999,
         signature: xdr.ScVal.scvVec([]),
-      }),
+      })
     ),
     rootInvocation: new xdr.SorobanAuthorizedInvocation({
       function: xdr.SorobanAuthorizedFunction.sorobanAuthorizedFunctionTypeContractFn(
@@ -22,7 +22,7 @@ async function signedTemplateEntryBase64(): Promise<string> {
           contractAddress: xdr.ScAddress.scAddressTypeContract(Keypair.random().rawPublicKey()),
           functionName: Buffer.from('transfer'),
           args: [],
-        }),
+        })
       ),
       subInvocations: [],
     }),

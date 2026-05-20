@@ -6,11 +6,13 @@ export function TokenAvatar({
   symbol,
   iconUrl,
   className = 'h-10 w-10',
+  rounded = 'rounded-full',
 }: {
   symbol: string
   iconUrl?: string | null
   /** Tailwind size classes for the circle container */
   className?: string
+  rounded?: string
 }) {
   const [imgFailed, setImgFailed] = useState(false)
   const letter = (symbol?.trim()?.[0] ?? '?').toUpperCase()
@@ -34,7 +36,8 @@ export function TokenAvatar({
   return (
     <div
       className={[
-        'grid shrink-0 place-items-center overflow-hidden rounded-full bg-primary/20 text-primary',
+        'grid shrink-0 place-items-center overflow-hidden bg-black/60 p-1 border border-border/30 text-fg',
+        rounded,
         className,
       ].join(' ')}
     >
@@ -42,7 +45,7 @@ export function TokenAvatar({
         <img
           src={resolvedSrc!}
           alt=""
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           onError={() => setImgFailed(true)}
         />
       ) : (
@@ -51,4 +54,3 @@ export function TokenAvatar({
     </div>
   )
 }
-

@@ -1,7 +1,11 @@
 import { Keypair, Networks } from '@stellar/stellar-sdk'
 import { describe, expect, it } from 'vitest'
 
-import { migrableAssetsFromHorizonAccount, parseHorizonAccountJson, stellarMinReserveXlm } from './migrationBalances'
+import {
+  migrableAssetsFromHorizonAccount,
+  parseHorizonAccountJson,
+  stellarMinReserveXlm,
+} from './migrationBalances'
 
 describe('stellarMinReserveXlm', () => {
   it('matches (2 + subentries) * 0.5', () => {

@@ -27,25 +27,25 @@ export function SendTokenList({
     const q = search.trim().toLowerCase()
     if (!q) return withBalance
     return withBalance.filter(
-      (t) => t.code.toLowerCase().includes(q) || t.code.toLowerCase() === 'xlm' && 'stellar'.includes(q),
+      (t) =>
+        t.code.toLowerCase().includes(q) ||
+        (t.code.toLowerCase() === 'xlm' && 'stellar'.includes(q))
     )
   }, [tokens, search])
 
   if (loading) {
-    return (
-      <div className="py-12 text-center text-sm font-bold text-muted">Loading balances…</div>
-    )
+    return <div className="py-12 text-center text-sm font-bold text-muted">Loading balances…</div>
   }
 
   if (error) {
-    return (
-      <div className="py-12 text-center text-sm font-bold text-red-300">{error}</div>
-    )
+    return <div className="py-12 text-center text-sm font-bold text-red-300">{error}</div>
   }
 
   if (filtered.length === 0) {
     return (
-      <div className="py-12 text-center text-sm font-bold text-muted">No tokens available to send</div>
+      <div className="py-12 text-center text-sm font-bold text-muted">
+        No tokens available to send
+      </div>
     )
   }
 

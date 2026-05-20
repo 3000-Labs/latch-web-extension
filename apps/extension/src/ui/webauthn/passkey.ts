@@ -1,13 +1,13 @@
-import type { StoredAccount } from "@latch/types"
-import { p256 } from "@noble/curves/nist.js"
-import { decodeMultiple } from "cbor-x"
-import { xdr } from "@stellar/stellar-sdk"
+import type { StoredAccount } from '@latch/types'
+import { p256 } from '@noble/curves/nist.js'
+import { decodeMultiple } from 'cbor-x'
+import { xdr } from '@stellar/stellar-sdk'
 
-import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from "./utils"
+import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from './utils'
 
 /** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
 export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
-  const passkeyCount = accounts.reduce((n, a) => n + (a.mode === "passkey" ? 1 : 0), 0)
+  const passkeyCount = accounts.reduce((n, a) => n + (a.mode === 'passkey' ? 1 : 0), 0)
   return `Latch account ${passkeyCount + 1}`
 }
 
@@ -36,7 +36,7 @@ function ensureLen(bytes: Uint8Array, len: number, label: string) {
 function decodeFirstCborItem(bytes: Uint8Array): unknown {
   // cbor-x decodeMultiple lets us parse the first item even if there are trailing bytes
   for (const item of decodeMultiple(bytes)) return item
-  throw new Error("Failed to decode CBOR")
+  throw new Error('Failed to decode CBOR')
 }
 
 function parseAttestationObject(attestationObjectB64Url: string): {
@@ -45,7 +45,7 @@ function parseAttestationObject(attestationObjectB64Url: string): {
   const bytes = base64UrlToBytes(attestationObjectB64Url)
   const obj = decodeFirstCborItem(bytes) as any
   const authData = obj?.authData
-  if (!(authData instanceof Uint8Array)) throw new Error("Invalid attestationObject.authData")
+  if (!(authData instanceof Uint8Array)) throw new Error('Invalid attestationObject.authData')
   return { authData }
 }
 
@@ -53,17 +53,18 @@ function coseToUncompressedP256(coseKey: any): Uint8Array {
   // COSE_Key fields: -2 => x, -3 => y
   const x = coseKey?.[-2]
   const y = coseKey?.[-3]
-  if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array)) throw new Error("Invalid COSE key (missing x/y)")
-  ensureLen(x, 32, "P-256 x")
-  ensureLen(y, 32, "P-256 y")
+  if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array))
+    throw new Error('Invalid COSE key (missing x/y)')
+  ensureLen(x, 32, 'P-256 x')
+  ensureLen(y, 32, 'P-256 y')
   return concatBytes(new Uint8Array([0x04]), concatBytes(x, y))
 }
 
 export function extractRegistrationKeyData(registrationResponse: any): PasskeyRegistrationResult {
   const attObj = registrationResponse?.response?.attestationObject
   const credentialId = registrationResponse?.id
-  if (typeof attObj !== "string") throw new Error("Missing attestationObject")
-  if (typeof credentialId !== "string") throw new Error("Missing credential id")
+  if (typeof attObj !== 'string') throw new Error('Missing attestationObject')
+  if (typeof credentialId !== 'string') throw new Error('Missing credential id')
 
   const { authData } = parseAttestationObject(attObj)
 
@@ -71,7 +72,7 @@ export function extractRegistrationKeyData(registrationResponse: any): PasskeyRe
   // rpIdHash(32) || flags(1) || signCount(4) || attestedCredentialData(if flags&0x40) ...
   const flags = authData[32]
   const hasAttestedCredData = (flags & 0x40) !== 0
-  if (!hasAttestedCredData) throw new Error("Attested credential data missing in authenticatorData")
+  if (!hasAttestedCredData) throw new Error('Attested credential data missing in authenticatorData')
 
   let offset = 32 + 1 + 4
   offset += 16 // AAGUID
@@ -94,7 +95,7 @@ function derToRs(der: Uint8Array): { r: bigint; s: bigint } {
   // Minimal ASN.1 DER parser for ECDSA signature: SEQUENCE(INTEGER r, INTEGER s)
   let i = 0
   const expect = (v: number) => {
-    if (der[i] !== v) throw new Error("Invalid DER signature")
+    if (der[i] !== v) throw new Error('Invalid DER signature')
     i++
   }
   const readLen = () => {
@@ -152,14 +153,15 @@ export function buildWebauthnSigDataXdrHex(args: {
   signatureCompact: Uint8Array
 }): string {
   const entries = [
-    ["authenticator_data", args.authenticatorData],
-    ["client_data", args.clientDataJson],
-    ["signature", args.signatureCompact]
-  ].map(([k, v]) =>
-    new xdr.ScMapEntry({
-      key: xdr.ScVal.scvSymbol(k),
-      val: xdr.ScVal.scvBytes(v as Uint8Array),
-    }),
+    ['authenticator_data', args.authenticatorData],
+    ['client_data', args.clientDataJson],
+    ['signature', args.signatureCompact],
+  ].map(
+    ([k, v]) =>
+      new xdr.ScMapEntry({
+        key: xdr.ScVal.scvSymbol(k),
+        val: xdr.ScVal.scvBytes(v as Uint8Array),
+      })
   )
 
   const scVal = xdr.ScVal.scvMap(entries)
@@ -172,41 +174,47 @@ export function createLocalRegistrationOptions(rpId: string) {
   const userId = crypto.getRandomValues(new Uint8Array(32))
   return {
     challenge: bytesToBase64Url(challenge),
-    rp: { name: "Latch", id: rpId },
+    rp: { name: 'Latch', id: rpId },
     user: {
       id: bytesToBase64Url(userId),
       name: `user@${rpId}`,
-      displayName: "Latch user"
+      displayName: 'Latch user',
     },
-    pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
     authenticatorSelection: {
-      residentKey: "required",
-      userVerification: "required"
+      residentKey: 'required',
+      userVerification: 'required',
     },
     timeout: 60_000,
-    attestation: "none"
+    attestation: 'none',
   } as const
 }
 
-export function createLocalAuthenticationOptions(args: { rpId: string; credentialId: string; authDigestHex: string }) {
+export function createLocalAuthenticationOptions(args: {
+  rpId: string
+  credentialId: string
+  authDigestHex: string
+}) {
   const challenge = hexToBytes(args.authDigestHex)
   return {
     rpId: args.rpId,
     challenge: bytesToBase64Url(challenge),
-    allowCredentials: [{ id: args.credentialId, type: "public-key" }],
+    allowCredentials: [{ id: args.credentialId, type: 'public-key' }],
     timeout: 60_000,
-    userVerification: "required"
+    userVerification: 'required',
   } as const
 }
 
 /** Chrome extension id used as WebAuthn `rpId` for smart-account auth (not session login). */
 export function extensionWebauthnRpId(): string {
   const extId =
-    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+    typeof chrome !== 'undefined' &&
+    typeof chrome.runtime?.id === 'string' &&
+    chrome.runtime.id.length > 0
       ? chrome.runtime.id
-      : ""
+      : ''
   if (!extId) {
-    throw new Error("WebAuthn for transactions requires the Chrome extension context.")
+    throw new Error('WebAuthn for transactions requires the Chrome extension context.')
   }
   return extId
 }
@@ -220,9 +228,9 @@ export function passkeyAuthenticationOptionsForAuthDigest(args: {
   authDigestHex: string
   rpId?: string
 }) {
-  const hex = args.authDigestHex.trim().replace(/^0x/i, "")
+  const hex = args.authDigestHex.trim().replace(/^0x/i, '')
   if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
-    throw new Error("Invalid auth digest from transaction build.")
+    throw new Error('Invalid auth digest from transaction build.')
   }
   return createLocalAuthenticationOptions({
     rpId: args.rpId ?? extensionWebauthnRpId(),
@@ -240,7 +248,9 @@ export function buildPasskeySigDataXdrFromAssertion(assertion: unknown): string 
   })
 }
 
-export function parseAuthenticationResponse(authResponse: any): Omit<PasskeyAssertionResult, "sigDataXdrHex"> {
+export function parseAuthenticationResponse(
+  authResponse: any
+): Omit<PasskeyAssertionResult, 'sigDataXdrHex'> {
   const resp = authResponse?.response
   const authenticatorData = base64UrlToBytes(resp?.authenticatorData)
   const clientDataJson = base64UrlToBytes(resp?.clientDataJSON)
@@ -251,7 +261,12 @@ export function parseAuthenticationResponse(authResponse: any): Omit<PasskeyAsse
 
 function readErrorCauseMessage(cause: unknown): string | undefined {
   if (cause instanceof Error) return cause.message
-  if (cause && typeof cause === "object" && "message" in cause && typeof (cause as { message: unknown }).message === "string") {
+  if (
+    cause &&
+    typeof cause === 'object' &&
+    'message' in cause &&
+    typeof (cause as { message: unknown }).message === 'string'
+  ) {
     return (cause as { message: string }).message
   }
   return undefined
@@ -264,16 +279,18 @@ function readErrorCauseMessage(cause: unknown): string | undefined {
 /** Parse begin `options` whether the API returns an object or a JSON string. */
 export function webauthnBeginOptionsToObject(options: unknown): Record<string, unknown> | null {
   if (options == null) return null
-  if (typeof options === "string") {
+  if (typeof options === 'string') {
     try {
       const o = JSON.parse(options) as unknown
-      if (typeof o === "object" && o !== null && !Array.isArray(o)) return o as Record<string, unknown>
+      if (typeof o === 'object' && o !== null && !Array.isArray(o))
+        return o as Record<string, unknown>
       return null
     } catch {
       return null
     }
   }
-  if (typeof options === "object" && !Array.isArray(options)) return options as Record<string, unknown>
+  if (typeof options === 'object' && !Array.isArray(options))
+    return options as Record<string, unknown>
   return null
 }
 
@@ -284,8 +301,8 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
   const o = webauthnBeginOptionsToObject(options)
   if (!o) return undefined
   const rp = o.rp as { id?: unknown } | undefined
-  if (rp && typeof rp.id === "string") return rp.id
-  if (typeof o.rpId === "string") return o.rpId
+  if (rp && typeof rp.id === 'string') return rp.id
+  if (typeof o.rpId === 'string') return o.rpId
   return undefined
 }
 
@@ -294,30 +311,32 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
  * No-op when not on a chrome-extension page (e.g. unit tests without extension globals).
  */
 export function assertBeginOptionsRpIdMatchesExtension(options: unknown): void {
-  const protocol = typeof window !== "undefined" ? window.location.protocol : ""
-  if (protocol !== "chrome-extension:") return
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : ''
+  if (protocol !== 'chrome-extension:') return
 
   const extId =
-    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+    typeof chrome !== 'undefined' &&
+    typeof chrome.runtime?.id === 'string' &&
+    chrome.runtime.id.length > 0
       ? chrome.runtime.id
-      : ""
+      : ''
   if (!extId) return
 
   const rpId = getWebauthnRpIdFromBeginOptions(options)
   if (rpId === undefined) {
     throw new Error(
       [
-        "WebAuthn options from the server are missing rp.id (registration) or rpId (authentication).",
-        "The Latch API must return options built for this Chrome extension when chromeExtensionId is sent on begin.",
-      ].join(" ")
+        'WebAuthn options from the server are missing rp.id (registration) or rpId (authentication).',
+        'The Latch API must return options built for this Chrome extension when chromeExtensionId is sent on begin.',
+      ].join(' ')
     )
   }
   if (rpId !== extId) {
     throw new Error(
       [
         `WebAuthn RP mismatch: the server set rp.id/rpId to "${rpId}" but this extension's id is "${extId}".`,
-        "Registration/authentication will fail verification. Fix the API to set rp.id (and verify with expectedRPID) to chrome.runtime.id from chromeExtensionId.",
-      ].join(" ")
+        'Registration/authentication will fail verification. Fix the API to set rp.id (and verify with expectedRPID) to chrome.runtime.id from chromeExtensionId.',
+      ].join(' ')
     )
   }
 }
@@ -327,16 +346,17 @@ export function formatWebauthnBrowserError(err: unknown): string {
 
   const code = (err as { code?: string }).code
   const causeMsg = readErrorCauseMessage((err as { cause?: unknown }).cause)
-  const protocol = typeof window !== "undefined" ? window.location.protocol : ""
+  const protocol = typeof window !== 'undefined' ? window.location.protocol : ''
 
-  if (code === "ERROR_INVALID_DOMAIN" && protocol === "chrome-extension:") {
-    const extId = typeof chrome !== "undefined" && chrome.runtime?.id ? chrome.runtime.id : "your-extension-id"
+  if (code === 'ERROR_INVALID_DOMAIN' && protocol === 'chrome-extension:') {
+    const extId =
+      typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : 'your-extension-id'
     const parts = [
-      "WebAuthn failed in the extension.",
+      'WebAuthn failed in the extension.',
       causeMsg ? `Details: ${causeMsg}` : undefined,
       `The server must receive chromeExtensionId and set WebAuthn rp.id to "${extId}" (same as chrome.runtime.id).`,
     ].filter(Boolean)
-    return parts.join(" ")
+    return parts.join(' ')
   }
 
   if (causeMsg) return `${err.message} (${causeMsg})`
@@ -347,7 +367,7 @@ export function formatWebauthnBrowserError(err: unknown): string {
 const UNEXPECTED_RP_ID_HASH_RE = /unexpected\s+rp\s*id\s*hash/i
 
 async function sha256HexUtf8(rpId: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(rpId))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rpId))
   return bytesToHex(new Uint8Array(digest))
 }
 
@@ -357,15 +377,15 @@ async function sha256HexUtf8(rpId: string): Promise<string> {
  */
 export function readAuthenticatorRpIdHashHexFromCredentialJSON(credential: unknown): string | null {
   const resp = (credential as { response?: unknown } | null)?.response
-  if (!resp || typeof resp !== "object") return null
+  if (!resp || typeof resp !== 'object') return null
   const r = resp as Record<string, unknown>
   try {
-    if (typeof r.authenticatorData === "string" && r.authenticatorData.length > 0) {
+    if (typeof r.authenticatorData === 'string' && r.authenticatorData.length > 0) {
       const d = base64UrlToBytes(r.authenticatorData)
       if (d.length < 32) return null
       return bytesToHex(d.subarray(0, 32))
     }
-    if (typeof r.attestationObject === "string") {
+    if (typeof r.attestationObject === 'string') {
       const { authData } = parseAttestationObject(r.attestationObject)
       if (authData.length < 32) return null
       return bytesToHex(authData.subarray(0, 32))
@@ -394,19 +414,25 @@ export async function enrichWebauthnRpIdHashErrorMessage(
     parts.push(`Begin rp.id/rpId: ${JSON.stringify(rpId)}`)
     parts.push(`SHA-256(rpId) expected by verifier (hex): ${await sha256HexUtf8(rpId)}`)
   } else {
-    parts.push("Begin options did not include rp.id or rpId (could not compute expected hash).")
+    parts.push('Begin options did not include rp.id or rpId (could not compute expected hash).')
   }
 
   const fromCred =
-    ctx.credentialResponse != null ? readAuthenticatorRpIdHashHexFromCredentialJSON(ctx.credentialResponse) : null
+    ctx.credentialResponse != null
+      ? readAuthenticatorRpIdHashHexFromCredentialJSON(ctx.credentialResponse)
+      : null
   if (fromCred) {
     parts.push(`Authenticator rpIdHash from this credential (hex): ${fromCred}`)
   } else {
-    parts.push("Could not read rpIdHash from the WebAuthn credential (missing or invalid authenticatorData).")
+    parts.push(
+      'Could not read rpIdHash from the WebAuthn credential (missing or invalid authenticatorData).'
+    )
   }
 
   const extId =
-    typeof chrome !== "undefined" && typeof chrome.runtime?.id === "string" && chrome.runtime.id.length > 0
+    typeof chrome !== 'undefined' &&
+    typeof chrome.runtime?.id === 'string' &&
+    chrome.runtime.id.length > 0
       ? chrome.runtime.id
       : undefined
   if (extId) {
@@ -414,6 +440,5 @@ export async function enrichWebauthnRpIdHashErrorMessage(
     parts.push(`SHA-256(chrome.runtime.id) (hex): ${await sha256HexUtf8(extId)}`)
   }
 
-  return parts.join(" ")
+  return parts.join(' ')
 }
-

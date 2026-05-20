@@ -31,7 +31,9 @@ export function TransactionStepper({ steps }: { steps: TransactionStepperStep[] 
               alt=""
               className={[
                 'h-7 w-7 object-contain',
-                s.status === 'failed' ? 'rounded-full ring-2 ring-red-500/70 ring-offset-1 ring-offset-bg' : '',
+                s.status === 'failed'
+                  ? 'rounded-full ring-2 ring-red-500/70 ring-offset-1 ring-offset-bg'
+                  : '',
               ].join(' ')}
             />
             <div

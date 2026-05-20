@@ -13,7 +13,7 @@ export function createRpcServer(rpcUrl: string): rpc.Server {
  */
 export async function simulateAndAssembleSoroban(
   server: rpc.Server,
-  transaction: Transaction,
+  transaction: Transaction
 ): Promise<Transaction> {
   const sim = await server.simulateTransaction(transaction)
   if (rpc.Api.isSimulationError(sim)) {
@@ -39,7 +39,7 @@ export async function simulateAndAssembleSoroban(
 export async function sendAndPollSoroban(
   server: rpc.Server,
   signed: Transaction,
-  options?: { pollIntervalMs?: number; maxAttempts?: number },
+  options?: { pollIntervalMs?: number; maxAttempts?: number }
 ): Promise<{
   status: 'SUCCESS' | 'FAILED'
   hash: string

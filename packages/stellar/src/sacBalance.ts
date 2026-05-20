@@ -9,7 +9,7 @@ function ledgerKeyContractDataBase64(sacContractId: string, cAddress: string): s
       contract: new Address(sacContractId).toScAddress(),
       key: xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('Balance'), new Address(cAddress).toScVal()]),
       durability: xdr.ContractDataDurability.persistent(),
-    }),
+    })
   )
   return key.toXDR('base64')
 }
@@ -18,7 +18,7 @@ export async function fetchSacBalanceRaw(
   rpcUrl: string,
   cAddress: string,
   sacContractId: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<bigint> {
   const keyB64 = ledgerKeyContractDataBase64(sacContractId, cAddress)
   const res = await fetch(rpcUrl.replace(/\/$/, ''), {
@@ -51,7 +51,10 @@ export async function fetchSacBalanceRaw(
   return 0n
 }
 
-export function formatSacRawToHuman(amount: bigint, decimals = STELLAR_SAC_DISPLAY_DECIMALS): string {
+export function formatSacRawToHuman(
+  amount: bigint,
+  decimals = STELLAR_SAC_DISPLAY_DECIMALS
+): string {
   const neg = amount < 0n
   const a = neg ? -amount : amount
   const d = BigInt(10) ** BigInt(decimals)

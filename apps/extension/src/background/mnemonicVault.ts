@@ -30,7 +30,9 @@ function decodeB64(b64: string): Uint8Array {
 
 async function deriveAesKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
   const enc = new TextEncoder()
-  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
+  const keyMaterial = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, [
+    'deriveBits',
+  ])
   const bits = await crypto.subtle.deriveBits(
     {
       name: 'PBKDF2',
@@ -106,7 +108,9 @@ export async function saveMnemonicVaultRecord(record: MnemonicVaultPayloadV1): P
   await chrome.storage.local.set({ [VAULT_KEY]: next })
 }
 
-export async function loadMnemonicVaultRecord(accountId: string): Promise<MnemonicVaultPayloadV1 | undefined> {
+export async function loadMnemonicVaultRecord(
+  accountId: string
+): Promise<MnemonicVaultPayloadV1 | undefined> {
   const res = await chrome.storage.local.get([VAULT_KEY])
   const list = (res[VAULT_KEY] as MnemonicVaultPayloadV1[] | undefined) ?? []
   return list.find((r) => r.accountId === accountId)

@@ -26,11 +26,7 @@ export function ReceiveTokenCard({
       <div className="flex items-center gap-3 min-w-0">
         <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-black flex items-center justify-center p-1 border border-border/30">
           {token.iconUrl ? (
-            <img
-              src={token.iconUrl}
-              alt={token.name}
-              className="h-full w-full object-contain"
-            />
+            <img src={token.iconUrl} alt={token.name} className="h-full w-full object-contain" />
           ) : (
             <div className="text-xs font-extrabold text-primary select-none">
               {token.symbol.slice(0, 3)}
@@ -40,7 +36,10 @@ export function ReceiveTokenCard({
         <div className="min-w-0">
           <div className="text-sm font-extrabold text-fg">{token.name}</div>
           <div className="mt-0.5 text-xs font-semibold text-muted tracking-wider">
-            BALANCE <span className="text-fg">{token.balance} {token.symbol}</span>
+            BALANCE{' '}
+            <span className="text-fg">
+              {token.balance} {token.symbol}
+            </span>
           </div>
         </div>
       </div>

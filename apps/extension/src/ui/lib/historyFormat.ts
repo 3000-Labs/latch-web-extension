@@ -28,7 +28,7 @@ function dateSectionLabel(dateStr?: string): string {
 
 export function mapTransactionToHistoryItem(
   row: SmartAccountTransactionRow,
-  iconUrl?: string | null,
+  iconUrl?: string | null
 ): HistoryItemVm {
   const asset =
     row.kind === 'swap'
@@ -70,7 +70,7 @@ export function groupHistoryItems(items: HistoryItemVm[]): HistorySectionVm[] {
 export function buildTransactionDetail(
   item: HistoryItemVm,
   cAddress: string,
-  networkLabel: string,
+  networkLabel: string
 ): import('../types/transaction-detail').TransactionDetailVm {
   return {
     id: item.id,
@@ -91,7 +91,7 @@ export function buildTransactionDetail(
 
 export function iconUrlForCode(
   portfolioRows: { code: string; iconUrl?: string | null }[],
-  code: string,
+  code: string
 ): string | null | undefined {
   return portfolioRows.find((r) => r.code === code)?.iconUrl
 }

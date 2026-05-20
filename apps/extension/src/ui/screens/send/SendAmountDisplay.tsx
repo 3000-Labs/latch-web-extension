@@ -5,7 +5,10 @@ import type { SendInputMode } from '../../types/send'
 
 function AmountCursor() {
   return (
-    <span className="mx-0.5 inline-block h-10 w-0.5 shrink-0 animate-pulse bg-primary align-middle" aria-hidden />
+    <span
+      className="mx-0.5 inline-block h-10 w-0.5 shrink-0 animate-pulse bg-primary align-middle"
+      aria-hidden
+    />
   )
 }
 
@@ -81,9 +84,7 @@ export function SendAmountDisplay({
         onClick={onToggleMode}
         className="mt-2 text-sm font-bold text-muted hover:text-fg/80"
       >
-        {inputMode === 'fiat'
-          ? `${secondaryCrypto} ${symbol}`
-          : `$${secondaryFiat ?? '0.00'}`}
+        {inputMode === 'fiat' ? `${secondaryCrypto} ${symbol}` : `$${secondaryFiat ?? '0.00'}`}
       </button>
     </div>
   )

@@ -22,12 +22,12 @@ packages/
 
 ## Extension Execution Contexts
 
-| Context        | File                                       | Rule                                                               |
-| -------------- | ------------------------------------------ | ------------------------------------------------------------------ |
-| Popup          | `apps/extension/src/popup/index.tsx`     | Primary UI surface. No key material. Sends messages to background. |
-| Side panel     | `apps/extension/src/sidepanel/index.tsx`   | Same rules as popup: no key material; messages to background only. |
-| Background SW  | `apps/extension/src/background/index.ts`   | ONLY context allowed to hold keys / sign.                          |
-| Content Script | `apps/extension/src/contents/injector.ts`  | Proxy only. Bridges dapp ↔ background.                             |
+| Context        | File                                      | Rule                                                               |
+| -------------- | ----------------------------------------- | ------------------------------------------------------------------ |
+| Popup          | `apps/extension/src/popup/index.tsx`      | Primary UI surface. No key material. Sends messages to background. |
+| Side panel     | `apps/extension/src/sidepanel/index.tsx`  | Same rules as popup: no key material; messages to background only. |
+| Background SW  | `apps/extension/src/background/index.ts`  | ONLY context allowed to hold keys / sign.                          |
+| Content Script | `apps/extension/src/contents/injector.ts` | Proxy only. Bridges dapp ↔ background.                             |
 
 **Never import `@latch/crypto` outside the background service worker.**
 

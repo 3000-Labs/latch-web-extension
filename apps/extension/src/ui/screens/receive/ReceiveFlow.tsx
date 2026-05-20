@@ -41,18 +41,28 @@ export function ReceiveFlow({
     // Get current date formatted like: "May 20th, 2026 14:24:34"
     const now = new Date()
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ]
     const monthName = months[now.getMonth()]
     const day = now.getDate()
-    
+
     // Add ordinal suffix
     let suffix = 'th'
     if (day === 1 || day === 21 || day === 31) suffix = 'st'
     else if (day === 2 || day === 22) suffix = 'nd'
     else if (day === 3 || day === 23) suffix = 'rd'
-    
+
     const year = now.getFullYear()
     const hours = String(now.getHours()).padStart(2, '0')
     const minutes = String(now.getMinutes()).padStart(2, '0')
@@ -67,9 +77,7 @@ export function ReceiveFlow({
     else if (selectedToken.symbol === 'EURC') simAmount = '75.00'
 
     // Mock from-address
-    const fromAddr = selectedToken.symbol === 'XLM'
-      ? 'GDN2NW3J...H6JK'
-      : 'GBBD47IF...LA5'
+    const fromAddr = selectedToken.symbol === 'XLM' ? 'GDN2NW3J...H6JK' : 'GBBD47IF...LA5'
 
     setSimulationData({
       amount: simAmount,

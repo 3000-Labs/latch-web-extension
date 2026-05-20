@@ -87,21 +87,22 @@ describe('buildSacProbesForHistory', () => {
     const usdcSac = new Asset('USDC', USDC_ISSUER).contractId(PASSPHRASE)
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify(
-            horizonAccountJson([
-              { asset_type: 'native', balance: '10.0000000' },
-              {
-                asset_type: 'credit_alphanum4',
-                asset_code: 'USDC',
-                asset_issuer: USDC_ISSUER,
-                balance: '5.0000000',
-              },
-            ]),
-          ),
-        ),
-      ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify(
+              horizonAccountJson([
+                { asset_type: 'native', balance: '10.0000000' },
+                {
+                  asset_type: 'credit_alphanum4',
+                  asset_code: 'USDC',
+                  asset_issuer: USDC_ISSUER,
+                  balance: '5.0000000',
+                },
+              ])
+            )
+          )
+      )
     )
 
     const probes = await buildSacProbesForHistory({
@@ -137,12 +138,12 @@ describe('fetchSmartAccountPayments', () => {
                 },
               ],
             },
-          }),
+          })
         )
       }
       if (u.includes('/accounts/') && !u.includes('/operations') && init?.method !== 'POST') {
         return new Response(
-          JSON.stringify(horizonAccountJson([{ asset_type: 'native', balance: '1.0000000' }])),
+          JSON.stringify(horizonAccountJson([{ asset_type: 'native', balance: '1.0000000' }]))
         )
       }
       if (u.includes('/operations/1/effects')) {
@@ -158,7 +159,7 @@ describe('fetchSmartAccountPayments', () => {
                 },
               ],
             },
-          }),
+          })
         )
       }
       if (init?.method === 'POST' && String(init.body).includes('getLatestLedger')) {
@@ -200,8 +201,8 @@ describe('fetchSmartAccountPayments', () => {
                 asset_issuer: USDC_ISSUER,
                 balance: '5.0000000',
               },
-            ]),
-          ),
+            ])
+          )
         )
       }
       if (init?.method === 'POST') {
@@ -229,7 +230,7 @@ describe('fetchSmartAccountPayments', () => {
                     }),
                   ],
                 },
-              }),
+              })
             )
           }
           return new Response(JSON.stringify({ result: { events: [] } }))
@@ -271,8 +272,8 @@ describe('fetchSmartAccountPayments', () => {
                 asset_issuer: USDC_ISSUER,
                 balance: '5.0000000',
               },
-            ]),
-          ),
+            ])
+          )
         )
       }
       if (init?.method === 'POST') {
@@ -300,7 +301,7 @@ describe('fetchSmartAccountPayments', () => {
                     }),
                   ],
                 },
-              }),
+              })
             )
           }
           if (contractId === usdcSac) {
@@ -318,7 +319,7 @@ describe('fetchSmartAccountPayments', () => {
                     }),
                   ],
                 },
-              }),
+              })
             )
           }
           return new Response(JSON.stringify({ result: { events: [] } }))
@@ -385,13 +386,13 @@ describe('fetchSmartAccountPayments', () => {
                   }),
                 ],
               },
-            }),
+            })
           )
         }
       }
       if (String(_url).includes('/accounts/') && !String(_url).includes('/operations')) {
         return new Response(
-          JSON.stringify(horizonAccountJson([{ asset_type: 'native', balance: '1.0000000' }])),
+          JSON.stringify(horizonAccountJson([{ asset_type: 'native', balance: '1.0000000' }]))
         )
       }
       return new Response('{}', { status: 404 })

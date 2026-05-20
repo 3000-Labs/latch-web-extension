@@ -99,6 +99,7 @@ import type { HistorySectionVm } from './types/history'
 import type { TransactionDetailVm } from './types/transaction-detail'
 import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from './types/send'
 import { SendFlow } from './screens/send/SendFlow'
+import { ReceiveFlow } from './screens/receive/ReceiveFlow'
 import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
@@ -129,6 +130,7 @@ type Route =
   | 'swap'
   | 'swapConfirm'
   | 'send'
+  | 'receive'
   | 'dappApproval'
   | 'migration'
   | 'migrationSuccess'
@@ -252,7 +254,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
    * Chrome does not reliably run WebAuthn inside the extension side panel (hangs with no UI).
    * Popup uses in-page credentials; side panel opens the shared `tabs/passkey-bridge` window.
    */
-  async function webauthnCredential(mode: 'registration' | 'authentication', optionsJSON: unknown): Promise<unknown> {
+  async function webauthnCredential(
+    mode: 'registration' | 'authentication',
+    optionsJSON: unknown
+  ): Promise<unknown> {
     try {
       if (surface === 'sidepanel') {
         return await openPasskeyBridgeAndWait({ mode, optionsJSON })
@@ -329,7 +334,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
   const [pendingMnemonic, setPendingMnemonic] = useState('')
   const seedWords = useSeedPhraseWords()
-  const [migrationDiscovery, setMigrationDiscovery] = useState<MigrationDiscovery | null | undefined>(undefined)
+  const [migrationDiscovery, setMigrationDiscovery] = useState<
+    MigrationDiscovery | null | undefined
+  >(undefined)
   const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
@@ -344,7 +351,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         balanceUsd: r.balanceUsd ?? null,
         iconUrl: r.iconUrl,
       })),
-    [portfolioRows],
+    [portfolioRows]
   )
 
   const networkLabel =
@@ -356,10 +363,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (setupState !== 'has_account') return
     let cancelled = false
     void (async () => {
-      const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>({
-        type: 'GET_ASSET_ICON_DATA_URLS',
-        payload: { assets: swapTokens.map((t) => ({ code: t.symbol })) },
-      })
+      const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>(
+        {
+          type: 'GET_ASSET_ICON_DATA_URLS',
+          payload: { assets: swapTokens.map((t) => ({ code: t.symbol })) },
+        }
+      )
       if (cancelled || !res.ok || !res.data) return
       const map: Record<string, string | null> = {}
       swapTokens.forEach((t, i) => {
@@ -400,7 +409,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
     if (page !== 'main') return
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-    if (!acc?.id || acc.mode !== 'mnemonic' || !acc.gAddress?.trim() || !acc.smartAccountAddress?.trim()) {
+    if (
+      !acc?.id ||
+      acc.mode !== 'mnemonic' ||
+      !acc.gAddress?.trim() ||
+      !acc.smartAccountAddress?.trim()
+    ) {
       setMigrationDiscovery(null)
       return
     }
@@ -436,7 +450,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       try {
         if (route === 'createPasskey') {
           const displayName = nextPasskeyAccountDisplayName(accounts)
-          const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>({
+          const begin = await sendToBackground<
+            { displayName?: string },
+            BackendWebauthnBeginResponse
+          >({
             type: 'PASSKEY_REG_BEGIN',
             payload: { displayName },
           })
@@ -530,7 +547,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setPortfolioLoading(true)
     setPortfolioError(null)
     try {
-      const res = await sendToBackground<GetSmartAccountBalancesRequest, GetSmartAccountBalancesResponse>({
+      const res = await sendToBackground<
+        GetSmartAccountBalancesRequest,
+        GetSmartAccountBalancesResponse
+      >({
         type: 'GET_SMART_ACCOUNT_BALANCES',
         payload: { accountId: acc.id },
       })
@@ -568,7 +588,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         return
       }
       const items = (res.data?.items ?? []).map((row) =>
-        mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRows, row.assetCode)),
+        mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRows, row.assetCode))
       )
       setHistorySections(groupHistoryItems(items))
     } finally {
@@ -629,7 +649,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setError(null)
     setLoading('Connecting to Phantom…')
     try {
-      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
+      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
+        .phantom?.solana
       if (!provider) throw new Error('Phantom not detected. Please install Phantom.')
 
       const conn = await provider.connect()
@@ -664,7 +685,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         remember: true,
         encryptionPassword: seedEncryptionPassword,
       }
-      const res = await sendToBackground<ImportMnemonicAccountRequest, ImportMnemonicAccountResponse>({
+      const res = await sendToBackground<
+        ImportMnemonicAccountRequest,
+        ImportMnemonicAccountResponse
+      >({
         type: 'IMPORT_MNEMONIC_ACCOUNT',
         payload: req,
       })
@@ -763,14 +787,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
         ReturnType<typeof startAuthentication>
       >
-      const finish = await sendToBackground<{ response: unknown }, BackendWebauthnAuthenticationFinishResponse>({
+      const finish = await sendToBackground<
+        { response: unknown },
+        BackendWebauthnAuthenticationFinishResponse
+      >({
         type: 'PASSKEY_AUTH_FINISH',
         payload: { response: assertion },
       })
       if (!finish.ok) {
         const errMsg = friendlyError(finish.error)
         throw new Error(
-          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, {
+            optionsJSON,
+            credentialResponse: assertion,
+          })
         )
       }
 
@@ -857,7 +887,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (activeAccount.mode === 'freighter') {
         if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
         const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
+            ? Networks.PUBLIC
+            : Networks.TESTNET
         if (!build.gAddressEntryTemplateXdr) {
           throw new Error('Missing delegated auth entry template from build response.')
         }
@@ -914,13 +946,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
 
     if (activeAccount.mode === 'phantom') {
-      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
+      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
+        .phantom?.solana
       if (!provider) throw new Error('Phantom not detected.')
       const digest = build.authDigestHex.toLowerCase()
       const prefixedMessage = `Stellar Smart Account Auth:\n${digest}`
       const msgBytes = new TextEncoder().encode(prefixedMessage)
       const signed = await provider.signMessage(msgBytes)
-      const sigBytes: Uint8Array = signed instanceof Uint8Array ? signed : signed.signature ?? new Uint8Array()
+      const sigBytes: Uint8Array =
+        signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
       if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
       setSendProgressLabel('Submitting…')
       const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
@@ -966,7 +1000,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (!submitRes.ok) {
       const errMsg = friendlyError(submitRes.error)
       throw new Error(
-        await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+        await enrichWebauthnRpIdHashErrorMessage(errMsg, {
+          optionsJSON,
+          credentialResponse: assertion,
+        })
       )
     }
     return submitRes.data ?? {}
@@ -1067,7 +1104,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const b =
           builtDelegatedTx ??
           (
-            await sendToBackground<{ smartAccountAddress: string; gAddress: string }, BuildDelegatedTxResponse>({
+            await sendToBackground<
+              { smartAccountAddress: string; gAddress: string },
+              BuildDelegatedTxResponse
+            >({
               type: 'BUILD_DELEGATED_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -1078,7 +1118,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         if (!b) throw new Error('Failed to build delegated transaction.')
         setLoading('Awaiting Freighter signature…')
         const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
+            ? Networks.PUBLIC
+            : Networks.TESTNET
         if (!b.gAddressEntryTemplateXdr) {
           throw new Error('Missing delegated auth entry template from build response.')
         }
@@ -1114,7 +1156,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const b =
           builtDelegatedTx ??
           (
-            await sendToBackground<{ smartAccountAddress: string; gAddress: string }, BuildDelegatedTxResponse>({
+            await sendToBackground<
+              { smartAccountAddress: string; gAddress: string },
+              BuildDelegatedTxResponse
+            >({
               type: 'BUILD_DELEGATED_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -1156,12 +1201,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       }
 
       if (activeAccount.mode === 'phantom') {
-        const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom?.solana
+        const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
+          .phantom?.solana
         if (!provider) throw new Error('Phantom not detected.')
         const b =
           builtTx ??
           (
-            await sendToBackground<{ smartAccountAddress: string; signerG?: string }, BuildTxResponse>({
+            await sendToBackground<
+              { smartAccountAddress: string; signerG?: string },
+              BuildTxResponse
+            >({
               type: 'BUILD_TX',
               payload: {
                 smartAccountAddress: activeAccount.smartAccountAddress,
@@ -1175,7 +1224,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         const msgBytes = new TextEncoder().encode(prefixedMessage)
         setLoading('Awaiting Phantom signature…')
         const signed = await provider.signMessage(msgBytes)
-        const sigBytes: Uint8Array = signed instanceof Uint8Array ? signed : signed.signature ?? new Uint8Array()
+        const sigBytes: Uint8Array =
+          signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
         if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
         const authSignatureHex = bytesToHex(sigBytes)
 
@@ -1200,7 +1250,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const b =
         builtTx ??
         (
-          await sendToBackground<{ smartAccountAddress: string; signerG?: string }, BuildTxResponse>({
+          await sendToBackground<
+            { smartAccountAddress: string; signerG?: string },
+            BuildTxResponse
+          >({
             type: 'BUILD_TX',
             payload: {
               smartAccountAddress: activeAccount.smartAccountAddress,
@@ -1240,7 +1293,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (!submitRes.ok) {
         const errMsg = friendlyError(submitRes.error)
         throw new Error(
-          await enrichWebauthnRpIdHashErrorMessage(errMsg, { optionsJSON, credentialResponse: assertion })
+          await enrichWebauthnRpIdHashErrorMessage(errMsg, {
+            optionsJSON,
+            credentialResponse: assertion,
+          })
         )
       }
       setRoute('home')
@@ -1278,7 +1334,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           <button
             className={[
               'h-9 w-20 rounded-full border text-sm font-extrabold',
-              pref === 'sidepanel' ? 'border-primary bg-primary text-black' : 'border-border bg-bg text-fg',
+              pref === 'sidepanel'
+                ? 'border-primary bg-primary text-black'
+                : 'border-border bg-bg text-fg',
             ].join(' ')}
             onClick={() => {
               const next = pref === 'sidepanel' ? 'popup' : 'sidepanel'
@@ -1299,7 +1357,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setError(null)
     setLoading('Logging out…')
     try {
-      const res = await sendToBackground<undefined, undefined>({ type: 'LOGOUT', payload: undefined })
+      const res = await sendToBackground<undefined, undefined>({
+        type: 'LOGOUT',
+        payload: undefined,
+      })
       if (!res.ok) throw new Error(friendlyError(res.error))
       setSetupState('new')
       setPendingDappRequests([])
@@ -1362,7 +1423,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         </div>
 
         {page === 'settings' ? (
-          <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+          <div
+            className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(
+              ' '
+            )}
+          >
             <SettingsScreen
               accountName={activeAccountLabel}
               accountAddress={activeAccount?.smartAccountAddress ?? '—'}
@@ -1372,7 +1437,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               onChangeBiometricsEnabled={() => {}}
               sidepanelPreferenceSection={sidepanelPreferenceSection}
               onClose={() => setPage('main')}
-              onLogout={() => void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+              onLogout={() =>
+                void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))
+              }
               onOpenMigrateAssets={
                 activeAccount?.mode === 'mnemonic' &&
                 activeAccount.gAddress?.trim() &&
@@ -1537,7 +1604,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Add account</h2>
-                  <p className="mt-2 text-sm text-muted">Choose how you want to add another signer</p>
+                  <p className="mt-2 text-sm text-muted">
+                    Choose how you want to add another signer
+                  </p>
                 </div>
 
                 <div className="mt-6 space-y-3 w-full">
@@ -1595,7 +1664,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <div className="mt-auto space-y-3 w-full">
                   <button
                     disabled={Boolean(loading) || !passkeyPrefetchReady}
-                    onClick={() => void loginWithExistingPasskey().catch((e) => setError(e instanceof Error ? e.message : String(e)))}
+                    onClick={() =>
+                      void loginWithExistingPasskey().catch((e) =>
+                        setError(e instanceof Error ? e.message : String(e))
+                      )
+                    }
                     className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
                   >
                     {!passkeyPrefetchReady
@@ -1632,28 +1705,31 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 {/* Choose signer screen */}
                 <div className="flex flex-col items-center space-y-3">
                   <div className="mt-6 space-y-3 w-full">
-                    {(
-                      ENABLE_OTHER_SIGNERS
-                        ? ([
-                            {
-                              id: 'freighter',
-                              name: 'Freighter',
-                              subtitle: 'Browser extension wallet for Stellar',
-                            },
-                            { id: 'phantom', name: 'Phantom', subtitle: 'Wallet for message signing' },
-                            {
-                              id: 'passkey',
-                              name: 'Passkey',
-                              subtitle: 'Biometric WebAuthn signer (P-256)',
-                            },
-                          ] as const)
-                        : ([
-                            {
-                              id: 'passkey',
-                              name: 'Passkey',
-                              subtitle: 'Biometric WebAuthn signer (P-256)',
-                            },
-                          ] as const)
+                    {(ENABLE_OTHER_SIGNERS
+                      ? ([
+                          {
+                            id: 'freighter',
+                            name: 'Freighter',
+                            subtitle: 'Browser extension wallet for Stellar',
+                          },
+                          {
+                            id: 'phantom',
+                            name: 'Phantom',
+                            subtitle: 'Wallet for message signing',
+                          },
+                          {
+                            id: 'passkey',
+                            name: 'Passkey',
+                            subtitle: 'Biometric WebAuthn signer (P-256)',
+                          },
+                        ] as const)
+                      : ([
+                          {
+                            id: 'passkey',
+                            name: 'Passkey',
+                            subtitle: 'Biometric WebAuthn signer (P-256)',
+                          },
+                        ] as const)
                     ).map((s) => {
                       const active = s.id === selectedSigner
                       return (
@@ -1682,11 +1758,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     {selectedSigner === 'passkey' ? (
                       <button
                         onClick={() =>
-                          setRoute(chooseSignerForExistingWallet ? 'addAccountPasskey' : 'createPasskey')
+                          setRoute(
+                            chooseSignerForExistingWallet ? 'addAccountPasskey' : 'createPasskey'
+                          )
                         }
                         className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                       >
-                        {chooseSignerForExistingWallet ? 'Log in with Passkey' : 'Continue with Passkey'}
+                        {chooseSignerForExistingWallet
+                          ? 'Log in with Passkey'
+                          : 'Continue with Passkey'}
                       </button>
                     ) : (
                       <button
@@ -1755,11 +1835,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     }
                     className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:opacity-50"
                   >
-                    {!passkeyPrefetchReady
-                      ? 'Preparing…'
-                      : loading
-                        ? loading
-                        : 'Create Passkey'}
+                    {!passkeyPrefetchReady ? 'Preparing…' : loading ? loading : 'Create Passkey'}
                   </button>
                   <button
                     onClick={() => {
@@ -1808,7 +1884,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
-              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <ImportSeedScreen
                   surface={surface}
                   step={route === 'importSeedEncrypt' ? 'encrypt' : importSeedStep}
@@ -1835,7 +1916,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   onEncryptionConfirmChange={setSeedEncryptionConfirm}
                   onImport={() =>
                     void beginMnemonicImport().catch((e) =>
-                      setError(e instanceof Error ? e.message : String(e)),
+                      setError(e instanceof Error ? e.message : String(e))
                     )
                   }
                   onEncryptBack={() => {
@@ -1852,8 +1933,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">Unlock saved phrase</h2>
-                  <p className="mt-2 text-xs text-muted">Enter the password you chose when enabling Remember.</p>
+                  <h2 className="mt-4 text-2xl font-extrabold tracking-tight">
+                    Unlock saved phrase
+                  </h2>
+                  <p className="mt-2 text-xs text-muted">
+                    Enter the password you chose when enabling Remember.
+                  </p>
                 </div>
                 <input
                   type="password"
@@ -1896,7 +1981,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 !activeAccountMnemonicSignerLoaded ? (
                   <div className="mb-3 rounded-2xl border border-primary/40 bg-surface/80 px-3 py-3 text-xs shadow-soft">
                     <div className="font-extrabold text-fg">Saved recovery phrase is locked</div>
-                    <div className="mt-1 text-muted">Unlock to sign transactions after the extension restarts.</div>
+                    <div className="mt-1 text-muted">
+                      Unlock to sign transactions after the extension restarts.
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -1933,12 +2020,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     setRoute('swap')
                   }}
                   onOpenSend={openSendFlow}
+                  onOpenReceive={() => setRoute('receive')}
                 />
               </div>
             ) : null}
 
             {!loading && route === 'migration' && activeAccount?.id ? (
-              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <MigrationScreen
                   surface={surface}
                   accountId={activeAccount.id}
@@ -1954,14 +2047,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
             {!loading && route === 'migrationSuccess' ? (
               <div
-                className={['mt-4 flex min-h-0 flex-1 flex-col items-center animate-screenIn', flowHeightClass].join(
-                  ' ',
-                )}
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col items-center animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
               >
                 <img src={successAvatarUrl} alt="" className="h-16 w-16 object-contain" />
-                <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight">Migration complete</h2>
+                <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight">
+                  Migration complete
+                </h2>
                 <p className="mt-3 max-w-[280px] text-center text-sm leading-relaxed text-muted">
-                  Your transactions were submitted to the network. Balances may take a moment to update on-chain.
+                  Your transactions were submitted to the network. Balances may take a moment to
+                  update on-chain.
                 </p>
                 <button
                   type="button"
@@ -1978,7 +2075,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'history' ? (
-              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <HistoryScreen
                   surface={surface}
                   sections={historySections}
@@ -1996,7 +2098,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'transactionDetail' && transactionDetail ? (
-              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <TransactionDetailScreen
                   surface={surface}
                   detail={transactionDetail}
@@ -2051,7 +2158,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'send' ? (
-              <div className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <SendFlow
                   surface={surface}
                   step={sendStep}
@@ -2083,6 +2195,22 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
+            {!loading && route === 'receive' ? (
+              <div
+                className={[
+                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <ReceiveFlow
+                  smartAccountAddress={activeAccount?.smartAccountAddress || ''}
+                  portfolioRows={portfolioRows}
+                  portfolioLoading={portfolioLoading}
+                  portfolioError={portfolioError}
+                  onBackToHome={() => setRoute('home')}
+                />
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -2122,7 +2250,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     if (!renameAccountId) return
                     void sendToBackground<{ accountId: string; label?: string }, undefined>({
                       type: 'RENAME_ACCOUNT',
-                      payload: { accountId: renameAccountId, label: renameDraft.trim() || undefined },
+                      payload: {
+                        accountId: renameAccountId,
+                        label: renameDraft.trim() || undefined,
+                      },
                     })
                       .then(() => refreshAccounts())
                       .then(() => setRenameAccountId(null))

@@ -1,13 +1,7 @@
 import React from 'react'
 import { ChevronLeft } from 'lucide-react'
 
-export function ReceiveQrHeader({
-  tokenName,
-  onBack,
-}: {
-  tokenName: string
-  onBack: () => void
-}) {
+export function ReceiveQrHeader({ tokenName, onBack }: { tokenName: string; onBack: () => void }) {
   return (
     <div className="flex shrink-0 items-center justify-between">
       <button
@@ -18,9 +12,7 @@ export function ReceiveQrHeader({
       >
         <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
       </button>
-      <div className="text-base font-extrabold text-center flex-1">
-        Your {tokenName} Address
-      </div>
+      <div className="text-base font-extrabold text-center flex-1">Your {tokenName} Address</div>
       <div className="w-9" />
     </div>
   )

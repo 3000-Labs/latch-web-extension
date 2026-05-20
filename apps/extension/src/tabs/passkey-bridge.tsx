@@ -1,23 +1,23 @@
-import "../style.css"
+import '../style.css'
 
-import { useEffect, useState } from "react"
-import { startAuthentication, startRegistration } from "@simplewebauthn/browser"
+import { useEffect, useState } from 'react'
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
-import { formatWebauthnBrowserError } from "../ui/webauthn/passkey"
+import { formatWebauthnBrowserError } from '../ui/webauthn/passkey'
 import {
   LATCH_PASSKEY_BRIDGE_RESULT,
   passkeyBridgeStorageKey,
   type PasskeyBridgeStoredPayload,
-} from "../ui/webauthn/passkeyBridge"
+} from '../ui/webauthn/passkeyBridge'
 
 export default function PasskeyBridgeTab() {
-  const [status, setStatus] = useState("Opening passkey…")
+  const [status, setStatus] = useState('Opening passkey…')
 
   useEffect(() => {
-    const raw = window.location.hash.replace(/^#/, "")
-    const ticket = raw ? decodeURIComponent(raw) : ""
+    const raw = window.location.hash.replace(/^#/, '')
+    const ticket = raw ? decodeURIComponent(raw) : ''
     if (!ticket) {
-      setStatus("Missing session. Close this window and try again from Latch.")
+      setStatus('Missing session. Close this window and try again from Latch.')
       return
     }
 
@@ -26,15 +26,15 @@ export default function PasskeyBridgeTab() {
       const bag = await chrome.storage.session.get(key)
       const payload = bag[key] as PasskeyBridgeStoredPayload | undefined
       if (!payload) {
-        setStatus("This passkey session expired. Close the window and try again.")
+        setStatus('This passkey session expired. Close the window and try again.')
         return
       }
       await chrome.storage.session.remove(key)
 
-      setStatus("Complete the passkey prompt from your system…")
+      setStatus('Complete the passkey prompt from your system…')
       try {
         let response: unknown
-        if (payload.mode === "registration") {
+        if (payload.mode === 'registration') {
           response = await startRegistration({
             optionsJSON: payload.optionsJSON,
           } as Parameters<typeof startRegistration>[0])

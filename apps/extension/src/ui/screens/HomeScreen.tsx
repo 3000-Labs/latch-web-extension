@@ -91,7 +91,11 @@ export function HomeScreen({
       <div className="mt-8 flex items-center justify-center gap-2">
         <ActionIconButton label="Add" icon={<Plus {...iconProps} />} />
         <ActionIconButton label="Send" icon={<ArrowUp {...iconProps} />} onClick={onOpenSend} />
-        <ActionIconButton label="Receive" icon={<ArrowDown {...iconProps} />} onClick={onOpenReceive} />
+        <ActionIconButton
+          label="Receive"
+          icon={<ArrowDown {...iconProps} />}
+          onClick={onOpenReceive}
+        />
         <ActionIconButton
           label="Swap"
           icon={<img src={swapIconUrl} alt="" className="h-5 w-5" />}

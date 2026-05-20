@@ -18,7 +18,7 @@ export function buildClassicNativePaymentTx(params: {
         destination: params.destination,
         asset: Asset.native(),
         amount: params.amount,
-      }),
+      })
     )
     .setTimeout(300)
     .build()

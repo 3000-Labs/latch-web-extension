@@ -41,10 +41,13 @@ function installLatch() {
       return data.publicKey
     },
     async signTransaction(request: any) {
-      const data = await sendToBackground<{ response: { signedXdr: string } }>('DAPP_SIGN_TRANSACTION', {
-        origin: window.location.origin,
-        request,
-      })
+      const data = await sendToBackground<{ response: { signedXdr: string } }>(
+        'DAPP_SIGN_TRANSACTION',
+        {
+          origin: window.location.origin,
+          request,
+        }
+      )
       return data.response
     },
     async getNetwork() {

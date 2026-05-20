@@ -16,18 +16,18 @@ export function HistoryTransactionRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-2xl border border-border bg-surface/40 px-4 py-4 text-left hover:bg-surface/60"
+      className="flex w-full items-center justify-between rounded-2xl border border-border/20 bg-surface px-4 py-[14px] text-left hover:bg-surface/75 active:bg-surface/85 transition-all cursor-pointer"
     >
       <div className="flex min-w-0 items-center gap-3">
-        <TokenAvatar symbol={item.assetCode} iconUrl={item.iconUrl} />
+        <TokenAvatar symbol={item.assetCode} iconUrl={item.iconUrl} rounded="rounded-xl" />
         <div className="min-w-0">
-          <div className="truncate text-sm font-extrabold">{item.asset}</div>
-          <div className="text-xs font-bold text-muted">{statusLabel}</div>
+          <div className="truncate text-sm font-extrabold text-fg">{item.asset}</div>
+          <div className="text-xs font-semibold text-muted/70 mt-0.5">{statusLabel}</div>
         </div>
       </div>
       <div className="shrink-0 text-right">
-        <div className="text-sm font-extrabold">{item.amountLabel}</div>
-        <div className="text-xs font-bold text-muted">{item.timeLabel}</div>
+        <div className="text-sm font-extrabold text-fg">{item.amountLabel}</div>
+        <div className="text-xs font-semibold text-muted/70 mt-0.5">{item.timeLabel}</div>
       </div>
     </button>
   )

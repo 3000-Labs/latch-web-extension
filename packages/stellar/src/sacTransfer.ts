@@ -28,8 +28,8 @@ export function buildUnsignedSacTransferTx(params: {
         'transfer',
         new Address(params.fromGAddress).toScVal(),
         new Address(params.toCAddress).toScVal(),
-        nativeToScVal(params.amountRaw, { type: 'i128' }),
-      ),
+        nativeToScVal(params.amountRaw, { type: 'i128' })
+      )
     )
     .setTimeout(300)
     .build()

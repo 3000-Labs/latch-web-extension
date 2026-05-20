@@ -1,12 +1,6 @@
 import React from 'react'
 
-export function ReceiptConfirmHero({
-  amount,
-  symbol,
-}: {
-  amount: string
-  symbol: string
-}) {
+export function ReceiptConfirmHero({ amount, symbol }: { amount: string; symbol: string }) {
   return (
     <div className="text-center py-8 mt-12">
       <div className="text-[13px] font-bold text-muted uppercase tracking-wider">

@@ -89,7 +89,7 @@ export function buildTokenMap(items: TokenListItem[]): TokenMap {
 
 export function iconFromTokenMap(
   map: TokenMap,
-  params: { code: string; issuer?: string; sacContractId?: string },
+  params: { code: string; issuer?: string; sacContractId?: string }
 ): string | null {
   const code = params.code.toUpperCase()
 
@@ -119,7 +119,7 @@ export function iconFromTokenMap(
 /** @deprecated use iconFromTokenMap with fetchTokenMap */
 export function iconFromTokenLists(
   lists: TokenListItem[],
-  params: { code: string; issuer?: string; sacContractId?: string },
+  params: { code: string; issuer?: string; sacContractId?: string }
 ): string | null {
   return iconFromTokenMap(buildTokenMap(lists), params)
 }
@@ -169,7 +169,11 @@ async function fetchTokenListFromNetwork(network: 'mainnet' | 'testnet'): Promis
 }
 
 export async function fetchTokenMap(network: 'mainnet' | 'testnet'): Promise<TokenMap> {
-  if (memoryCache && memoryCache.network === network && Date.now() - memoryCache.at < LIST_STALE_MS) {
+  if (
+    memoryCache &&
+    memoryCache.network === network &&
+    Date.now() - memoryCache.at < LIST_STALE_MS
+  ) {
     return memoryCache.map
   }
 
@@ -186,7 +190,9 @@ export async function fetchTokenMap(network: 'mainnet' | 'testnet'): Promise<Tok
 }
 
 /** @deprecated use fetchTokenMap */
-export async function fetchCombinedTokenLists(network: 'mainnet' | 'testnet'): Promise<TokenListItem[]> {
+export async function fetchCombinedTokenLists(
+  network: 'mainnet' | 'testnet'
+): Promise<TokenListItem[]> {
   const map = await fetchTokenMap(network)
   const items: TokenListItem[] = []
   const seen = new Set<string>()

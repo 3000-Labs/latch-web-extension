@@ -28,7 +28,7 @@ export function accountToSignerType(mode: AccountMode): SendSignerType {
 
 export function buildSendRequestFromDraft(
   draft: SendDraft,
-  account: StoredAccount,
+  account: StoredAccount
 ): BuildSendTxRequest | null {
   if (!account.smartAccountAddress || !draft.token || !draft.recipientAddress.trim()) return null
   const amount = sendCryptoAmountFromDraft(draft)
@@ -57,7 +57,7 @@ export function buildSendRequestFromDraft(
 
 export function buildSetupRequestFromDraft(
   draft: SendDraft,
-  account: StoredAccount,
+  account: StoredAccount
 ): SetupSendRulesRequest | null {
   if (!account.smartAccountAddress || !draft.token) return null
   const signerType = accountToSignerType(account.mode)
@@ -96,17 +96,13 @@ export function isNoContextRuleError(error?: { code?: string; status?: number })
   return error?.status === 409 && error?.code === 'NO_CONTEXT_RULE'
 }
 
-export function isDelegatedSendBuild(
-  build: BuildSendTxResponse,
-): build is BuildSendTxResponse & {
+export function isDelegatedSendBuild(build: BuildSendTxResponse): build is BuildSendTxResponse & {
   gAddressPreimageXdr: string
   gAddressEntryTemplateXdr: string
   smartAccountAuthEntryXdr: string
 } {
   return Boolean(
-    build.gAddressPreimageXdr &&
-      build.gAddressEntryTemplateXdr &&
-      build.smartAccountAuthEntryXdr,
+    build.gAddressPreimageXdr && build.gAddressEntryTemplateXdr && build.smartAccountAuthEntryXdr
   )
 }
 

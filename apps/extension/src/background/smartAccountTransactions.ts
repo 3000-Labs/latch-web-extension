@@ -2,16 +2,25 @@ import { fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
 
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
 
-import { getStellarNetworkFromEnv, horizonUrlFromEnv, networkPassphraseFromEnv, sorobanRpcUrlFromEnv } from './migration/env'
+import {
+  getStellarNetworkFromEnv,
+  horizonUrlFromEnv,
+  networkPassphraseFromEnv,
+  sorobanRpcUrlFromEnv,
+} from './migration/env'
 import { getAccounts } from './storage'
 import { computeBalanceUsd } from './tokenPrices'
 
 function classifyKind(
   tx: { from: string; to: string },
   cAddress: string,
-  gAddress?: string,
+  gAddress?: string
 ): SmartAccountTransactionRow['kind'] {
-  if (stellarAddressEquals(tx.to, cAddress) && gAddress && stellarAddressEquals(tx.from, gAddress)) {
+  if (
+    stellarAddressEquals(tx.to, cAddress) &&
+    gAddress &&
+    stellarAddressEquals(tx.from, gAddress)
+  ) {
     return 'deposit'
   }
   if (stellarAddressEquals(tx.from, cAddress)) return 'sent'
@@ -20,7 +29,7 @@ function classifyKind(
 }
 
 export async function runGetSmartAccountTransactions(
-  accountId: string,
+  accountId: string
 ): Promise<GetSmartAccountTransactionsResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)

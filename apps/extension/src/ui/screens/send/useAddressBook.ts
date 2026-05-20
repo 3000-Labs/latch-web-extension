@@ -25,8 +25,8 @@ export function useAddressBook() {
               e != null &&
               typeof (e as AddressBookEntry).id === 'string' &&
               typeof (e as AddressBookEntry).name === 'string' &&
-              typeof (e as AddressBookEntry).address === 'string',
-          ),
+              typeof (e as AddressBookEntry).address === 'string'
+          )
         )
       }
       setLoaded(true)

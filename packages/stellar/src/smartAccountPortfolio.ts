@@ -16,7 +16,7 @@ export type PortfolioTokenProbe = {
  */
 export function portfolioProbesFromHorizonAccount(
   record: HorizonAccountRecord,
-  networkPassphrase: string,
+  networkPassphrase: string
 ): PortfolioTokenProbe[] {
   const probes: PortfolioTokenProbe[] = []
   const nativeSac = Asset.native().contractId(networkPassphrase)
@@ -48,7 +48,7 @@ export function portfolioProbesFromHorizonAccount(
 export async function fetchHorizonAccountJson(
   horizonBaseUrl: string,
   accountId: string,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<unknown> {
   const url = `${horizonBaseUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(accountId)}`
   const res = await fetch(url, { headers: { Accept: 'application/json' }, signal })
@@ -80,7 +80,11 @@ export async function loadSmartAccountPortfolioRows(params: {
 
   if (params.gAddress?.trim()) {
     try {
-      const json = await fetchHorizonAccountJson(params.horizonUrl, params.gAddress.trim(), params.signal)
+      const json = await fetchHorizonAccountJson(
+        params.horizonUrl,
+        params.gAddress.trim(),
+        params.signal
+      )
       const record = parseHorizonAccountJson(json)
       if (record) {
         const fromG = portfolioProbesFromHorizonAccount(record, params.networkPassphrase)
@@ -95,10 +99,15 @@ export async function loadSmartAccountPortfolioRows(params: {
 
   const results = await Promise.all(
     probes.map(async (p) => {
-      const raw = await fetchSacBalanceRaw(params.rpcUrl, params.cAddress, p.sacContractId, params.signal)
+      const raw = await fetchSacBalanceRaw(
+        params.rpcUrl,
+        params.cAddress,
+        p.sacContractId,
+        params.signal
+      )
       const human = formatSacRawToHuman(raw, STELLAR_SAC_DISPLAY_DECIMALS)
       return { ...p, raw, human }
-    }),
+    })
   )
 
   const rows: SmartAccountPortfolioRow[] = []

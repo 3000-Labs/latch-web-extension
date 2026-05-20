@@ -15,7 +15,7 @@ function cacheKey(network: string, code: string, issuerOrNative: string) {
 export async function getCachedIconDataUrl(
   network: string,
   code: string,
-  issuerOrNative: string,
+  issuerOrNative: string
 ): Promise<string | null> {
   const k = cacheKey(network, code, issuerOrNative)
   const r = await chrome.storage.local.get(k)
@@ -23,7 +23,12 @@ export async function getCachedIconDataUrl(
   return typeof v === 'string' && v.startsWith('data:') ? v : null
 }
 
-async function setCachedIconDataUrl(network: string, code: string, issuerOrNative: string, dataUrl: string) {
+async function setCachedIconDataUrl(
+  network: string,
+  code: string,
+  issuerOrNative: string,
+  dataUrl: string
+) {
   await chrome.storage.local.set({ [cacheKey(network, code, issuerOrNative)]: dataUrl })
 }
 
@@ -68,7 +73,10 @@ async function resolveIconUrlFromToml(params: {
   signal?: AbortSignal
 }): Promise<string | null> {
   const accUrl = `${params.horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(params.issuer)}`
-  const res = await fetch(accUrl, { headers: { Accept: 'application/json' }, signal: params.signal })
+  const res = await fetch(accUrl, {
+    headers: { Accept: 'application/json' },
+    signal: params.signal,
+  })
   if (!res.ok) return null
   const body = (await res.json()) as { home_domain?: string }
   const domain = normalizeDomain(body.home_domain ?? '')
@@ -83,7 +91,12 @@ async function resolveIconUrlFromToml(params: {
 
   if (!toml.CURRENCIES) return null
   for (const cur of toml.CURRENCIES) {
-    if (cur.code === params.code && cur.issuer === params.issuer && cur.image && typeof cur.image === 'string') {
+    if (
+      cur.code === params.code &&
+      cur.issuer === params.issuer &&
+      cur.image &&
+      typeof cur.image === 'string'
+    ) {
       const imgUrl = cur.image.trim()
       if (imgUrl.toLowerCase().startsWith('https://')) return imgUrl
     }
@@ -167,7 +180,7 @@ export async function resolveIconDataUrlForAsset(params: {
 export const resolveIconUrlForAsset = resolveIconDataUrlForAsset
 
 export async function getAssetIconDataUrlsBatch(
-  req: GetAssetIconDataUrlsRequest,
+  req: GetAssetIconDataUrlsRequest
 ): Promise<GetAssetIconDataUrlsResponse> {
   const network = getStellarNetworkFromEnv()
   const horizonUrl = horizonUrlFromEnv()
@@ -179,8 +192,8 @@ export async function getAssetIconDataUrlsBatch(
         code: a.code,
         issuer: a.issuer,
         sacContractId: a.sacContractId,
-      }),
-    ),
+      })
+    )
   )
   return { icons }
 }

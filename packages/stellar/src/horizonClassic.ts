@@ -6,7 +6,7 @@ export function createHorizonServer(horizonUrl: string): Horizon.Server {
 
 export async function submitClassicTransaction(
   horizonUrl: string,
-  signed: Transaction,
+  signed: Transaction
 ): Promise<{ hash: string }> {
   const server = createHorizonServer(horizonUrl)
   const res = await server.submitTransaction(signed)
@@ -16,7 +16,7 @@ export async function submitClassicTransaction(
 export async function pollHorizonTransaction(
   horizonUrl: string,
   hash: string,
-  options?: { pollIntervalMs?: number; maxAttempts?: number },
+  options?: { pollIntervalMs?: number; maxAttempts?: number }
 ): Promise<{ status: 'success' | 'failed' | 'pending'; ledgerAttr?: number }> {
   const server = createHorizonServer(horizonUrl)
   const pollIntervalMs = options?.pollIntervalMs ?? 1000

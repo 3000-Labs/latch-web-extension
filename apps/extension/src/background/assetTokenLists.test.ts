@@ -34,7 +34,7 @@ describe('buildTokenMap', () => {
   it('keys by symbol and symbol:issuer with first occurrence winning', () => {
     expect(map.USDC?.icon).toBe('https://example.com/usdc.png')
     expect(map['USDC:GBBD47IF6L27R6SAA3BVWFXNUG7QLYZNH7ZWK5CT4OEK2LDXZ2BJZK2']?.icon).toBe(
-      'https://example.com/usdc.png',
+      'https://example.com/usdc.png'
     )
     expect(map['USDC:GOTHER']?.icon).toBe('https://example.com/usdc-other.png')
   })
@@ -46,7 +46,7 @@ describe('iconFromTokenMap', () => {
       iconFromTokenMap(map, {
         code: 'USDC',
         sacContractId: 'CBIELTK6YBZJU5UP2WWQ3ROF7NHHELKHUV6FJOL7REJOGLR7ATZ6',
-      }),
+      })
     ).toBe('https://example.com/usdc.png')
   })
 
@@ -55,7 +55,7 @@ describe('iconFromTokenMap', () => {
       iconFromTokenMap(map, {
         code: 'USDC',
         issuer: 'GBBD47IF6L27R6SAA3BVWFXNUG7QLYZNH7ZWK5CT4OEK2LDXZ2BJZK2',
-      }),
+      })
     ).toBe('https://example.com/usdc.png')
   })
 

@@ -1,15 +1,20 @@
-import type { AccountMode, DappPermission, GetAccountsResponse, PendingDappRequest, StoredAccount } from "@latch/types"
+import type {
+  AccountMode,
+  DappPermission,
+  GetAccountsResponse,
+  PendingDappRequest,
+  StoredAccount,
+} from '@latch/types'
 
-import { clearAllMnemonicVaultRecords } from "./mnemonicVault"
+import { clearAllMnemonicVaultRecords } from './mnemonicVault'
 
 const STORAGE_KEYS = {
-  setupState: "latch.setupState",
-  legacyAccountPublicKey: "latch.accountPublicKey",
-  accounts: "latch.accounts",
-  activeAccountId: "latch.activeAccountId",
-  dappPermissions: "latch.dappPermissions"
-  ,
-  pendingDappRequests: "latch.pendingDappRequests"
+  setupState: 'latch.setupState',
+  legacyAccountPublicKey: 'latch.accountPublicKey',
+  accounts: 'latch.accounts',
+  activeAccountId: 'latch.activeAccountId',
+  dappPermissions: 'latch.dappPermissions',
+  pendingDappRequests: 'latch.pendingDappRequests',
 } as const
 
 type DappPermissionsStore = Record<string, DappPermission[] | undefined>
@@ -33,7 +38,9 @@ function newId() {
   return crypto.randomUUID()
 }
 
-export async function upsertAccount(input: Omit<StoredAccount, "id" | "createdAt"> & Partial<Pick<StoredAccount, "id" | "createdAt">>) {
+export async function upsertAccount(
+  input: Omit<StoredAccount, 'id' | 'createdAt'> & Partial<Pick<StoredAccount, 'id' | 'createdAt'>>
+) {
   const { accounts, activeAccountId } = await getAccounts()
 
   const now = Date.now()
@@ -47,7 +54,7 @@ export async function upsertAccount(input: Omit<StoredAccount, "id" | "createdAt
 
   await chrome.storage.local.set({
     [STORAGE_KEYS.accounts]: nextAccounts,
-    [STORAGE_KEYS.activeAccountId]: activeAccountId ?? id
+    [STORAGE_KEYS.activeAccountId]: activeAccountId ?? id,
   })
 
   return { account: next, activeAccountId: activeAccountId ?? id }
@@ -65,25 +72,30 @@ export async function createAccount(params: {
   const { accounts } = await getAccounts()
 
   let existing: StoredAccount | undefined
-  if (params.mode === "passkey") {
+  if (params.mode === 'passkey') {
     existing = accounts.find((a) => {
-      if (a.mode !== "passkey") return false
-      if (params.passkeyCredentialId && a.passkeyCredentialId === params.passkeyCredentialId) return true
-      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress) return true
+      if (a.mode !== 'passkey') return false
+      if (params.passkeyCredentialId && a.passkeyCredentialId === params.passkeyCredentialId)
+        return true
+      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress)
+        return true
       return false
     })
-  } else if (params.mode === "mnemonic" || params.mode === "freighter") {
+  } else if (params.mode === 'mnemonic' || params.mode === 'freighter') {
     existing = accounts.find((a) => {
-      if (a.mode !== "mnemonic" && a.mode !== "freighter") return false
+      if (a.mode !== 'mnemonic' && a.mode !== 'freighter') return false
       if (params.gAddress && a.gAddress === params.gAddress) return true
-      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress) return true
+      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress)
+        return true
       return false
     })
-  } else if (params.mode === "phantom") {
+  } else if (params.mode === 'phantom') {
     existing = accounts.find((a) => {
-      if (a.mode !== "phantom") return false
-      if (params.phantomPublicKeyHex && a.phantomPublicKeyHex === params.phantomPublicKeyHex) return true
-      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress) return true
+      if (a.mode !== 'phantom') return false
+      if (params.phantomPublicKeyHex && a.phantomPublicKeyHex === params.phantomPublicKeyHex)
+        return true
+      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress)
+        return true
       return false
     })
   }
@@ -97,7 +109,7 @@ export async function createAccount(params: {
     phantomPublicKeyHex: params.phantomPublicKeyHex,
     passkeyCredentialId: params.passkeyCredentialId,
     passkeyKeyDataHex: params.passkeyKeyDataHex ?? existing?.passkeyKeyDataHex,
-    label: params.label ?? existing?.label
+    label: params.label ?? existing?.label,
   })
 }
 
@@ -108,7 +120,7 @@ export async function renameAccount(args: { accountId: string; label?: string })
   )
   await chrome.storage.local.set({
     [STORAGE_KEYS.accounts]: nextAccounts,
-    [STORAGE_KEYS.activeAccountId]: activeAccountId
+    [STORAGE_KEYS.activeAccountId]: activeAccountId,
   })
 }
 
@@ -118,7 +130,10 @@ export async function getDappPermissions(origin: string): Promise<DappPermission
   return store[origin] ?? []
 }
 
-export async function setDappPermissions(origin: string, allowed: DappPermission[]): Promise<DappPermission[]> {
+export async function setDappPermissions(
+  origin: string,
+  allowed: DappPermission[]
+): Promise<DappPermission[]> {
   const res = await chrome.storage.local.get([STORAGE_KEYS.dappPermissions])
   const store = (res[STORAGE_KEYS.dappPermissions] as DappPermissionsStore | undefined) ?? {}
   const next: DappPermissionsStore = { ...store, [origin]: allowed }
@@ -139,7 +154,7 @@ export async function addPendingDappRequest(req: PendingDappRequest) {
 export async function removePendingDappRequest(requestId: string) {
   const current = await listPendingDappRequests()
   await chrome.storage.local.set({
-    [STORAGE_KEYS.pendingDappRequests]: current.filter((r) => r.id !== requestId)
+    [STORAGE_KEYS.pendingDappRequests]: current.filter((r) => r.id !== requestId),
   })
 }
 
@@ -151,7 +166,7 @@ export async function clearSession() {
     STORAGE_KEYS.setupState,
     STORAGE_KEYS.legacyAccountPublicKey,
     STORAGE_KEYS.dappPermissions,
-    STORAGE_KEYS.pendingDappRequests
+    STORAGE_KEYS.pendingDappRequests,
   ])
 }
 
@@ -161,7 +176,7 @@ export async function disconnectSessionForLogoutDev() {
     STORAGE_KEYS.setupState,
     STORAGE_KEYS.legacyAccountPublicKey,
     STORAGE_KEYS.dappPermissions,
-    STORAGE_KEYS.pendingDappRequests
+    STORAGE_KEYS.pendingDappRequests,
   ])
 }
 
@@ -178,6 +193,5 @@ export async function migrateLegacyPublicKeyIfNeeded() {
   if (!pk) return
 
   // We don't know smartAccountAddress; keep as gAddress for now (treated as freighter-ish).
-  await createAccount({ mode: "freighter", smartAccountAddress: "", gAddress: pk })
+  await createAccount({ mode: 'freighter', smartAccountAddress: '', gAddress: pk })
 }
-

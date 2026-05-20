@@ -14,7 +14,11 @@ import type {
 
 import { TokenAvatar } from '../components/TokenAvatar'
 import { TransactionStepper } from '../components/TransactionStepper'
-import { buildMigrationTxSteps, formatMigrationStepTime, type MigrationTxUiPhase } from '../migration/migrationTxSteps'
+import {
+  buildMigrationTxSteps,
+  formatMigrationStepTime,
+  type MigrationTxUiPhase,
+} from '../migration/migrationTxSteps'
 
 async function sendToBackground<T>(message: BackgroundMessage): Promise<BackgroundResponse<T>> {
   return (await chrome.runtime.sendMessage(message)) as BackgroundResponse<T>
@@ -59,7 +63,11 @@ export function MigrationScreen({
   const [sweepError, setSweepError] = useState<string | null>(null)
 
   const [txPhase, setTxPhase] = useState<MigrationTxUiPhase>('idle')
-  const [txTimes, setTxTimes] = useState<{ initiated?: string; submitted?: string; confirmed?: string }>({})
+  const [txTimes, setTxTimes] = useState<{
+    initiated?: string
+    submitted?: string
+    confirmed?: string
+  }>({})
   const [activeAssetLabel, setActiveAssetLabel] = useState<string | null>(null)
   const [lastSweepTxHash, setLastSweepTxHash] = useState<string | null>(null)
   const [assetIcons, setAssetIcons] = useState<Record<string, string | null>>({})
@@ -114,7 +122,7 @@ export function MigrationScreen({
 
   const runSweepWithStepper = async (
     label: string,
-    run: () => Promise<BackgroundResponse<MigrationSweepResult>>,
+    run: () => Promise<BackgroundResponse<MigrationSweepResult>>
   ): Promise<boolean> => {
     setActiveAssetLabel(label)
     setTxPhase('idle')
@@ -176,7 +184,7 @@ export function MigrationScreen({
               accountId,
               pendingTokenSweepCount: tokens.length,
             } satisfies MigrationSweepXlmRequest,
-          }),
+          })
         )
         if (!ok) {
           setBusy(false)
@@ -188,8 +196,11 @@ export function MigrationScreen({
         const ok = await runSweepWithStepper(t.code, () =>
           sendToBackground<MigrationSweepResult>({
             type: 'MIGRATION_SWEEP_TOKEN',
-            payload: { accountId, sacContractId: t.sacContractId } satisfies MigrationSweepTokenRequest,
-          }),
+            payload: {
+              accountId,
+              sacContractId: t.sacContractId,
+            } satisfies MigrationSweepTokenRequest,
+          })
         )
         if (!ok) {
           setBusy(false)
@@ -223,11 +234,14 @@ export function MigrationScreen({
 
       <h2 className="mt-4 text-center text-2xl font-extrabold tracking-tight">Migrate assets</h2>
       <p className="mt-2 px-1 text-center text-xs leading-relaxed text-muted">
-        Move balances from your classic Stellar account (G) to your smart account (C). Each step is submitted on-chain.
+        Move balances from your classic Stellar account (G) to your smart account (C). Each step is
+        submitted on-chain.
       </p>
 
       {loadError ? (
-        <div className="mt-4 rounded-2xl border border-border bg-surface/60 px-3 py-3 text-sm text-fg">{loadError}</div>
+        <div className="mt-4 rounded-2xl border border-border bg-surface/60 px-3 py-3 text-sm text-fg">
+          {loadError}
+        </div>
       ) : null}
 
       {!loadError && discovery?.state === 'unsupported' ? (
@@ -254,9 +268,13 @@ export function MigrationScreen({
         <div className="mt-4 flex min-h-0 flex-1 flex-col gap-4">
           <div className="rounded-2xl border border-border bg-surface/60 p-3 shadow-soft">
             <div className="text-xs font-extrabold text-muted">Classic account</div>
-            <div className="mt-1 break-all font-mono text-[11px] text-fg/90">{discovery.gAddress}</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-fg/90">
+              {discovery.gAddress}
+            </div>
             <div className="mt-3 text-xs font-extrabold text-muted">Smart account</div>
-            <div className="mt-1 break-all font-mono text-[11px] text-fg/90">{discovery.cAddress}</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-fg/90">
+              {discovery.cAddress}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-border bg-surface/60 p-3 shadow-soft">
@@ -283,8 +301,12 @@ export function MigrationScreen({
 
           {activeAssetLabel && txPhase !== 'idle' ? (
             <div className="rounded-2xl border border-border bg-surface/80 p-3">
-              <div className="text-center text-xs font-extrabold text-muted">Current transaction</div>
-              <div className="mt-1 text-center text-sm font-extrabold text-fg">{activeAssetLabel}</div>
+              <div className="text-center text-xs font-extrabold text-muted">
+                Current transaction
+              </div>
+              <div className="mt-1 text-center text-sm font-extrabold text-fg">
+                {activeAssetLabel}
+              </div>
               <div className="mt-4">
                 <TransactionStepper steps={steps} />
               </div>

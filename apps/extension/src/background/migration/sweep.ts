@@ -29,7 +29,7 @@ function requireMnemonicKeypair(accountId: string): Keypair {
   if (!kp) {
     throw new BackendError(
       'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.',
-      { code: 'mnemonic_locked' },
+      { code: 'mnemonic_locked' }
     )
   }
   return kp
@@ -37,7 +37,9 @@ function requireMnemonicKeypair(accountId: string): Keypair {
 
 async function fetchHorizonAccountJson(gAddress: string): Promise<unknown> {
   const horizonUrl = horizonUrlFromEnv()
-  const response = await fetch(`${horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(gAddress)}`)
+  const response = await fetch(
+    `${horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(gAddress)}`
+  )
   if (!response.ok) {
     throw new Error(`Could not load account: HTTP ${response.status}`)
   }
@@ -46,15 +48,21 @@ async function fetchHorizonAccountJson(gAddress: string): Promise<unknown> {
 
 export async function runMigrationSweepXlm(
   accountId: string,
-  pendingTokenSweepCount = 0,
+  pendingTokenSweepCount = 0
 ): Promise<MigrationSweepResult> {
   const { accounts } = await getAccounts()
   const account = accounts.find((a) => a.id === accountId)
   if (!account?.gAddress || !account.smartAccountAddress) {
-    return { success: false, error: { message: 'Missing G or smart account address', code: 'missing_addresses' } }
+    return {
+      success: false,
+      error: { message: 'Missing G or smart account address', code: 'missing_addresses' },
+    }
   }
   if (account.mode !== 'mnemonic') {
-    return { success: false, error: { message: 'Migration requires a mnemonic account.', code: 'not_mnemonic' } }
+    return {
+      success: false,
+      error: { message: 'Migration requires a mnemonic account.', code: 'not_mnemonic' },
+    }
   }
 
   const keypair = requireMnemonicKeypair(accountId)
@@ -76,7 +84,8 @@ export async function runMigrationSweepXlm(
   const balance = native ? Number.parseFloat(native.balance) : 0
 
   /** After this XLM SAC transfer we must still cover ledger reserve, optional 1.5 XLM floor, and fees for pending token sweeps. */
-  const minRemainAfterThisTx = Math.max(MIN_XLM_LINGER_ON_CLASSIC_G, minReserve) + feePerSorobanTx * pendingTokenSweepCount
+  const minRemainAfterThisTx =
+    Math.max(MIN_XLM_LINGER_ON_CLASSIC_G, minReserve) + feePerSorobanTx * pendingTokenSweepCount
   const transferable = balance - feePerSorobanTx - minRemainAfterThisTx
   if (transferable < 0.000_000_1) {
     return {
@@ -94,7 +103,10 @@ export async function runMigrationSweepXlm(
    * Move native XLM via the network's native SAC `transfer` (same pattern as issued assets).
    */
   const sacContractId = Asset.native().contractId(passphrase)
-  const amountRaw = humanAmountStringToRawUnits(transferable.toFixed(STELLAR_SAC_DISPLAY_DECIMALS), STELLAR_SAC_DISPLAY_DECIMALS)
+  const amountRaw = humanAmountStringToRawUnits(
+    transferable.toFixed(STELLAR_SAC_DISPLAY_DECIMALS),
+    STELLAR_SAC_DISPLAY_DECIMALS
+  )
 
   const sourceAccount = new Account(g, record.sequence)
   const unsigned = buildUnsignedSacTransferTx({
@@ -135,15 +147,21 @@ export async function runMigrationSweepXlm(
 
 export async function runMigrationSweepToken(
   accountId: string,
-  sacContractId: string,
+  sacContractId: string
 ): Promise<MigrationSweepResult> {
   const { accounts } = await getAccounts()
   const account = accounts.find((a) => a.id === accountId)
   if (!account?.gAddress || !account.smartAccountAddress) {
-    return { success: false, error: { message: 'Missing G or smart account address', code: 'missing_addresses' } }
+    return {
+      success: false,
+      error: { message: 'Missing G or smart account address', code: 'missing_addresses' },
+    }
   }
   if (account.mode !== 'mnemonic') {
-    return { success: false, error: { message: 'Migration requires a mnemonic account.', code: 'not_mnemonic' } }
+    return {
+      success: false,
+      error: { message: 'Migration requires a mnemonic account.', code: 'not_mnemonic' },
+    }
   }
 
   const keypair = requireMnemonicKeypair(accountId)
@@ -183,12 +201,18 @@ export async function runMigrationSweepToken(
   })
 
   if (!tokenBal || tokenBal.asset_type === 'native') {
-    return { success: false, error: { message: 'No matching trustline for this token.', code: 'no_trustline' } }
+    return {
+      success: false,
+      error: { message: 'No matching trustline for this token.', code: 'no_trustline' },
+    }
   }
 
   const amountHuman = tokenBal.balance
   if (Number.parseFloat(amountHuman) < 0.000_000_1) {
-    return { success: false, error: { message: 'No balance to migrate for this asset.', code: 'zero_balance' } }
+    return {
+      success: false,
+      error: { message: 'No balance to migrate for this asset.', code: 'zero_balance' },
+    }
   }
 
   const amountRaw = humanAmountStringToRawUnits(amountHuman, STELLAR_SAC_DISPLAY_DECIMALS)

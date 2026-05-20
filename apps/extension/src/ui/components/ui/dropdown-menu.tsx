@@ -1,7 +1,7 @@
-import * as React from "react"
-import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import * as React from 'react'
+import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu'
 
-import { cn } from "../../lib/utils"
+import { cn } from '../../lib/utils'
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger
@@ -19,9 +19,9 @@ const DropdownMenuSubTrigger = React.forwardRef<
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-md px-2 py-2 text-sm font-extrabold outline-none",
-      "text-fg/90 hover:bg-bg/40 data-[state=open]:bg-bg/40",
-      inset && "pl-8",
+      'flex cursor-default select-none items-center rounded-md px-2 py-2 text-sm font-extrabold outline-none',
+      'text-fg/90 hover:bg-bg/40 data-[state=open]:bg-bg/40',
+      inset && 'pl-8',
       className
     )}
     {...props}
@@ -38,7 +38,7 @@ const DropdownMenuSubContent = React.forwardRef<
   <DropdownMenuPrimitive.SubContent
     ref={ref}
     className={cn(
-      "z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-border bg-surface/90 p-1 shadow-soft",
+      'z-50 min-w-[8rem] overflow-hidden rounded-2xl border border-border bg-surface/90 p-1 shadow-soft',
       className
     )}
     {...props}
@@ -55,7 +55,7 @@ const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-[10rem] overflow-hidden rounded-2xl border border-border bg-surface/90 p-1 shadow-soft",
+        'z-50 min-w-[10rem] overflow-hidden rounded-2xl border border-border bg-surface/90 p-1 shadow-soft',
         className
       )}
       {...props}
@@ -71,9 +71,9 @@ const DropdownMenuItem = React.forwardRef<
   <DropdownMenuPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex cursor-default select-none items-center rounded-xl px-3 py-2 text-sm font-extrabold outline-none",
-      "text-fg/90 hover:bg-bg/40 data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-      inset && "pl-8",
+      'relative flex cursor-default select-none items-center rounded-xl px-3 py-2 text-sm font-extrabold outline-none',
+      'text-fg/90 hover:bg-bg/40 data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+      inset && 'pl-8',
       className
     )}
     {...props}
@@ -87,7 +87,7 @@ const DropdownMenuLabel = React.forwardRef<
 >(({ className, inset, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
-    className={cn("px-3 py-2 text-xs font-extrabold text-muted", inset && "pl-8", className)}
+    className={cn('px-3 py-2 text-xs font-extrabold text-muted', inset && 'pl-8', className)}
     {...props}
   />
 ))
@@ -99,7 +99,7 @@ const DropdownMenuSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DropdownMenuPrimitive.Separator
     ref={ref}
-    className={cn("-mx-1 my-1 h-px bg-border/60", className)}
+    className={cn('-mx-1 my-1 h-px bg-border/60', className)}
     {...props}
   />
 ))
@@ -117,6 +117,5 @@ export {
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
-  DropdownMenuRadioGroup
+  DropdownMenuRadioGroup,
 }
-

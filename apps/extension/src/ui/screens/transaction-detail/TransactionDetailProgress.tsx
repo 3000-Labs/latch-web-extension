@@ -1,6 +1,9 @@
 import React from 'react'
 
-import { TransactionStepper, type TransactionStepperStep } from '../../components/TransactionStepper'
+import {
+  TransactionStepper,
+  type TransactionStepperStep,
+} from '../../components/TransactionStepper'
 
 export function TransactionDetailProgress({ stepTimes }: { stepTimes: [string, string, string] }) {
   const steps: TransactionStepperStep[] = [

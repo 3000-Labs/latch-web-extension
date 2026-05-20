@@ -1,60 +1,22 @@
-import React, { useState } from "react"
-import { ChevronLeft, Pencil } from "lucide-react"
+import React, { useState } from 'react'
+import { Pencil } from 'lucide-react'
 
-import { SectionCard } from "../components/SectionCard"
-import type { SwapDraft, SwapQuoteVm } from "../swap/swapVm"
-import { truncateAddress } from "../swap/swapVm"
-
-function Row({
-  label,
-  value,
-  right
-}: {
-  label: string
-  value: React.ReactNode
-  right?: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="text-xs font-extrabold text-muted">{label}</div>
-      <div className="flex items-center gap-2 text-right">
-        <div className="text-sm font-extrabold text-fg/90">{value}</div>
-        {right}
-      </div>
-    </div>
-  )
-}
-
-function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={[
-        "h-7 w-12 rounded-full border border-border p-1 transition-colors",
-        checked ? "bg-primary/80" : "bg-surface/60"
-      ].join(" ")}
-    >
-      <span
-        className={[
-          "block h-5 w-5 rounded-full bg-bg shadow-soft transition-transform",
-          checked ? "translate-x-5" : "translate-x-0"
-        ].join(" ")}
-      />
-    </button>
-  )
-}
+import type { SwapDraft, SwapQuoteVm } from '../swap/swapVm'
+import { truncateAddress } from '../swap/swapVm'
+import { ConfirmHeader } from '../swap/components/ConfirmHeader'
+import { ConfirmRow } from '../swap/components/ConfirmRow'
+import { TokenAvatar } from '../components/TokenAvatar'
+import { SettingsToggle } from './settings/SettingsToggle'
+import liquidMeshLogo from 'url:../../../assets/brand/LiquidMesh.png'
 
 export function ConfirmSwapScreen({
   surface,
   draft,
   quote,
   onBackOrCancel,
-  onConfirm
+  onConfirm,
 }: {
-  surface: "popup" | "sidepanel"
+  surface: 'popup' | 'sidepanel'
   draft: SwapDraft
   quote: SwapQuoteVm
   onBackOrCancel: () => void
@@ -62,89 +24,142 @@ export function ConfirmSwapScreen({
 }) {
   const [mevProtection, setMevProtection] = useState(false)
 
-  const fromAddr = "0xb3008e9f0b2c7028d"
-  const gasAccount = "0x6A4A95670d"
+  const fromAddr = '0xb3008e9f0b2c7028d'
+  const gasAccount = '0x6A4A95670d'
   const receiveAddr = gasAccount
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between">
-        <button
-          onClick={onBackOrCancel}
-          className="grid h-9 w-9 place-items-center rounded-full border border-border bg-surface/40 text-fg/80 hover:bg-surface/60"
-          aria-label="Back"
-        >
-          <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
-        </button>
-        <div className="text-base font-extrabold">Confirm Swap</div>
-        <div className="w-9" />
-      </div>
+  const shortFromAddr = truncateAddress(fromAddr, 6, 6)
+  const shortGasAddr = truncateAddress(gasAccount, 6, 6)
+  const shortReceiveAddr = truncateAddress(receiveAddr, 6, 6)
 
-      <div className="mt-5 space-y-3">
-        <SectionCard className="bg-surface/40">
-          <div className="text-xs font-extrabold text-muted">From</div>
-          <div className="mt-3 flex items-center justify-between gap-3">
+  return (
+    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
+      <ConfirmHeader onBack={onBackOrCancel} />
+
+      <div className="mt-4 flex-1 space-y-4 overflow-auto pr-1 pb-4">
+        {/* From Section */}
+        <div className="space-y-2">
+          <span className="text-xs font-bold text-muted/60 uppercase tracking-wider px-1">
+            From
+          </span>
+          <div className="flex items-center justify-between rounded-[24px] border border-border/20 bg-surface p-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-2xl bg-primary/20 text-primary">
-                <span className="text-sm font-extrabold">S</span>
-              </span>
+              <TokenAvatar symbol="XLM" className="h-10 w-10" rounded="rounded-xl" />
               <div>
-                <div className="text-sm font-extrabold">Unlimited Stellar</div>
-                <div className="text-xs font-bold text-muted">To: {truncateAddress(fromAddr, 6, 6)}</div>
+                <div className="text-sm font-extrabold text-fg">Unlimited Stellar</div>
+                <div className="text-xs font-semibold text-muted/70 mt-0.5">
+                  To: {shortFromAddr}
+                </div>
               </div>
             </div>
-            <button type="button" className="text-fg/70 hover:text-fg" aria-label="Edit">
-              <Pencil className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+            <button
+              type="button"
+              onClick={onBackOrCancel}
+              className="text-muted hover:text-fg transition-colors"
+              aria-label="Edit"
+            >
+              <Pencil className="h-4.5 w-4.5" strokeWidth={2.2} />
             </button>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard className="bg-surface/40">
-          <div className="text-xs font-extrabold text-muted">Spend</div>
-          <div className="mt-3">
-            <div className="text-xl font-extrabold tracking-tight">- {draft.payAmount || "0"} USDT</div>
-            <div className="text-xs font-bold text-muted">~$1.00056</div>
-          </div>
-        </SectionCard>
-
-        <SectionCard className="bg-surface/40">
-          <div className="text-xs font-extrabold text-muted">Receive (Estimated)</div>
-          <div className="mt-3 flex items-center justify-between gap-3">
+        {/* Spend Section */}
+        <div className="space-y-2">
+          <span className="text-xs font-bold text-muted/60 uppercase tracking-wider px-1">
+            Spend
+          </span>
+          <div className="flex items-center gap-3 rounded-[24px] border border-border/20 bg-surface p-4">
+            <TokenAvatar symbol="USDT" className="h-10 w-10" rounded="rounded-xl" />
             <div>
-              <div className="text-xl font-extrabold tracking-tight">{quote.receiveAmountLine}</div>
-              <div className="text-xs font-bold text-muted">{quote.receiveUsdApproxLine}</div>
+              <div className="text-sm font-extrabold text-fg">-{draft.payAmount || '0'} USDT</div>
+              <div className="text-xs font-semibold text-muted/70 mt-0.5">≈$1.00056</div>
             </div>
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-border border-t-primary" aria-hidden />
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard className="bg-surface/30">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-bold text-muted">MEV Protection</div>
-              <Switch checked={mevProtection} onChange={setMevProtection} />
+        {/* Receive Section */}
+        <div className="space-y-2">
+          <span className="text-xs font-bold text-muted/60 uppercase tracking-wider px-1">
+            Receive (Estimated)
+          </span>
+          <div className="flex items-center justify-between rounded-[24px] border border-border/20 bg-surface p-4">
+            <div className="flex items-center gap-3">
+              <TokenAvatar symbol="XLM" className="h-10 w-10" rounded="rounded-xl" />
+              <div>
+                <div className="text-sm font-extrabold text-fg">{quote.receiveAmountLine}</div>
+                <div className="text-xs font-semibold text-muted/70 mt-0.5">
+                  {quote.receiveUsdApproxLine || '≈$0.00'}
+                </div>
+              </div>
             </div>
-            <Row label="Gas Account" value={truncateAddress(gasAccount, 6, 5)} />
-            <Row label="Network Fee" value={<span className="text-fg/90">Fast</span>} right={<span className="text-xs font-bold text-muted">0.00004619 BNB ($0.05493)</span>} />
-            <Row label="Min. Received" value={quote.minReceivedLine} />
-            <Row label="Provider" value={quote.provider} />
-            <Row label="Receive Address" value={truncateAddress(receiveAddr, 6, 5)} />
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-border/30 border-t-primary" />
           </div>
-        </SectionCard>
+        </div>
+
+        {/* Details Section */}
+        <div className="rounded-[24px] border border-border/20 bg-surface/50 p-4.5 space-y-3.5">
+          <div className="flex items-center justify-between text-sm py-0.5">
+            <span className="text-muted/70 font-semibold">MEV Protection</span>
+            <SettingsToggle checked={mevProtection} onChange={setMevProtection} />
+          </div>
+
+          <ConfirmRow
+            label="Gas Account"
+            value={shortGasAddr}
+            onClick={() => {}}
+            showChevron={true}
+          />
+
+          <ConfirmRow
+            label="Network Fee"
+            value={
+              <div className="flex flex-col items-end">
+                <span className="text-sm">Fast</span>
+                <span className="text-[10px] font-semibold text-muted/60 mt-0.5">
+                  0.00004619 BNB ($0.05493)
+                </span>
+              </div>
+            }
+            onClick={() => {}}
+            showChevron={true}
+          />
+
+          <ConfirmRow label="Min. Received" value={quote.minReceivedLine} />
+
+          <div className="flex items-center justify-between text-sm py-0.5">
+            <span className="text-muted/70 font-semibold">Provider</span>
+            <div className="flex items-center gap-1.5 font-extrabold text-fg">
+              <img
+                src={liquidMeshLogo}
+                className="h-3.5 w-3.5 shrink-0 rounded object-contain"
+                alt="LiquidMesh"
+              />
+              <span>{quote.provider}</span>
+            </div>
+          </div>
+
+          <ConfirmRow label="Receive Address" value={shortReceiveAddr} />
+        </div>
       </div>
 
-      <div className={["mt-auto grid grid-cols-2 gap-3 pt-5", surface === "sidepanel" ? "pb-0" : ""].join(" ")}>
+      {/* Footer Buttons */}
+      <div
+        className={[
+          'mt-auto grid grid-cols-2 gap-3 pt-4',
+          surface === 'sidepanel' ? 'pb-0' : 'pb-2',
+        ].join(' ')}
+      >
         <button
           type="button"
           onClick={onBackOrCancel}
-          className="h-12 rounded-full border border-border bg-surface text-base font-extrabold text-fg shadow-soft hover:bg-surface/80"
+          className="h-12 rounded-full border border-border/25 bg-surface text-sm font-extrabold text-fg shadow-soft hover:bg-surface/75 active:scale-[0.98] transition-all cursor-pointer"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          className="h-12 rounded-full bg-primary text-base font-extrabold text-black shadow-soft hover:brightness-95 active:brightness-90"
+          className="h-12 rounded-full bg-primary text-sm font-extrabold text-black shadow-soft hover:brightness-105 active:scale-[0.98] transition-all cursor-pointer"
         >
           Confirm Swap
         </button>
@@ -152,4 +167,3 @@ export function ConfirmSwapScreen({
     </div>
   )
 }
-

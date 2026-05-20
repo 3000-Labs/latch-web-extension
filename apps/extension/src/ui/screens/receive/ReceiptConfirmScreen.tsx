@@ -31,7 +31,7 @@ export function ReceiptConfirmScreen({
           network={network}
         />
       </div>
-      
+
       <div className="shrink-0 mt-8">
         <ReceiptConfirmCloseButton onClick={onClose} />
       </div>

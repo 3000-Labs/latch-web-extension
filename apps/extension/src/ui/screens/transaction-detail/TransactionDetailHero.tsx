@@ -22,7 +22,9 @@ export function TransactionDetailHero({
           Completed
         </span>
       ) : (
-        <span className="mt-2 rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted">Pending</span>
+        <span className="mt-2 rounded-full bg-surface px-3 py-1 text-xs font-bold text-muted">
+          Pending
+        </span>
       )}
     </div>
   )

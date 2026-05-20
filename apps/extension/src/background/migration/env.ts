@@ -13,10 +13,14 @@ export function networkPassphraseFromEnv(): string {
 
 export function horizonUrlFromEnv(): string {
   const raw = process.env.PLASMO_PUBLIC_HORIZON_URL
-  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : 'https://horizon-testnet.stellar.org'
+  return typeof raw === 'string' && raw.trim() !== ''
+    ? raw.trim()
+    : 'https://horizon-testnet.stellar.org'
 }
 
 export function sorobanRpcUrlFromEnv(): string {
   const raw = process.env.PLASMO_PUBLIC_SOROBAN_RPC_URL
-  return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : 'https://soroban-testnet.stellar.org'
+  return typeof raw === 'string' && raw.trim() !== ''
+    ? raw.trim()
+    : 'https://soroban-testnet.stellar.org'
 }

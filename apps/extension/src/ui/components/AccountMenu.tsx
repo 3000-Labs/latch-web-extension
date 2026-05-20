@@ -106,7 +106,9 @@ export function AccountMenu({
                 </span>
                 <CopyAddressButton address={a.smartAccountAddress} menuAnchor />
               </div>
-              <div className="truncate text-[11px] font-bold text-muted/80">{signerDetailLine(a)}</div>
+              <div className="truncate text-[11px] font-bold text-muted/80">
+                {signerDetailLine(a)}
+              </div>
             </div>
           </DropdownMenuItem>
         ))}

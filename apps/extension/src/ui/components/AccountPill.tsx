@@ -1,21 +1,15 @@
-import React from "react"
-import { ChevronDown } from "lucide-react"
+import React from 'react'
+import { ChevronDown } from 'lucide-react'
 
-export function AccountPill({
-  name,
-  onClick
-}: {
-  name: string
-  onClick?: () => void
-}) {
+export function AccountPill({ name, onClick }: { name: string; onClick?: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={[
-        "flex items-center gap-3 rounded-full bg-surface/60 px-4 py-2 shadow-soft",
-        "hover:bg-surface/70 active:bg-surface/80"
-      ].join(" ")}
+        'flex items-center gap-3 rounded-full bg-surface/60 px-4 py-2 shadow-soft',
+        'hover:bg-surface/70 active:bg-surface/80',
+      ].join(' ')}
     >
       <span className="h-9 w-9 overflow-hidden rounded-full bg-surface/80">
         <img
@@ -29,4 +23,3 @@ export function AccountPill({
     </button>
   )
 }
-

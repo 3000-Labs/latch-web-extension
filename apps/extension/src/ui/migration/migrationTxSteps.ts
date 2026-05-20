@@ -16,7 +16,7 @@ const LABELS = ['Transaction initiated', 'Submitted to network', 'Confirmed on l
 function step(
   index: 0 | 1 | 2,
   status: TransactionStepperStep['status'],
-  timeLabel?: string,
+  timeLabel?: string
 ): TransactionStepperStep {
   return {
     id: `migration-tx-${index}`,
@@ -28,13 +28,17 @@ function step(
 
 export function buildMigrationTxSteps(
   phase: MigrationTxUiPhase,
-  times: { initiated?: string; submitted?: string; confirmed?: string },
+  times: { initiated?: string; submitted?: string; confirmed?: string }
 ): TransactionStepperStep[] {
   if (phase === 'idle') {
     return [step(0, 'pending'), step(1, 'pending'), step(2, 'pending')]
   }
   if (phase === 'initiated') {
-    return [step(0, 'complete', times.initiated ?? formatMigrationStepTime()), step(1, 'pending'), step(2, 'pending')]
+    return [
+      step(0, 'complete', times.initiated ?? formatMigrationStepTime()),
+      step(1, 'pending'),
+      step(2, 'pending'),
+    ]
   }
   if (phase === 'submitted') {
     return [

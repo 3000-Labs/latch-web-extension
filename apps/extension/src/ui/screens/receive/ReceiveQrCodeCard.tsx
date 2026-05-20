@@ -1,13 +1,7 @@
 import React from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 
-export function ReceiveQrCodeCard({
-  value,
-  logoUrl,
-}: {
-  value: string
-  logoUrl?: string | null
-}) {
+export function ReceiveQrCodeCard({ value, logoUrl }: { value: string; logoUrl?: string | null }) {
   const imageSettings = logoUrl
     ? {
         src: logoUrl,

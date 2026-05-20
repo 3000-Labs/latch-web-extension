@@ -18,7 +18,7 @@ const DISCOVERY_NATIVE_EPS = 0.000_000_1
  */
 export function migrableAssetsFromHorizonAccount(
   account: HorizonAccountRecord,
-  networkPassphrase: string,
+  networkPassphrase: string
 ): MigrableAsset[] {
   const sub = account.subentry_count ?? 0
   const minReserve = stellarMinReserveXlm(sub)
@@ -40,7 +40,9 @@ export function migrableAssetsFromHorizonAccount(
       const amt = Number.parseFloat(b.balance)
       if (amt > 0) {
         try {
-          const sacContractId = new Asset(b.asset_code, b.asset_issuer).contractId(networkPassphrase)
+          const sacContractId = new Asset(b.asset_code, b.asset_issuer).contractId(
+            networkPassphrase
+          )
           assets.push({
             kind: 'token',
             code: b.asset_code,

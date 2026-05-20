@@ -4,27 +4,27 @@
  * instead; popup surface keeps in-page WebAuthn.
  */
 
-export const LATCH_PASSKEY_BRIDGE_RESULT = "LATCH_PASSKEY_BRIDGE_RESULT" as const
+export const LATCH_PASSKEY_BRIDGE_RESULT = 'LATCH_PASSKEY_BRIDGE_RESULT' as const
 
-const REQ_PREFIX = "latchPasskeyBridgeReq:"
+const REQ_PREFIX = 'latchPasskeyBridgeReq:'
 
 export function passkeyBridgeStorageKey(ticket: string): string {
   return `${REQ_PREFIX}${ticket}`
 }
 
 export type PasskeyBridgeStoredPayload = {
-  mode: "registration" | "authentication"
+  mode: 'registration' | 'authentication'
   optionsJSON: unknown
   createdAt: number
 }
 
 export async function openPasskeyBridgeAndWait(args: {
-  mode: "registration" | "authentication"
+  mode: 'registration' | 'authentication'
   optionsJSON: unknown
   timeoutMs?: number
 }): Promise<unknown> {
-  if (typeof chrome === "undefined" || !chrome.windows?.create || !chrome.storage?.session) {
-    throw new Error("Passkey bridge requires Chrome extension APIs.")
+  if (typeof chrome === 'undefined' || !chrome.windows?.create || !chrome.storage?.session) {
+    throw new Error('Passkey bridge requires Chrome extension APIs.')
   }
 
   const ticket = crypto.randomUUID()
@@ -33,7 +33,7 @@ export async function openPasskeyBridgeAndWait(args: {
   try {
     JSON.stringify(args.optionsJSON)
   } catch {
-    throw new Error("Passkey options are not serializable for the bridge window.")
+    throw new Error('Passkey options are not serializable for the bridge window.')
   }
 
   const payload: PasskeyBridgeStoredPayload = {
@@ -49,7 +49,7 @@ export async function openPasskeyBridgeAndWait(args: {
     const to = window.setTimeout(() => {
       chrome.runtime.onMessage.removeListener(onMsg)
       void chrome.storage.session.remove(key)
-      reject(new Error("Passkey prompt timed out."))
+      reject(new Error('Passkey prompt timed out.'))
     }, timeoutMs)
 
     const onMsg = (message: unknown) => {
@@ -67,7 +67,7 @@ export async function openPasskeyBridgeAndWait(args: {
       chrome.runtime.onMessage.removeListener(onMsg)
       void chrome.storage.session.remove(key).catch(() => {})
       if (m.ok && m.response !== undefined) resolve(m.response)
-      else reject(new Error(m.error ?? "Passkey was cancelled or failed."))
+      else reject(new Error(m.error ?? 'Passkey was cancelled or failed.'))
     }
 
     chrome.runtime.onMessage.addListener(onMsg)
@@ -83,7 +83,7 @@ export async function openPasskeyBridgeAndWait(args: {
       chrome.windows.create(
         {
           url,
-          type: "popup",
+          type: 'popup',
           width: 440,
           height: 580,
           focused: true,

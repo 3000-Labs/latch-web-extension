@@ -67,7 +67,7 @@ function readEd25519SignatureBytes(creds: xdr.SorobanAddressCredentials): Buffer
   const raw = creds.signature()
   if (raw == null) {
     throw new Error(
-      'Signed auth entry has no signature. Freighter must sign gAddressEntryTemplateXdr.',
+      'Signed auth entry has no signature. Freighter must sign gAddressEntryTemplateXdr.'
     )
   }
 

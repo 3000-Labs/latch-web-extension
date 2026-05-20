@@ -23,7 +23,7 @@ export function SeedPhraseWordGrid({
       const start = parts.length >= words.length ? 0 : startIndex
       onPasteWords(text, start)
     },
-    [onPasteWords],
+    [onPasteWords]
   )
 
   return (

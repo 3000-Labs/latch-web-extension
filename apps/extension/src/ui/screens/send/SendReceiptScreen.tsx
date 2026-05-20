@@ -34,7 +34,9 @@ export function SendReceiptScreen({
 }) {
   const token = draft.token!
   const cryptoAmount =
-    draft.inputMode === 'crypto' ? draft.amount : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
+    draft.inputMode === 'crypto'
+      ? draft.amount
+      : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
   const recipientLabel = draft.recipientName
     ? `${draft.recipientName} {${truncateMiddle(draft.recipientAddress)}}`
     : `{${truncateMiddle(draft.recipientAddress)}}`

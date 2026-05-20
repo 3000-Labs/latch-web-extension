@@ -3,11 +3,18 @@ import { loadSmartAccountPortfolioRows, STELLAR_SAC_DISPLAY_DECIMALS } from '@la
 import type { GetSmartAccountBalancesResponse, SmartAccountBalanceRow } from '@latch/types'
 
 import { resolveIconDataUrlForAsset } from './assetIcons'
-import { getStellarNetworkFromEnv, horizonUrlFromEnv, networkPassphraseFromEnv, sorobanRpcUrlFromEnv } from './migration/env'
+import {
+  getStellarNetworkFromEnv,
+  horizonUrlFromEnv,
+  networkPassphraseFromEnv,
+  sorobanRpcUrlFromEnv,
+} from './migration/env'
 import { getAccounts } from './storage'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
 
-export async function runGetSmartAccountBalances(accountId: string): Promise<GetSmartAccountBalancesResponse> {
+export async function runGetSmartAccountBalances(
+  accountId: string
+): Promise<GetSmartAccountBalancesResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
   const c = acc?.smartAccountAddress?.trim()
@@ -41,7 +48,7 @@ export async function runGetSmartAccountBalances(accountId: string): Promise<Get
         issuer: row.issuer,
         sacContractId: row.sacContractId,
       })
-    }),
+    })
   )
 
   const rows: SmartAccountBalanceRow[] = core.map((row, i) => {

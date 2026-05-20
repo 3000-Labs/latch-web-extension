@@ -1,9 +1,9 @@
-import React from "react"
+import React from 'react'
 
 export function FilterChip({
   active,
   children,
-  onClick
+  onClick,
 }: {
   active: boolean
   children: React.ReactNode
@@ -13,12 +13,13 @@ export function FilterChip({
     <button
       onClick={onClick}
       className={[
-        "rounded-full border px-3 py-1.5 text-xs font-extrabold",
-        active ? "border-primary text-primary" : "border-border text-fg/80 hover:bg-surface/50"
-      ].join(" ")}
+        'rounded-full border px-4 py-1.5 text-xs font-extrabold transition-all',
+        active
+          ? 'border-primary text-fg bg-surface/20'
+          : 'border-border/60 text-muted/70 hover:bg-surface/50 hover:text-fg',
+      ].join(' ')}
     >
       {children}
     </button>
   )
 }
-
