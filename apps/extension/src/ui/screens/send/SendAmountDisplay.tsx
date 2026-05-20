@@ -16,21 +16,23 @@ export function SendAmountDisplay({
   amount,
   inputMode,
   symbol,
+  priceUsd,
   onAmountChange,
   onToggleMode,
 }: {
   amount: string
   inputMode: SendInputMode
   symbol: string
+  priceUsd: number | null
   onAmountChange: (next: string) => void
   onToggleMode: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const displayAmount = amount || '0'
   const secondaryCrypto =
-    inputMode === 'fiat' ? (fiatToCrypto(amount, symbol) ?? '0') : amount || '0'
+    inputMode === 'fiat' ? (fiatToCrypto(amount, priceUsd) ?? '0') : amount || '0'
   const secondaryFiat =
-    inputMode === 'crypto' ? (cryptoToFiat(amount || '0', symbol) ?? '0.00') : null
+    inputMode === 'crypto' ? (cryptoToFiat(amount || '0', priceUsd) ?? '0.00') : null
 
   const handleChange = (raw: string) => {
     const cleaned = raw.replace(/[^\d.]/g, '')

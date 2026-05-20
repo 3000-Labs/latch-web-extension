@@ -1,33 +1,20 @@
-/** Mirrors background tokenPrices interim map for UI conversion. */
-const TOKEN_USD_PRICES: Record<string, number> = {
-  XLM: 0.16,
-  USDC: 1.0,
-  USDT: 1.0,
-}
-
-export function getUsdPriceForAsset(code: string): number | null {
-  return TOKEN_USD_PRICES[code.toUpperCase()] ?? null
-}
-
 export function formatUsdAmount(n: number): string {
   const floored = Math.floor(n * 100) / 100
   return floored.toFixed(2)
 }
 
-export function cryptoToFiat(cryptoAmount: string, code: string): string | null {
-  const price = getUsdPriceForAsset(code)
-  if (price == null) return null
+export function cryptoToFiat(cryptoAmount: string, priceUsd: number | null | undefined): string | null {
+  if (priceUsd == null) return null
   const n = parseFloat(cryptoAmount)
   if (!Number.isFinite(n) || n < 0) return null
-  return formatUsdAmount(n * price)
+  return formatUsdAmount(n * priceUsd)
 }
 
-export function fiatToCrypto(fiatAmount: string, code: string): string | null {
-  const price = getUsdPriceForAsset(code)
-  if (price == null || price <= 0) return null
+export function fiatToCrypto(fiatAmount: string, priceUsd: number | null | undefined): string | null {
+  if (priceUsd == null || priceUsd <= 0) return null
   const n = parseFloat(fiatAmount.replace(/^\$/, ''))
   if (!Number.isFinite(n) || n < 0) return null
-  const crypto = n / price
+  const crypto = n / priceUsd
   return crypto.toFixed(7).replace(/\.?0+$/, '') || '0'
 }
 

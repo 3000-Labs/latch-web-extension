@@ -1,5 +1,7 @@
 import React from 'react'
 
+import { formatDisplayAmount2dp } from '../../lib/formatDisplay'
+
 export function SendAvailableBalanceRow({
   balance,
   symbol,
@@ -14,7 +16,7 @@ export function SendAvailableBalanceRow({
       <div>
         <div className="text-xs font-bold text-muted">Available To Send</div>
         <div className="mt-1 text-sm font-extrabold text-fg">
-          {balance} {symbol}
+          {formatDisplayAmount2dp(balance)} {symbol}
         </div>
       </div>
       <button

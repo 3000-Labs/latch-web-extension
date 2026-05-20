@@ -6,6 +6,7 @@ import swapIconUrl from 'url:../../../assets/icons/swap-icon.svg'
 import { ActionIconButton } from '../components/ActionIconButton'
 import { NewsCarousel } from '../components/NewsCarousel'
 import { TokenAvatar } from '../components/TokenAvatar'
+import { formatDisplayAmount2dp } from '../lib/formatDisplay'
 
 const iconProps = { className: 'h-5 w-5', strokeWidth: 2 } as const
 
@@ -176,7 +177,7 @@ export function HomeScreen({
                   <div className="min-w-0">
                     <div className="text-sm font-extrabold">{t.symbol}</div>
                     <div className="truncate text-xs font-bold text-muted">
-                      {hidden ? '••••' : t.balance}
+                      {hidden ? '••••' : formatDisplayAmount2dp(t.balance)}
                     </div>
                   </div>
                 </div>

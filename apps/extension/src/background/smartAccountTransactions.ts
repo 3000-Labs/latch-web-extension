@@ -9,6 +9,7 @@ import {
   sorobanRpcUrlFromEnv,
 } from './migration/env'
 import { getAccounts } from './storage'
+import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd } from './tokenPrices'
 
 function classifyKind(
@@ -45,6 +46,9 @@ export async function runGetSmartAccountTransactions(
     networkPassphrase: networkPassphraseFromEnv(),
   })
 
+  const codes = payments.map((p) => p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET'))
+  const { pricesByCodeUpper } = await getMarketPrices(codes)
+
   const items: SmartAccountTransactionRow[] = payments.map((p) => {
     const code = p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET')
     const kind = classifyKind(p, c, g)
@@ -52,9 +56,10 @@ export async function runGetSmartAccountTransactions(
     const sign = isSent ? '-' : '+'
     const amountNum = parseFloat(p.amount)
     const amountLabel = Number.isFinite(amountNum)
-      ? `${sign}${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} ${code}`
+      ? `${sign}${amountNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`
       : `${sign}${p.amount} ${code}`
-    const usd = computeBalanceUsd(p.amount.replace(/^-/, ''), code)
+    const priceUsd = pricesByCodeUpper[code.toUpperCase()]?.priceUsd
+    const usd = computeBalanceUsd(p.amount.replace(/^-/, ''), priceUsd)
     const amountUsd = usd != null ? `${isSent ? '-' : '+'}$${usd}` : null
 
     return {

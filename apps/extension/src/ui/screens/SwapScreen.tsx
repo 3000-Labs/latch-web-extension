@@ -66,7 +66,7 @@ export function SwapScreen({
 
   const receiveDisplayAmount = payN === null ? '--' : payAmount
 
-  const receiveUsdApprox = payN === null ? '≈--' : `≈$${(payN * 1.00046).toFixed(5)}`
+  const receiveUsdApprox = payN === null ? '≈--' : `≈$${(payN * 1.00046).toFixed(2)}`
 
   const handleSwapTokens = () => {
     setApproved(false)

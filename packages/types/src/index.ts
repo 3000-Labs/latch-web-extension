@@ -500,6 +500,20 @@ export interface MigrationSweepTokenRequest {
   sacContractId: string
 }
 
+export interface GetMarketPricesRequest {
+  tokens: string[]
+}
+
+export type MarketTokenPrice = {
+  priceUsd: number
+  change24h: number
+}
+
+export interface GetMarketPricesResponse {
+  updatedAtMs: number | null
+  pricesByCodeUpper: Record<string, MarketTokenPrice>
+}
+
 // Message types for popup/content ↔ background communication
 export type MessageType =
   | 'SIGN_TRANSACTION'
@@ -538,6 +552,7 @@ export type MessageType =
   | 'MIGRATION_SWEEP_TOKEN'
   | 'GET_SMART_ACCOUNT_BALANCES'
   | 'GET_SMART_ACCOUNT_TRANSACTIONS'
+  | 'GET_MARKET_PRICES'
   | 'GET_ASSET_ICON_DATA_URLS'
   | 'BUILD_SEND_TX'
   | 'SETUP_SEND_RULES'
@@ -598,6 +613,7 @@ export type BackgroundRequestPayloadByType = {
   MIGRATION_SWEEP_TOKEN: MigrationSweepTokenRequest
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesRequest
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsRequest
+  GET_MARKET_PRICES: GetMarketPricesRequest
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
   BUILD_SEND_TX: BuildSendTxRequest
   SETUP_SEND_RULES: SetupSendRulesRequest
@@ -640,6 +656,7 @@ export type BackgroundResponseDataByType = {
   MIGRATION_SWEEP_TOKEN: MigrationSweepResult
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesResponse
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsResponse
+  GET_MARKET_PRICES: GetMarketPricesResponse
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
   BUILD_SEND_TX: BuildSendTxResponse
   SETUP_SEND_RULES: SetupSendRulesResponse

@@ -10,18 +10,20 @@ export function SendFailureScreen({
   surface,
   draft,
   errorDetail,
+  priceUsd,
   onTryAgain,
 }: {
   surface: 'popup' | 'sidepanel'
   draft: SendDraft
   errorDetail?: string
+  priceUsd: number | null
   onTryAgain: () => void
 }) {
   const token = draft.token!
   const cryptoAmount =
     draft.inputMode === 'crypto'
       ? draft.amount
-      : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
+      : (fiatToCrypto(draft.amount, priceUsd) ?? draft.amount)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center">

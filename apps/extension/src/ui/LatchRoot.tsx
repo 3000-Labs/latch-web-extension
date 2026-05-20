@@ -25,6 +25,8 @@ import type {
   GetSmartAccountTransactionsResponse,
   GetAssetIconDataUrlsRequest,
   GetAssetIconDataUrlsResponse,
+  GetMarketPricesRequest,
+  GetMarketPricesResponse,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
@@ -353,6 +355,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [sendResult, setSendResult] = useState<SendResult | null>(null)
   const [sendProgressLabel, setSendProgressLabel] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
+  const [sendTokenPriceUsd, setSendTokenPriceUsd] = useState<number | null>(null)
 
   const [activeAccountHasMnemonicVault, setActiveAccountHasMnemonicVault] = useState(false)
   const [activeAccountMnemonicSignerLoaded, setActiveAccountMnemonicSignerLoaded] = useState(false)
@@ -961,6 +964,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setSendResult(null)
     setSendError(null)
     setSendProgressLabel(null)
+    setSendTokenPriceUsd(null)
   }
 
   function openSendFlow() {
@@ -968,6 +972,34 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setRoute('send')
     void loadPortfolio()
   }
+
+  const loadMarketPriceForToken = useCallback(
+    async (code: string): Promise<number | null> => {
+      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+        type: 'GET_MARKET_PRICES',
+        payload: { tokens: [code] },
+      })
+      if (!res.ok || !res.data) return null
+      return res.data.pricesByCodeUpper[code.toUpperCase()]?.priceUsd ?? null
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (route !== 'send') return
+    const code = sendDraft.token?.code?.trim()
+    if (!code) {
+      setSendTokenPriceUsd(null)
+      return
+    }
+    let cancelled = false
+    void loadMarketPriceForToken(code).then((p) => {
+      if (!cancelled) setSendTokenPriceUsd(p)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [route, sendDraft.token?.code, loadMarketPriceForToken])
 
   function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
     if (!data) return undefined
@@ -1112,7 +1144,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   async function executeSendWithSetupLoop(draft: SendDraft): Promise<SendResult> {
     if (!activeAccount) throw new Error('No active account')
-    const buildBody = buildSendRequestFromDraft(draft, activeAccount)
+    const buildBody = buildSendRequestFromDraft(draft, activeAccount, sendTokenPriceUsd)
     const setupBody = buildSetupRequestFromDraft(draft, activeAccount)
     if (!buildBody) throw new Error('Invalid send details')
     if (!setupBody) {
@@ -1157,7 +1189,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   async function fetchSendFeeEstimate(): Promise<BuildSendTxResponse | null> {
     if (!activeAccount) return null
-    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount)
+    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount, sendTokenPriceUsd)
     if (!buildBody) return null
     try {
       const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
@@ -2246,6 +2278,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   portfolioRows={portfolioRows}
                   portfolioLoading={portfolioLoading}
                   portfolioError={portfolioError}
+                  tokenPriceUsd={sendTokenPriceUsd}
                   networkLabel={networkLabel}
                   sendProgressLabel={sendProgressLabel}
                   sendError={sendError}

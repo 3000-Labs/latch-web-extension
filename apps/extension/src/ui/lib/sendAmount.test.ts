@@ -9,12 +9,12 @@ import {
 } from './sendAmount'
 
 describe('sendAmount', () => {
-  it('converts crypto to fiat using hardcoded XLM price', () => {
-    expect(cryptoToFiat('10', 'XLM')).toBe('1.60')
+  it('converts crypto to fiat', () => {
+    expect(cryptoToFiat('10', 0.16)).toBe('1.60')
   })
 
   it('converts fiat to crypto', () => {
-    expect(fiatToCrypto('1.60', 'XLM')).toBe('10')
+    expect(fiatToCrypto('1.60', 0.16)).toBe('10')
   })
 
   it('parses positive amounts', () => {

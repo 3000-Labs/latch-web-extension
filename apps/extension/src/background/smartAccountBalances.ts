@@ -10,6 +10,7 @@ import {
   sorobanRpcUrlFromEnv,
 } from './migration/env'
 import { getAccounts } from './storage'
+import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
 
 export async function runGetSmartAccountBalances(
@@ -36,6 +37,8 @@ export async function runGetSmartAccountBalances(
     horizonUrl,
   })
 
+  const { pricesByCodeUpper } = await getMarketPrices(core.map((r) => r.code))
+
   const iconResults = await Promise.all(
     core.map((row) => {
       if (row.code.toUpperCase() === 'XLM' && !row.issuer) {
@@ -52,7 +55,8 @@ export async function runGetSmartAccountBalances(
   )
 
   const rows: SmartAccountBalanceRow[] = core.map((row, i) => {
-    const balanceUsd = computeBalanceUsd(row.amount, row.code)
+    const priceUsd = pricesByCodeUpper[row.code.toUpperCase()]?.priceUsd
+    const balanceUsd = computeBalanceUsd(row.amount, priceUsd)
     return {
       code: row.code,
       issuer: row.issuer,
@@ -64,7 +68,13 @@ export async function runGetSmartAccountBalances(
     }
   })
 
-  const totalBalanceUsd = computeTotalBalanceUsd(rows) ?? undefined
+  const totalBalanceUsd =
+    computeTotalBalanceUsd(
+      rows,
+      Object.fromEntries(
+        Object.entries(pricesByCodeUpper).map(([k, v]) => [k, v.priceUsd] as const)
+      )
+    ) ?? undefined
 
   return { rows, totalBalanceUsd }
 }

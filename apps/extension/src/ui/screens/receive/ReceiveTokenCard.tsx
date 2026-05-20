@@ -1,6 +1,7 @@
 import React from 'react'
 import { QrCode } from 'lucide-react'
 import { CopyAddressButton } from '../../components/CopyAddressButton'
+import { formatDisplayAmount2dp } from '../../lib/formatDisplay'
 
 export interface ReceiveToken {
   id: string
@@ -38,7 +39,7 @@ export function ReceiveTokenCard({
           <div className="mt-0.5 text-xs font-semibold text-muted tracking-wider">
             BALANCE{' '}
             <span className="text-fg">
-              {token.balance} {token.symbol}
+              {formatDisplayAmount2dp(token.balance)} {token.symbol}
             </span>
           </div>
         </div>

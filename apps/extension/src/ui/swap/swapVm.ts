@@ -77,9 +77,9 @@ export function mockQuote(
     provider: 'LiquidMesh',
     rateLine: `1 ${payToken.symbol} > 0.00084221 ${receiveToken.symbol}`,
     slippageLine: `Auto | ${slippagePct}%`,
-    minReceivedLine: `${minReceived.toFixed(6)} ${receiveToken.symbol}`,
-    networkFeeLine: `~ ${feeXlm.toFixed(5)} Stellar`,
-    receiveAmountLine: pay === 0 ? '--' : `+${receive.toFixed(8)} ${receiveToken.symbol}`,
-    receiveUsdApproxLine: pay === 0 ? '' : `≈ $${receiveUsd.toFixed(5)} (+0.25%)`,
+    minReceivedLine: `${minReceived.toFixed(2)} ${receiveToken.symbol}`,
+    networkFeeLine: `~ ${feeXlm.toFixed(2)} Stellar`,
+    receiveAmountLine: pay === 0 ? '--' : `+${receive.toFixed(2)} ${receiveToken.symbol}`,
+    receiveUsdApproxLine: pay === 0 ? '' : `≈ $${receiveUsd.toFixed(2)} (+0.25%)`,
   }
 }

@@ -34,6 +34,8 @@ import type {
   MigrationDiscoverRequest,
   MigrationSweepTokenRequest,
   MigrationSweepXlmRequest,
+  GetMarketPricesRequest,
+  GetMarketPricesResponse,
   ResolvePendingDappRequest,
   SetActiveAccountRequest,
   SetDappPermissionsRequest,
@@ -83,6 +85,7 @@ import { runMigrationSweepToken, runMigrationSweepXlm } from './migration/sweep'
 import { runGetSmartAccountBalances } from './smartAccountBalances'
 import { runGetSmartAccountTransactions } from './smartAccountTransactions'
 import { deriveStellarKeypairFromMnemonic } from './stellarMnemonic'
+import { getMarketPrices } from './marketPrices'
 
 import {
   createAccount,
@@ -566,6 +569,19 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         const req = message.payload as GetSmartAccountTransactionsRequest
         const data = await runGetSmartAccountTransactions(req.accountId)
         sendResponse(ok(data))
+        return
+      }
+
+      case 'GET_MARKET_PRICES': {
+        const req = message.payload as GetMarketPricesRequest
+        const data = await getMarketPrices(req.tokens ?? [])
+        const payload: GetMarketPricesResponse = {
+          updatedAtMs: data.updatedAtMs,
+          pricesByCodeUpper: Object.fromEntries(
+            Object.entries(data.pricesByCodeUpper).map(([k, v]) => [k, v] as const)
+          ),
+        }
+        sendResponse(ok(payload))
         return
       }
 

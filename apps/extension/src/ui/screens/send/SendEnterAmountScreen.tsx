@@ -18,6 +18,7 @@ import { SendRecipientBar } from './SendRecipientBar'
 export function SendEnterAmountScreen({
   surface,
   draft,
+  priceUsd,
   onDraftChange,
   onBack,
   onEditRecipient,
@@ -25,6 +26,7 @@ export function SendEnterAmountScreen({
 }: {
   surface: 'popup' | 'sidepanel'
   draft: SendDraft
+  priceUsd: number | null
   onDraftChange: (patch: Partial<SendDraft>) => void
   onBack: () => void
   onEditRecipient: () => void
@@ -33,8 +35,8 @@ export function SendEnterAmountScreen({
   const token = draft.token!
   const cryptoAmount = useMemo(() => {
     if (draft.inputMode === 'crypto') return draft.amount
-    return fiatToCrypto(draft.amount, token.code) ?? ''
-  }, [draft.amount, draft.inputMode, token.code])
+    return fiatToCrypto(draft.amount, priceUsd) ?? ''
+  }, [draft.amount, draft.inputMode, priceUsd])
 
   const canContinue = useMemo(() => {
     const n = parsePositiveAmount(cryptoAmount)
@@ -73,6 +75,7 @@ export function SendEnterAmountScreen({
         amount={draft.amount}
         inputMode={draft.inputMode}
         symbol={token.code}
+        priceUsd={priceUsd}
         onAmountChange={(amount) => onDraftChange({ amount })}
         onToggleMode={toggleMode}
       />

@@ -5,13 +5,13 @@ import { cryptoToFiat } from '../../lib/sendAmount'
 export function SendSummaryHero({
   amount,
   symbol,
-  assetCode,
+  priceUsd,
 }: {
   amount: string
   symbol: string
-  assetCode: string
+  priceUsd: number | null
 }) {
-  const fiat = cryptoToFiat(amount, assetCode)
+  const fiat = cryptoToFiat(amount, priceUsd)
 
   return (
     <div className="mt-8 text-center">

@@ -19,6 +19,7 @@ export function SendFlow({
   portfolioRows,
   portfolioLoading,
   portfolioError,
+  tokenPriceUsd,
   networkLabel,
   sendProgressLabel,
   sendError,
@@ -37,6 +38,7 @@ export function SendFlow({
   portfolioRows: SmartAccountBalanceRow[]
   portfolioLoading: boolean
   portfolioError: string | null
+  tokenPriceUsd: number | null
   networkLabel: string
   sendProgressLabel: string | null
   sendError: string | null
@@ -86,6 +88,7 @@ export function SendFlow({
       <SendEnterAmountScreen
         surface={surface}
         draft={draft}
+        priceUsd={tokenPriceUsd}
         onDraftChange={onDraftChange}
         onBack={() => onStepChange('selectRecipient')}
         onEditRecipient={() => onStepChange('selectRecipient')}
@@ -99,6 +102,7 @@ export function SendFlow({
       <SendSummaryScreen
         surface={surface}
         draft={draft}
+        priceUsd={tokenPriceUsd}
         networkLabel={networkLabel}
         sendProgressLabel={sendProgressLabel}
         sendError={sendError}
@@ -115,6 +119,7 @@ export function SendFlow({
         surface={surface}
         draft={draft}
         result={result}
+        priceUsd={tokenPriceUsd}
         onContinue={onContinueHome}
         onViewReceipt={() => onStepChange('receipt')}
       />
@@ -127,6 +132,7 @@ export function SendFlow({
         surface={surface}
         draft={draft}
         errorDetail={result?.errorMessage}
+        priceUsd={tokenPriceUsd}
         onTryAgain={onTryAgainFromFailure}
       />
     )
@@ -138,6 +144,7 @@ export function SendFlow({
         surface={surface}
         draft={draft}
         result={result}
+        priceUsd={tokenPriceUsd}
         onTryAgain={() => onStepChange('summary')}
       />
     )

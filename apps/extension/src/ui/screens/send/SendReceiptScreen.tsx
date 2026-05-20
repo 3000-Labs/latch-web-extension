@@ -25,18 +25,20 @@ export function SendReceiptScreen({
   surface,
   draft,
   result,
+  priceUsd,
   onTryAgain,
 }: {
   surface: 'popup' | 'sidepanel'
   draft: SendDraft
   result: SendResult
+  priceUsd: number | null
   onTryAgain: () => void
 }) {
   const token = draft.token!
   const cryptoAmount =
     draft.inputMode === 'crypto'
       ? draft.amount
-      : (fiatToCrypto(draft.amount, token.code) ?? draft.amount)
+      : (fiatToCrypto(draft.amount, priceUsd) ?? draft.amount)
   const recipientLabel = draft.recipientName
     ? `${draft.recipientName} {${truncateMiddle(draft.recipientAddress)}}`
     : `{${truncateMiddle(draft.recipientAddress)}}`

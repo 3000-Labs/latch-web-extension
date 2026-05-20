@@ -11,13 +11,13 @@ import { fiatToCrypto } from './sendAmount'
 import { webauthnVerifierAddressFromEnv } from './latchEnv'
 import type { SendDraft } from '../types/send'
 
-export function sendCryptoAmountFromDraft(draft: SendDraft): string | null {
+export function sendCryptoAmountFromDraft(draft: SendDraft, priceUsd: number | null): string | null {
   if (!draft.token) return null
   if (draft.inputMode === 'crypto') {
     const trimmed = draft.amount.trim()
     return trimmed || null
   }
-  return fiatToCrypto(draft.amount, draft.token.code)
+  return fiatToCrypto(draft.amount, priceUsd)
 }
 
 export function accountToSignerType(mode: AccountMode): SendSignerType {
@@ -28,10 +28,11 @@ export function accountToSignerType(mode: AccountMode): SendSignerType {
 
 export function buildSendRequestFromDraft(
   draft: SendDraft,
-  account: StoredAccount
+  account: StoredAccount,
+  priceUsd: number | null
 ): BuildSendTxRequest | null {
   if (!account.smartAccountAddress || !draft.token || !draft.recipientAddress.trim()) return null
-  const amount = sendCryptoAmountFromDraft(draft)
+  const amount = sendCryptoAmountFromDraft(draft, priceUsd)
   if (!amount) return null
 
   const signerType = accountToSignerType(account.mode)

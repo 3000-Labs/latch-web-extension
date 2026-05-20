@@ -12,6 +12,7 @@ import { SendSummarySubmitButton } from './SendSummarySubmitButton'
 export function SendSummaryScreen({
   surface,
   draft,
+  priceUsd,
   networkLabel,
   sendProgressLabel,
   sendError,
@@ -21,6 +22,7 @@ export function SendSummaryScreen({
 }: {
   surface: 'popup' | 'sidepanel'
   draft: SendDraft
+  priceUsd: number | null
   networkLabel: string
   sendProgressLabel: string | null
   sendError: string | null
@@ -31,8 +33,8 @@ export function SendSummaryScreen({
   const token = draft.token!
   const cryptoAmount = useMemo(() => {
     if (draft.inputMode === 'crypto') return draft.amount
-    return fiatToCrypto(draft.amount, token.code) ?? '0'
-  }, [draft.amount, draft.inputMode, token.code])
+    return fiatToCrypto(draft.amount, priceUsd) ?? '0'
+  }, [draft.amount, draft.inputMode, priceUsd])
 
   const [feeDisplay, setFeeDisplay] = useState('Fast | —')
 
@@ -54,7 +56,7 @@ export function SendSummaryScreen({
     <div className="flex min-h-0 flex-1 flex-col">
       <SendSummaryHeader onBack={onBack} />
       <div className="min-h-0 flex-1 overflow-auto">
-        <SendSummaryHero amount={cryptoAmount} symbol={token.code} assetCode={token.code} />
+        <SendSummaryHero amount={cryptoAmount} symbol={token.code} priceUsd={priceUsd} />
         <SendSummaryFacts
           recipientName={draft.recipientName}
           recipientAddress={draft.recipientAddress}
