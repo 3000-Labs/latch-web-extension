@@ -1,3 +1,5 @@
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -35,8 +37,13 @@ body {
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
-    "SF Pro", "Helvetica Neue", Helvetica, Arial, system-ui, "Segoe UI", Roboto,
-    "Noto Sans", "Liberation Sans", sans-serif;
+  font-family:
+    "SF Pro Rounded",
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 

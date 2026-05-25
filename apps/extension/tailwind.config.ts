@@ -6,6 +6,15 @@ export default {
   darkMode: ['class'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          '"SF Pro Rounded"',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'system-ui',
+          'sans-serif',
+        ],
+      },
       colors: {
         bg: 'rgb(var(--latch-bg) / <alpha-value>)',
         fg: 'rgb(var(--latch-fg) / <alpha-value>)',

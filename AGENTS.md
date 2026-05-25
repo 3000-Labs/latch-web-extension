@@ -144,9 +144,15 @@ Guidelines:
 - Global Tailwind entry CSS at `apps/extension/src/style.css` (imported from `apps/extension/src/ui/LatchRoot.tsx`, shared by popup and side panel entrypoints)
 - Ensure Tailwind `content` includes `./src/**/*.{ts,tsx}` so unused classes purge correctly.
 
-### Font: SF Pro
+### Font: SF Pro Rounded
 
-We use **SF Pro** as the primary font. For portability, configure it as a **system font stack** (SF Pro is available on macOS/iOS; other platforms fall back cleanly).
+We bundle **SF Pro Rounded** so typography is consistent on all platforms (not only macOS/iOS).
+
+- Font files: `apps/extension/assets/fonts/` (weights 400, 500, 600, 700, 800, 900 — no italics)
+- `@font-face` declarations: `apps/extension/src/fonts.css` (imported from `apps/extension/src/style.css`)
+- Tailwind default sans stack: `fontFamily.sans` in `apps/extension/tailwind.config.ts`
+- Use existing Tailwind weight utilities (`font-medium`, `font-semibold`, `font-bold`, `font-extrabold`, etc.); keep `font-mono` for addresses/keys
+- SF Pro is Apple-licensed; shipping these files is an explicit product choice
 
 ### Theme system (light/dark)
 
