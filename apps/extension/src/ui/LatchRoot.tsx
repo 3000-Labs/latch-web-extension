@@ -1543,13 +1543,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
   const showTopHeader =
     page === 'main' && !needsMnemonicUnlock && (route === 'home' || route === 'migration')
+  const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
 
   return (
     <div className={['bg-bg text-fg', containerClass].join(' ')}>
       <div
         className={[
           'relative h-full w-full',
-          surface === 'sidepanel' ? 'px-6 pb-6 pt-5' : 'px-6 pb-6 pt-4',
+          surface === 'sidepanel' ? 'px-6 pb-6 pt-4' : 'px-6 pb-6 pt-3',
         ].join(' ')}
       >
         {showTopHeader ? (
@@ -1604,9 +1605,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
         {page === 'settings' && !needsMnemonicUnlock ? (
           <div
-            className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(
-              ' '
-            )}
+            className={[
+              routeContentMarginClass,
+              'flex min-h-0 flex-1 flex-col animate-screenIn',
+              flowHeightClass,
+            ].join(' ')}
           >
             <SettingsScreen
               accountName={activeAccountLabel}
@@ -1640,7 +1643,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {loading && !routeKeepsUiMountedForWebauthn(route) ? (
               <div
                 className={[
-                  'mt-4 flex flex-col items-center justify-center animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center justify-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -1659,7 +1662,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {error && (!loading || routeKeepsUiMountedForWebauthn(route)) ? (
-              <div className="mt-4 rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
+              <div
+                className={`${routeContentMarginClass} rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft`}
+              >
                 <div className="font-extrabold">Something went wrong</div>
                 <div className="mt-2 text-muted">{error}</div>
                 <button
@@ -1672,7 +1677,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'dappApproval' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Dapp request</h2>
@@ -1727,7 +1738,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'welcome' ? (
               <div
                 className={[
-                  'mt-3 flex flex-col items-center justify-between h-full pb-6 animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center justify-between h-full pb-6 animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -1780,7 +1791,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'addAccount' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Add account</h2>
@@ -1828,7 +1845,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {route === 'addAccountPasskey' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Passkey login</h2>
@@ -1871,7 +1894,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'chooseSigner' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Choose Signer</h2>
@@ -1975,7 +2004,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {route === 'createPasskey' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Create Passkey</h2>
@@ -2033,7 +2068,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'passkeyCreated' ? (
               <div
                 className={[
-                  'mt-4 flex flex-col items-center animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2066,7 +2101,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2110,7 +2145,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'unlockMnemonic' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <UnlockMnemonicScreen
                   password={unlockVaultPassword}
                   onPasswordChange={setUnlockVaultPassword}
@@ -2126,7 +2167,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'home' && !needsMnemonicUnlock ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <HomeScreen
                   accountName={activeAccountLabel}
                   onOpenHistory={() => setRoute('history')}
@@ -2159,7 +2206,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'migration' && activeAccount?.id ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2181,7 +2228,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'migrationSuccess' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col items-center animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col items-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2215,7 +2262,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'history' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2238,7 +2285,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'transactionDetail' && transactionDetail ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2251,7 +2298,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'swap' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <SwapScreen
                   surface={surface}
                   initialState={swapDraft ?? undefined}
@@ -2267,7 +2320,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'swapConfirm' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 {swapDraft && swapQuote ? (
                   <ConfirmSwapScreen
                     surface={surface}
@@ -2298,7 +2357,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'send' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2337,7 +2396,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'receive' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
