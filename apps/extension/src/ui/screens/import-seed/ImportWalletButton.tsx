@@ -7,14 +7,16 @@ export function ImportWalletButton({
   disabled?: boolean
   onClick: () => void
 }) {
+  const isDisabled = Boolean(disabled)
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
       className={[
-        'h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft',
-        'hover:bg-surface/80 disabled:cursor-not-allowed disabled:opacity-50',
+        'h-12 w-full rounded-full border border-border text-base font-bold shadow-soft',
+        isDisabled ? 'bg-surface text-fg hover:bg-surface/80' : 'bg-primary text-black hover:bg-primary/80',
+        'disabled:cursor-not-allowed disabled:opacity-50',
       ].join(' ')}
     >
       Import Wallet

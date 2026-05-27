@@ -1514,6 +1514,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const containerClass =
     surface === 'sidepanel' ? 'h-screen w-full min-w-[320px]' : 'h-[600px] w-[360px]'
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
+  const showTopHeader =
+    page === 'main' && !needsMnemonicUnlock && (route === 'home' || route === 'migration')
 
   return (
     <div className={['bg-bg text-fg', containerClass].join(' ')}>
@@ -1523,10 +1525,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           surface === 'sidepanel' ? 'px-6 pb-6 pt-5' : 'px-6 pb-6 pt-4',
         ].join(' ')}
       >
-        <div className="flex items-center justify-between gap-2">
-          {page === 'main' &&
-          !needsMnemonicUnlock &&
-          (route === 'home' || route === 'migration') ? (
+        {showTopHeader ? (
+          <div className="flex items-center justify-between gap-2">
             <AccountMenu
               accountLabel={activeAccountLabel}
               accounts={accounts}
@@ -1557,25 +1557,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 setRenameAccountId(accountId)
               }}
             />
-          ) : (
-            <div className="h-10 w-10" />
-          )}
-          <div className="flex items-center justify-end gap-2">
-            {!needsMnemonicUnlock ? (
-              <IconButton
-                aria-label="Menu"
-                title="Menu"
-                onClick={() => {
-                  setPage('settings')
-                }}
-              >
-                <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
-              </IconButton>
-            ) : (
-              <div className="h-8 w-8" />
-            )}
+            <div className="flex items-center justify-end gap-2">
+              {route === 'home' ? (
+                <IconButton
+                  aria-label="Menu"
+                  title="Menu"
+                  onClick={() => {
+                    setPage('settings')
+                  }}
+                >
+                  <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
+                </IconButton>
+              ) : (
+                <div className="h-8 w-8" />
+              )}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {page === 'settings' && !needsMnemonicUnlock ? (
           <div
