@@ -13,15 +13,76 @@ import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
 
-export async function runGetSmartAccountBalances(
-  accountId: string
-): Promise<GetSmartAccountBalancesResponse> {
+type Snapshot = {
+  updatedAtMs: number
+  data: GetSmartAccountBalancesResponse
+}
+
+const FRESH_TTL_MS = 15_000
+const MAX_STALE_MS = 2 * 60_000
+
+let memoryCacheByAccountId: Map<string, Snapshot> | null = null
+const inflightByAccountId: Map<string, Promise<GetSmartAccountBalancesResponse>> = new Map()
+
+function snapshotFreshEnough(s: Snapshot, now: number): boolean {
+  return now - s.updatedAtMs < FRESH_TTL_MS
+}
+
+function snapshotUsableAsStaleFallback(s: Snapshot, now: number): boolean {
+  return now - s.updatedAtMs < MAX_STALE_MS
+}
+
+function storageKeyForAccount(accountId: string): string {
+  // Include network in cache key because the same account id could exist across testnet/mainnet.
+  const network = getStellarNetworkFromEnv()
+  return `latch.smartAccountBalances.${network}.${accountId}.v1`
+}
+
+async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null> {
+  try {
+    const key = storageKeyForAccount(accountId)
+    const r = await chrome.storage.local.get([key])
+    const raw = r[key]
+    if (!raw || typeof raw !== 'object') return null
+    const s = raw as Partial<Snapshot>
+    if (typeof s.updatedAtMs !== 'number') return null
+    if (!s.data || typeof s.data !== 'object') return null
+    return { updatedAtMs: s.updatedAtMs, data: s.data as GetSmartAccountBalancesResponse }
+  } catch {
+    return null
+  }
+}
+
+async function writePersistedSnapshot(accountId: string, snapshot: Snapshot): Promise<void> {
+  try {
+    const key = storageKeyForAccount(accountId)
+    await chrome.storage.local.set({ [key]: snapshot })
+  } catch {
+    // best-effort only
+  }
+}
+
+function isTimeoutLikeError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  return e.name === 'AbortError' || e.message.toLowerCase().includes('timed out')
+}
+
+function isNetworkLikeError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false
+  const msg = e.message.toLowerCase()
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('network') ||
+    msg.includes('load failed') ||
+    msg.includes('disconnected')
+  )
+}
+
+async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBalancesResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
   const c = acc?.smartAccountAddress?.trim()
-  if (!c) {
-    return { rows: [] }
-  }
+  if (!c) return { rows: [] }
 
   const g = acc?.gAddress?.trim()
   const rpcUrl = sorobanRpcUrlFromEnv()
@@ -29,22 +90,31 @@ export async function runGetSmartAccountBalances(
   const passphrase = networkPassphraseFromEnv()
   const network = getStellarNetworkFromEnv()
 
+  // Hard cap for portfolio load (Horizon + Soroban RPC). Without this, cold starts can hang forever.
+  const portfolioSignal = AbortSignal.timeout(12_000)
   const core = await loadSmartAccountPortfolioRows({
     rpcUrl,
     networkPassphrase: passphrase,
     cAddress: c,
     gAddress: g,
     horizonUrl,
+    signal: portfolioSignal,
   })
 
-  const { pricesByCodeUpper } = await getMarketPrices(core.map((r) => r.code))
+  // Prices are strictly optional. Never fail balances due to market API timeouts.
+  let pricesByCodeUpper: Record<string, { priceUsd: number; change24h: number }> = {}
+  try {
+    const res = await getMarketPrices(core.map((r) => r.code))
+    pricesByCodeUpper = res.pricesByCodeUpper
+  } catch {
+    pricesByCodeUpper = {}
+  }
 
-  const iconResults = await Promise.all(
-    core.map((row) => {
-      if (row.code.toUpperCase() === 'XLM' && !row.issuer) {
-        return null
-      }
-      return resolveIconDataUrlForAsset({
+  // Icons are best-effort. Never fail balances due to icon resolution.
+  const iconResultsSettled = await Promise.allSettled(
+    core.map(async (row) => {
+      if (row.code.toUpperCase() === 'XLM' && !row.issuer) return null
+      return await resolveIconDataUrlForAsset({
         network,
         horizonUrl,
         code: row.code,
@@ -57,13 +127,20 @@ export async function runGetSmartAccountBalances(
   const rows: SmartAccountBalanceRow[] = core.map((row, i) => {
     const priceUsd = pricesByCodeUpper[row.code.toUpperCase()]?.priceUsd
     const balanceUsd = computeBalanceUsd(row.amount, priceUsd)
+    const iconSettled = iconResultsSettled[i]
+    const iconUrl =
+      row.code.toUpperCase() === 'XLM' && !row.issuer
+        ? null
+        : iconSettled?.status === 'fulfilled'
+          ? (iconSettled.value ?? null)
+          : null
     return {
       code: row.code,
       issuer: row.issuer,
       sacContractId: row.sacContractId,
       amount: row.amount,
       decimals: STELLAR_SAC_DISPLAY_DECIMALS,
-      iconUrl: row.code.toUpperCase() === 'XLM' && !row.issuer ? null : (iconResults[i] ?? null),
+      iconUrl,
       balanceUsd: balanceUsd ?? undefined,
     }
   })
@@ -71,10 +148,75 @@ export async function runGetSmartAccountBalances(
   const totalBalanceUsd =
     computeTotalBalanceUsd(
       rows,
-      Object.fromEntries(
-        Object.entries(pricesByCodeUpper).map(([k, v]) => [k, v.priceUsd] as const)
-      )
+      Object.fromEntries(Object.entries(pricesByCodeUpper).map(([k, v]) => [k, v.priceUsd] as const))
     ) ?? undefined
 
   return { rows, totalBalanceUsd }
+}
+
+async function computeBalancesWithRetry(
+  accountId: string
+): Promise<GetSmartAccountBalancesResponse> {
+  const backoffMs = [0, 400, 1_200, 2_500]
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) {
+      await new Promise((r) => setTimeout(r, backoffMs[attempt]))
+    }
+    try {
+      return await computeBalancesOnce(accountId)
+    } catch (e) {
+      lastErr = e
+      // Retry only for the common cold-start/transient cases.
+      if (!(isTimeoutLikeError(e) || isNetworkLikeError(e))) throw e
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+}
+
+export async function runGetSmartAccountBalances(
+  accountId: string
+): Promise<GetSmartAccountBalancesResponse> {
+  const now = Date.now()
+  if (!memoryCacheByAccountId) {
+    memoryCacheByAccountId = new Map()
+  }
+
+  const mem = memoryCacheByAccountId.get(accountId)
+  if (mem && snapshotFreshEnough(mem, now)) return mem.data
+
+  // Warm start: load persisted cache into memory (only once per account per cold SW start).
+  if (!mem) {
+    const persisted = await readPersistedSnapshot(accountId)
+    if (persisted) {
+      memoryCacheByAccountId.set(accountId, persisted)
+      if (snapshotFreshEnough(persisted, now)) return persisted.data
+    }
+  }
+
+  const existing = inflightByAccountId.get(accountId)
+  if (existing) return await existing
+
+  const p = computeBalancesWithRetry(accountId)
+    .then(async (data) => {
+      const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
+      memoryCacheByAccountId!.set(accountId, snapshot)
+      await writePersistedSnapshot(accountId, snapshot)
+      return data
+    })
+    .finally(() => {
+      inflightByAccountId.delete(accountId)
+    })
+
+  inflightByAccountId.set(accountId, p)
+
+  try {
+    return await p
+  } catch (e) {
+    const fallback = memoryCacheByAccountId.get(accountId)
+    if (fallback && snapshotUsableAsStaleFallback(fallback, Date.now())) {
+      return fallback.data
+    }
+    throw e
+  }
 }

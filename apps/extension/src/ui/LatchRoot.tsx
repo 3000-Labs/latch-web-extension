@@ -702,9 +702,36 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [accounts, activeAccountId, portfolioRows])
 
   useEffect(() => {
-    if (setupState !== 'has_account' || page !== 'main' || route !== 'home') return
+    if (page !== 'main') return
+    if (route !== 'home') return
+    if (needsMnemonicUnlock) return
+
+    // Avoid relying on `setupState` for this: on cold start we can render the Home route
+    // before `setupState` finishes hydrating, which would prevent balances from fetching.
+    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    if (!acc?.smartAccountAddress?.trim()) return
+
     void loadPortfolio()
-  }, [setupState, page, route, loadPortfolio, activeAccountId])
+  }, [page, route, needsMnemonicUnlock, accounts, activeAccountId, loadPortfolio])
+
+  const portfolioRetryAttemptRef = useRef(0)
+  useEffect(() => {
+    if (route !== 'home' || page !== 'main') {
+      portfolioRetryAttemptRef.current = 0
+      return
+    }
+    if (!portfolioError) {
+      portfolioRetryAttemptRef.current = 0
+      return
+    }
+    const attempt = Math.min(portfolioRetryAttemptRef.current, 5)
+    const backoffMs = [750, 1500, 3000, 5000, 8000, 12000][attempt] ?? 12000
+    portfolioRetryAttemptRef.current = attempt + 1
+    const t = setTimeout(() => {
+      void loadPortfolio()
+    }, backoffMs)
+    return () => clearTimeout(t)
+  }, [route, setupState, page, portfolioError, loadPortfolio])
 
   useEffect(() => {
     if (route !== 'history') return
