@@ -1,8 +1,7 @@
 import { useEffect, type ReactNode } from 'react'
 
-import { OnboardingBackground } from './OnboardingBackground'
-
-const ONBOARDING_BG = '#181613'
+import { OnboardingBackground, ONBOARDING_BG } from './OnboardingBackground'
+import { OnboardingLogo } from './OnboardingLogo'
 
 export function OnboardingLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -18,9 +17,10 @@ export function OnboardingLayout({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-[#181613] text-fg">
+    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#100f0f] text-fg">
       <OnboardingBackground />
-      <main className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6 py-16">
+      <OnboardingLogo />
+      <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 pb-16">
         {children}
       </main>
     </div>
