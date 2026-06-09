@@ -1,0 +1,21 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 853.124 853.124" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Ellipse " opacity="0.5" filter="url(#filter0_d_0_286)" style="mix-blend-mode:overlay">
+<circle cx="426.562" cy="422.562" r="422.562" fill="url(#paint0_linear_0_286)" shape-rendering="crispEdges"/>
+</g>
+<defs>
+<filter id="filter0_d_0_286" x="0" y="0" width="853.124" height="853.124" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="4"/>
+<feGaussianBlur stdDeviation="2"/>
+<feComposite in2="hardAlpha" operator="out"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.25 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_286"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_286" result="shape"/>
+</filter>
+<linearGradient id="paint0_linear_0_286" x1="-245.663" y1="-383.104" x2="427.28" y2="329.297" gradientUnits="userSpaceOnUse">
+<stop stop-color="white"/>
+<stop offset="1" stop-color="white" stop-opacity="0"/>
+</linearGradient>
+</defs>
+</svg>
