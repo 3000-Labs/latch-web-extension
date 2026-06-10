@@ -310,6 +310,35 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
  * Ensures server-issued options match extension WebAuthn (rp.id / rpId === chrome.runtime.id).
  * No-op when not on a chrome-extension page (e.g. unit tests without extension globals).
  */
+/** Restrict authentication begin options to one passkey when the user picked it in the UI. */
+export function narrowAuthenticationOptionsToCredential(
+  options: unknown,
+  credentialId: string
+): unknown {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return options
+
+  const allow = o.allowCredentials
+  if (!Array.isArray(allow) || allow.length === 0) {
+    return {
+      ...o,
+      allowCredentials: [{ id: credentialId, type: 'public-key' }],
+    }
+  }
+
+  const narrowed = allow.filter((cred) => {
+    if (!cred || typeof cred !== 'object') return false
+    const id = (cred as { id?: unknown }).id
+    return id === credentialId
+  })
+
+  return {
+    ...o,
+    allowCredentials:
+      narrowed.length > 0 ? narrowed : [{ id: credentialId, type: 'public-key' }],
+  }
+}
+
 export function assertBeginOptionsRpIdMatchesExtension(options: unknown): void {
   const protocol = typeof window !== 'undefined' ? window.location.protocol : ''
   if (protocol !== 'chrome-extension:') return

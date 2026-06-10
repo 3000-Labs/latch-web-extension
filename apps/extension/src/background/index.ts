@@ -58,6 +58,7 @@ import {
   createOrConnectPasskey,
   createOrConnectPhantom,
   ensureFreighterSmartAccountDeployed,
+  getBackendAccounts,
   passkeyAuthenticationBegin,
   passkeyAuthenticationFinish,
   passkeyRegistrationBegin,
@@ -202,10 +203,40 @@ async function applyUiSurfacePreference(pref: UiSurfacePreference) {
   }
 }
 
+function handleOnboardingActionClick(): void {
+  void (async () => {
+    if (await needsOnboardingFlow()) {
+      await openOnboardingTab()
+    }
+  })()
+}
+
+let onboardingActionClickListening = false
+
+/**
+ * Chrome toggles the side panel from the toolbar when `openPanelOnActionClick` is true.
+ * A registered `action.onClicked` listener prevents that native toggle, so only attach
+ * it while onboarding (no accounts) still needs the full-screen tab flow.
+ */
+function syncOnboardingActionClickListener(needsOnboarding: boolean): void {
+  if (needsOnboarding && !onboardingActionClickListening) {
+    chrome.action.onClicked.addListener(handleOnboardingActionClick)
+    onboardingActionClickListening = true
+    return
+  }
+  if (!needsOnboarding && onboardingActionClickListening) {
+    chrome.action.onClicked.removeListener(handleOnboardingActionClick)
+    onboardingActionClickListening = false
+  }
+}
+
 /** Popup / side panel when set up; full-screen onboarding tab before `has_account`. */
 async function applyActionClickBehavior(): Promise<void> {
   try {
-    if (await needsOnboardingFlow()) {
+    const needsOnboarding = await needsOnboardingFlow()
+    syncOnboardingActionClickListener(needsOnboarding)
+
+    if (needsOnboarding) {
       await chrome.action.setPopup({ popup: '' })
       if ('sidePanel' in chrome) {
         await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false })
@@ -235,14 +266,6 @@ async function initExtensionActionBehavior() {
   await ensureSetupStateMatchesAccounts()
   await applyActionClickBehavior()
 }
-
-chrome.action.onClicked.addListener(() => {
-  void (async () => {
-    if (await needsOnboardingFlow()) {
-      await openOnboardingTab()
-    }
-  })()
-})
 
 chrome.runtime.onInstalled.addListener((details) => {
   // Always default to popup on first install, and reset to popup on update so users
@@ -446,6 +469,12 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
           passkeyKeyDataHex: data.keyDataHex,
         })
         sendResponse(ok({ ...data, account }))
+        return
+      }
+
+      case 'GET_BACKEND_ACCOUNTS': {
+        const data = await getBackendAccounts()
+        sendResponse(ok(data))
         return
       }
 
@@ -756,6 +785,16 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
           status: 400,
           code: 'not_supported',
         })
+      }
+
+      case 'OPEN_WALLET_AFTER_ONBOARDING': {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.uiSurface]: 'sidepanel' satisfies UiSurfacePreference,
+        })
+        await ensureSetupStateMatchesAccounts()
+        await applyActionClickBehavior()
+        sendResponse(ok())
+        return
       }
 
       default: {

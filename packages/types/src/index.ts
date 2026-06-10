@@ -540,6 +540,7 @@ export type MessageType =
   | 'PASSKEY_REG_FINISH'
   | 'PASSKEY_AUTH_BEGIN'
   | 'PASSKEY_AUTH_FINISH'
+  | 'GET_BACKEND_ACCOUNTS'
   | 'RENAME_ACCOUNT'
   | 'GET_DAPP_PERMISSIONS'
   | 'SET_DAPP_PERMISSIONS'
@@ -556,6 +557,7 @@ export type MessageType =
   | 'GET_ASSET_ICON_DATA_URLS'
   | 'BUILD_SEND_TX'
   | 'SETUP_SEND_RULES'
+  | 'OPEN_WALLET_AFTER_ONBOARDING'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -601,6 +603,7 @@ export type BackgroundRequestPayloadByType = {
   PASSKEY_REG_FINISH: BackendWebauthnRegistrationFinishRequest
   PASSKEY_AUTH_BEGIN: undefined
   PASSKEY_AUTH_FINISH: BackendWebauthnAuthenticationFinishRequest
+  GET_BACKEND_ACCOUNTS: undefined
   RENAME_ACCOUNT: { accountId: string; label?: string }
   GET_DAPP_PERMISSIONS: GetDappPermissionsRequest
   SET_DAPP_PERMISSIONS: SetDappPermissionsRequest
@@ -617,6 +620,7 @@ export type BackgroundRequestPayloadByType = {
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
   BUILD_SEND_TX: BuildSendTxRequest
   SETUP_SEND_RULES: SetupSendRulesRequest
+  OPEN_WALLET_AFTER_ONBOARDING: undefined
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -644,6 +648,7 @@ export type BackgroundResponseDataByType = {
     accounts: StoredAccount[]
     activeAccountId?: string
   }
+  GET_BACKEND_ACCOUNTS: BackendAccountsResponse
   RENAME_ACCOUNT: undefined
   GET_DAPP_PERMISSIONS: GetDappPermissionsResponse
   SET_DAPP_PERMISSIONS: GetDappPermissionsResponse
@@ -660,4 +665,5 @@ export type BackgroundResponseDataByType = {
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
   BUILD_SEND_TX: BuildSendTxResponse
   SETUP_SEND_RULES: SetupSendRulesResponse
+  OPEN_WALLET_AFTER_ONBOARDING: undefined
 } & Record<string, unknown>
