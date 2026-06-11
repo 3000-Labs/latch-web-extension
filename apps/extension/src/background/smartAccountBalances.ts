@@ -18,8 +18,8 @@ type Snapshot = {
   data: GetSmartAccountBalancesResponse
 }
 
-const FRESH_TTL_MS = 15_000
-const MAX_STALE_MS = 2 * 60_000
+const FRESH_TTL_MS = 60_000
+const MAX_STALE_MS = 5 * 60_000
 
 let memoryCacheByAccountId: Map<string, Snapshot> | null = null
 const inflightByAccountId: Map<string, Promise<GetSmartAccountBalancesResponse>> = new Map()
@@ -174,6 +174,24 @@ async function computeBalancesWithRetry(
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
+function revalidateInBackground(accountId: string): void {
+  if (inflightByAccountId.has(accountId)) return
+
+  const p = computeBalancesWithRetry(accountId)
+    .then(async (data) => {
+      const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
+      memoryCacheByAccountId!.set(accountId, snapshot)
+      await writePersistedSnapshot(accountId, snapshot)
+      return data
+    })
+    .finally(() => {
+      inflightByAccountId.delete(accountId)
+    })
+
+  inflightByAccountId.set(accountId, p)
+  void p.catch(() => {})
+}
+
 export async function runGetSmartAccountBalances(
   accountId: string
 ): Promise<GetSmartAccountBalancesResponse> {
@@ -191,7 +209,14 @@ export async function runGetSmartAccountBalances(
     if (persisted) {
       memoryCacheByAccountId.set(accountId, persisted)
       if (snapshotFreshEnough(persisted, now)) return persisted.data
+      if (snapshotUsableAsStaleFallback(persisted, now)) {
+        revalidateInBackground(accountId)
+        return persisted.data
+      }
     }
+  } else if (snapshotUsableAsStaleFallback(mem, now)) {
+    revalidateInBackground(accountId)
+    return mem.data
   }
 
   const existing = inflightByAccountId.get(accountId)

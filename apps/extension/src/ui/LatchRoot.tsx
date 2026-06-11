@@ -31,8 +31,6 @@ import type {
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
-  MigrationDiscoverRequest,
-  MigrationDiscovery,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
@@ -60,7 +58,7 @@ import { Networks } from '@stellar/stellar-sdk'
 import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
-import { ExternalLink, Menu } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 
 import logoUrl from 'url:../../assets/brand/latch-logo.svg'
 import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
@@ -75,12 +73,14 @@ import { TransactionDetailScreen } from './screens/transaction-detail/Transactio
 import { MigrationScreen } from './screens/MigrationScreen'
 import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { ExploreScreen } from './screens/explore/ExploreScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
 import { AccountMenu } from './components/AccountMenu'
+import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
+import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
 import { storedAccountLabel } from './lib/storedAccountLabel'
 import {
-  isMigrationHomePromoCompleted,
   markMigrationHomePromoCompleted,
 } from './lib/migrationHomePrefs'
 
@@ -133,6 +133,7 @@ type Route =
   | 'importSeedEncrypt'
   | 'unlockMnemonic'
   | 'home'
+  | 'explore'
   | 'history'
   | 'transactionDetail'
   | 'swap'
@@ -155,6 +156,7 @@ function routeKeepsUiMountedForWebauthn(route: Route): boolean {
 
 const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
   'home',
+  'explore',
   'history',
   'transactionDetail',
   'swap',
@@ -250,19 +252,6 @@ function useUiSurfacePreference() {
   return { pref, setPref: persist }
 }
 
-function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={[
-        'h-8 w-8 rounded-full border border-border bg-surface/40 text-fg/80',
-        'grid place-items-center hover:bg-surface/60 active:bg-surface/80',
-        props.className ?? '',
-      ].join(' ')}
-    />
-  )
-}
-
 const headerIconClass = 'h-[18px] w-[18px]'
 
 async function openSidePanel() {
@@ -312,7 +301,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  const { theme, setTheme } = useTheme()
+  useTheme()
   const { pref, setPref } = useUiSurfacePreference()
 
   // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
@@ -364,22 +353,26 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [portfolioRows, setPortfolioRows] = useState<SmartAccountBalanceRow[]>([])
   const [totalBalanceUsd, setTotalBalanceUsd] = useState<string | null>(null)
   const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [portfolioHydrated, setPortfolioHydrated] = useState(false)
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
   const [historySections, setHistorySections] = useState<HistorySectionVm[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyHydrated, setHistoryHydrated] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const portfolioRowsRef = useRef(portfolioRows)
+  portfolioRowsRef.current = portfolioRows
+  const portfolioHydratedRef = useRef(false)
+  const historyHydratedRef = useRef(false)
   const [transactionDetail, setTransactionDetail] = useState<TransactionDetailVm | null>(null)
   const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
   const [pendingMnemonic, setPendingMnemonic] = useState('')
   const seedWords = useSeedPhraseWords()
-  const [migrationDiscovery, setMigrationDiscovery] = useState<
-    MigrationDiscovery | null | undefined
-  >(undefined)
   const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
-  const [migrationHomePromoCompleted, setMigrationHomePromoCompleted] = useState(false)
+  const [transactionDetailReturnRoute, setTransactionDetailReturnRoute] =
+    useState<Route>('history')
 
   const needsMnemonicUnlock = useMemo(
     () =>
@@ -389,21 +382,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [activeAccount, activeAccountHasMnemonicVault, activeAccountMnemonicSignerLoaded]
   )
 
-  const showHomeMigrationPromo =
-    migrationDiscovery?.state === 'not_started' &&
-    Boolean(activeAccount?.id) &&
-    !migrationHomePromoCompleted
-
-  const homePortfolioTokens = useMemo(
-    () =>
-      portfolioRows.map((r) => ({
-        id: r.sacContractId,
-        symbol: r.code,
-        balance: r.amount,
-        balanceUsd: r.balanceUsd ?? null,
-        iconUrl: r.iconUrl,
-      })),
-    [portfolioRows]
+  const recentActivityItems = useMemo(
+    () => historySections.flatMap((section) => section.items),
+    [historySections]
   )
 
   const networkLabel =
@@ -455,52 +436,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
 
   useEffect(() => {
-    if (setupState !== 'has_account') {
-      setMigrationDiscovery(undefined)
-      return
-    }
-    if (page !== 'main') return
-    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-    if (
-      !acc?.id ||
-      acc.mode !== 'mnemonic' ||
-      !acc.gAddress?.trim() ||
-      !acc.smartAccountAddress?.trim()
-    ) {
-      setMigrationDiscovery(null)
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      const res = await sendToBackground<MigrationDiscoverRequest, MigrationDiscovery>({
-        type: 'MIGRATION_DISCOVER',
-        payload: { accountId: acc.id },
-      })
-      if (cancelled) return
-      if (res.ok && res.data) setMigrationDiscovery(res.data)
-      else setMigrationDiscovery(null)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [setupState, page, activeAccountId, accounts])
-
-  useEffect(() => {
-    const accountId = activeAccount?.id
-    if (!accountId) {
-      setMigrationHomePromoCompleted(false)
-      return
-    }
-    let cancelled = false
-    void isMigrationHomePromoCompleted(accountId).then((completed) => {
-      if (!cancelled) setMigrationHomePromoCompleted(completed)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [activeAccount?.id])
-
-  useEffect(() => {
     if (!needsMnemonicUnlock) return
     if (page === 'settings') setPage('main')
     if (ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(route)) {
@@ -510,9 +445,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   useEffect(() => {
     if (route !== 'migrationSuccess' || !activeAccount?.id) return
-    void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
-      setMigrationHomePromoCompleted(true)
-    })
+    void markMigrationHomePromoCompleted(activeAccount.id)
   }, [route, activeAccount?.id])
 
   useEffect(() => {
@@ -642,14 +575,29 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     return { accounts: res.data.accounts, needsMnemonicUnlock: locked }
   }
 
+  useEffect(() => {
+    portfolioHydratedRef.current = false
+    historyHydratedRef.current = false
+    setPortfolioHydrated(false)
+    setHistoryHydrated(false)
+    setPortfolioRows([])
+    setTotalBalanceUsd(null)
+    setHistorySections([])
+    setPortfolioError(null)
+    setHistoryError(null)
+  }, [activeAccountId])
+
   const loadPortfolio = useCallback(async () => {
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
     if (!acc?.id || !acc.smartAccountAddress?.trim()) {
       setPortfolioRows([])
       setPortfolioError(null)
+      portfolioHydratedRef.current = true
+      setPortfolioHydrated(true)
       return
     }
-    setPortfolioLoading(true)
+    const showLoading = !portfolioHydratedRef.current
+    if (showLoading) setPortfolioLoading(true)
     setPortfolioError(null)
     try {
       const res = await sendToBackground<
@@ -668,6 +616,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       setTotalBalanceUsd(res.data?.totalBalanceUsd ?? null)
     } finally {
       setPortfolioLoading(false)
+      portfolioHydratedRef.current = true
+      setPortfolioHydrated(true)
     }
   }, [accounts, activeAccountId])
 
@@ -675,9 +625,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
     if (!acc?.id) {
       setHistorySections([])
+      historyHydratedRef.current = true
+      setHistoryHydrated(true)
       return
     }
-    setHistoryLoading(true)
+    const showLoading = !historyHydratedRef.current
+    if (showLoading) setHistoryLoading(true)
     setHistoryError(null)
     try {
       const res = await sendToBackground<
@@ -693,16 +646,21 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         return
       }
       const items = (res.data?.items ?? []).map((row) =>
-        mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRows, row.assetCode))
+        mapTransactionToHistoryItem(
+          row,
+          iconUrlForCode(portfolioRowsRef.current, row.assetCode)
+        )
       )
       setHistorySections(groupHistoryItems(items))
     } finally {
       setHistoryLoading(false)
+      historyHydratedRef.current = true
+      setHistoryHydrated(true)
     }
-  }, [accounts, activeAccountId, portfolioRows])
+  }, [accounts, activeAccountId])
 
   useEffect(() => {
-    if (page !== 'main') return
+    if (page !== 'main' && page !== 'settings') return
     if (route !== 'home') return
     if (needsMnemonicUnlock) return
 
@@ -716,7 +674,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const portfolioRetryAttemptRef = useRef(0)
   useEffect(() => {
-    if (route !== 'home' || page !== 'main') {
+    if (route !== 'home' || (page !== 'main' && page !== 'settings')) {
       portfolioRetryAttemptRef.current = 0
       return
     }
@@ -734,9 +692,28 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [route, setupState, page, portfolioError, loadPortfolio])
 
   useEffect(() => {
-    if (route !== 'history') return
+    if (route !== 'history' && route !== 'home' && route !== 'explore') return
     void loadHistory()
   }, [route, loadHistory])
+
+  function openSwapFromNav() {
+    setSwapDraft({
+      payTokenId: 'usdt',
+      receiveTokenId: 'xlm',
+      payAmount: '',
+      useExchangeBalance: false,
+      approved: false,
+    })
+    setSwapQuote(null)
+    setRoute('swap')
+  }
+
+  function handleMainTabSelect(tab: MainTab) {
+    if (tab === 'home') setRoute('home')
+    else if (tab === 'swap') openSwapFromNav()
+    else if (tab === 'history') setRoute('history')
+    else if (tab === 'explore') setRoute('explore')
+  }
 
   async function loadPendingDapp() {
     const res = await sendToBackground<unknown, ListPendingDappRequestsResponse>({
@@ -1542,15 +1519,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     surface === 'sidepanel' ? 'h-screen w-full min-w-[320px]' : 'h-[600px] w-[360px]'
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
   const showTopHeader =
-    page === 'main' && !needsMnemonicUnlock && (route === 'home' || route === 'migration')
+    page === 'main' && !needsMnemonicUnlock && route === 'migration'
+  const showHomeLoadingOverlay =
+    (page === 'main' || page === 'settings') &&
+    route === 'home' &&
+    !loading &&
+    ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
   const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
 
+  const showHomeBottomNav = route === 'home' && !needsMnemonicUnlock
+
   return (
-    <div className={['bg-bg text-fg', containerClass].join(' ')}>
+    <div className={['relative bg-bg text-fg', containerClass].join(' ')}>
       <div
         className={[
-          'relative h-full w-full',
-          surface === 'sidepanel' ? 'px-6 pb-6 pt-4' : 'px-6 pb-6 pt-3',
+          'relative flex h-full w-full min-h-0 flex-col',
+          surface === 'sidepanel' ? 'px-6 pt-4' : 'px-6 pt-3',
+          showHomeBottomNav ? 'pb-0' : 'pb-6',
         ].join(' ')}
       >
         {showTopHeader ? (
@@ -1585,60 +1570,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 setRenameAccountId(accountId)
               }}
             />
-            <div className="flex items-center justify-end gap-2">
-              {route === 'home' ? (
-                <IconButton
-                  aria-label="Menu"
-                  title="Menu"
-                  onClick={() => {
-                    setPage('settings')
-                  }}
-                >
-                  <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
-                </IconButton>
-              ) : (
-                <div className="h-8 w-8" />
-              )}
-            </div>
           </div>
         ) : null}
 
-        {page === 'settings' && !needsMnemonicUnlock ? (
-          <div
-            className={[
-              routeContentMarginClass,
-              'flex min-h-0 flex-1 flex-col animate-screenIn',
-              flowHeightClass,
-            ].join(' ')}
-          >
-            <SettingsScreen
-              accountName={activeAccountLabel}
-              accountAddress={activeAccount?.smartAccountAddress ?? '—'}
-              theme={theme}
-              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              biometricsEnabled={false}
-              onChangeBiometricsEnabled={() => {}}
-              sidepanelPreferenceSection={sidepanelPreferenceSection}
-              onClose={() => setPage('main')}
-              onLogout={() =>
-                void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))
-              }
-              onOpenMigrateAssets={
-                activeAccount?.mode === 'mnemonic' &&
-                activeAccount.gAddress?.trim() &&
-                activeAccount.smartAccountAddress?.trim() &&
-                migrationDiscovery?.state === 'not_started'
-                  ? () => {
-                      setPage('main')
-                      setRoute('migration')
-                    }
-                  : undefined
-              }
-            />
-          </div>
-        ) : null}
-
-        {page === 'main' ? (
+        {page === 'main' || page === 'settings' ? (
           <>
             {loading && !routeKeepsUiMountedForWebauthn(route) ? (
               <div
@@ -2170,35 +2105,70 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               <div
                 className={[
                   routeContentMarginClass,
-                  'flex flex-col animate-screenIn',
-                  flowHeightClass,
+                  'relative flex min-h-0 flex-1 flex-col animate-screenIn',
                 ].join(' ')}
               >
                 <HomeScreen
                   accountName={activeAccountLabel}
+                  onOpenSettings={() => setPage('settings')}
+                  onOpenExplore={() => setRoute('explore')}
                   onOpenHistory={() => setRoute('history')}
-                  onOpenMigrateAssets={
-                    showHomeMigrationPromo
-                      ? () => setRoute('migration')
-                      : undefined
-                  }
-                  portfolioTokens={homePortfolioTokens}
-                  portfolioLoading={portfolioLoading}
-                  portfolioError={portfolioError}
+                  recentActivity={recentActivityItems}
                   totalBalanceUsd={totalBalanceUsd}
-                  onOpenSwap={() => {
-                    setSwapDraft({
-                      payTokenId: 'usdt',
-                      receiveTokenId: 'xlm',
-                      payAmount: '',
-                      useExchangeBalance: false,
-                      approved: false,
-                    })
-                    setSwapQuote(null)
-                    setRoute('swap')
-                  }}
+                  balanceChangePercent="0.00%"
+                  onOpenSwap={openSwapFromNav}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
+                  onSelectActivity={(it) => {
+                    const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('home')
+                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
+                    setRoute('transactionDetail')
+                  }}
+                />
+                {showHomeLoadingOverlay ? <HomeLoadingOverlay /> : null}
+                {page === 'settings' ? (
+                  <>
+                    <div className="absolute inset-0 z-40 bg-overlay/90" aria-hidden />
+                    <div className="absolute inset-0 z-50 flex min-h-0 flex-col">
+                      <SettingsScreen
+                        accountName={activeAccountLabel}
+                        accountAddress={activeAccount?.smartAccountAddress ?? '—'}
+                        biometricsEnabled={false}
+                        onChangeBiometricsEnabled={() => {}}
+                        sidepanelPreferenceSection={sidepanelPreferenceSection}
+                        onClose={() => setPage('main')}
+                        onLogout={() =>
+                          void logout().catch((e) =>
+                            setError(e instanceof Error ? e.message : String(e))
+                          )
+                        }
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!loading && route === 'explore' && !needsMnemonicUnlock ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <ExploreScreen
+                  items={recentActivityItems}
+                  loading={historyLoading}
+                  error={historyError}
+                  onBack={() => setRoute('home')}
+                  onSelectItem={(it) => {
+                    const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('explore')
+                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
+                    setRoute('transactionDetail')
+                  }}
                 />
               </div>
             ) : null}
@@ -2245,11 +2215,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   className="mt-8 h-12 w-full max-w-xs rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   onClick={() => {
                     if (activeAccount?.id) {
-                      void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
-                        setMigrationHomePromoCompleted(true)
-                      })
+                      void markMigrationHomePromoCompleted(activeAccount.id)
                     }
-                    setMigrationDiscovery(undefined)
                     void loadPortfolio()
                     setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
                   }}
@@ -2275,6 +2242,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   onRefresh={() => void loadHistory()}
                   onSelectItem={(it) => {
                     const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('history')
                     setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
                     setRoute('transactionDetail')
                   }}
@@ -2292,7 +2260,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <TransactionDetailScreen
                   surface={surface}
                   detail={transactionDetail}
-                  onBack={() => setRoute('history')}
+                  onBack={() => setRoute(transactionDetailReturnRoute)}
                 />
               </div>
             ) : null}
@@ -2466,6 +2434,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           </div>
         ) : null}
       </div>
+
+      {showHomeBottomNav ? (
+        <MainBottomNav active="home" onSelect={handleMainTabSelect} />
+      ) : null}
     </div>
   )
 }

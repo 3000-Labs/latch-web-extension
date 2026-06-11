@@ -9,9 +9,13 @@
   /* dark */
   --latch-bg: 28 28 28; /* #1C1C1C */
   --latch-fg: 255 255 255;
-  --latch-muted: 178 178 178;
+  --latch-muted: 179 179 179; /* #B3B3B3 */
   --latch-primary: 255 173 0; /* #FFAD00 */
   --latch-surface: 22 22 22; /* #161616 */
+  --latch-surface-2: 34 33 33; /* #222121 */
+  --latch-card: 32 31 30; /* #201F1E */
+  --latch-stroke: 56 56 56; /* #383838 */
+  --latch-overlay: 18 18 18; /* #121212 */
   /* #2B2A29 */
   --latch-border: 43 42 41;
 }
@@ -22,6 +26,10 @@
   --latch-muted: 110 110 110;
   --latch-primary: 255 173 0; /* keep brand */
   --latch-surface: 255 255 251; /* #FFFFFB */
+  --latch-surface-2: 240 239 238;
+  --latch-card: 255 255 251;
+  --latch-stroke: 225 225 225;
+  --latch-overlay: 245 244 244;
   /* #E1E1E1 */
   --latch-border: 225 225 225;
 }
@@ -45,5 +53,19 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Hide scrollbars extension-wide; wheel / trackpad / touch scrolling still works */
+html,
+body,
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
