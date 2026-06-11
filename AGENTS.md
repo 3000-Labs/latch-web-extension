@@ -182,6 +182,13 @@ Prefer shipping reusable SVG/PNG assets under `apps/extension/assets/` and refer
 
 Avoid inlining large SVG blobs in TSX; prefer `<img src=\"../../assets/...\">` to keep code/token usage small and consistent across repos.
 
+### Main bottom navigation (`MainBottomNav`)
+
+- Mounted from `LatchRoot` on main tab routes (**home**, **swap**, **history**, **explore**) unless a screen explicitly opts out.
+- **Background must be solid and opaque** — Figma `card-bg-2` / `#222121`. Use `bg-[#222121]` (or `bg-[rgb(var(--latch-surface-2))]`). **Never** ship a transparent, translucent, or inherited-background nav bar; content scrolling behind the nav must not show through.
+- Tab screens that show the nav need `pb-[74px]` on their scroll root so content clears the 74px bar.
+- Preserve per-tab active styling (primary label + active icon variant where assets exist).
+
 ### Popup polish checklist
 
 - If you see unthemed “white space” during scroll/overscroll, ensure `html, body { background: rgb(var(--latch-bg)); overscroll-behavior: none; }` in `apps/extension/src/style.css`.

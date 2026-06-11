@@ -100,7 +100,7 @@ export function ExploreScreen({
   }, [items, query])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
+    <div className="flex min-h-0 flex-1 flex-col pb-[74px] animate-screenIn">
       <div className="grid h-[22px] grid-cols-[20px_1fr_20px] items-center">
         <button type="button" onClick={onBack} className="h-5 w-5 shrink-0" aria-label="Back">
           <img src={backIconUrl} alt="" className="h-5 w-5" />

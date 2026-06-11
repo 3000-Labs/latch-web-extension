@@ -698,8 +698,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   function openSwapFromNav() {
     setSwapDraft({
-      payTokenId: 'usdt',
-      receiveTokenId: 'xlm',
+      payTokenId: 'xlm',
+      receiveTokenId: 'usdt',
       payAmount: '',
       useExchangeBalance: false,
       approved: false,
@@ -1527,7 +1527,17 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
   const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
 
-  const showHomeBottomNav = route === 'home' && !needsMnemonicUnlock
+  const mainTabRoutes = ['home', 'swap', 'history', 'explore'] as const
+  const showMainBottomNav =
+    !needsMnemonicUnlock && (mainTabRoutes as readonly string[]).includes(route)
+  const activeMainTab: MainTab =
+    route === 'swap'
+      ? 'swap'
+      : route === 'history'
+        ? 'history'
+        : route === 'explore'
+          ? 'explore'
+          : 'home'
 
   return (
     <div className={['relative bg-bg text-fg', containerClass].join(' ')}>
@@ -1535,7 +1545,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         className={[
           'relative flex h-full w-full min-h-0 flex-col',
           surface === 'sidepanel' ? 'px-6 pt-4' : 'px-6 pt-3',
-          showHomeBottomNav ? 'pb-0' : 'pb-6',
+          showMainBottomNav ? 'pb-0' : 'pb-6',
         ].join(' ')}
       >
         {showTopHeader ? (
@@ -2269,7 +2279,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               <div
                 className={[
                   routeContentMarginClass,
-                  'flex flex-col animate-screenIn',
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2291,7 +2301,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               <div
                 className={[
                   routeContentMarginClass,
-                  'flex flex-col animate-screenIn',
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2300,6 +2310,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     surface={surface}
                     draft={swapDraft}
                     quote={swapQuote}
+                    swapTokenCatalog={swapTokenCatalog}
+                    receiveAddress={activeAccount?.smartAccountAddress}
                     onBackOrCancel={() => setRoute('swap')}
                     onConfirm={() => {
                       setSwapDraft(null)
@@ -2435,8 +2447,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         ) : null}
       </div>
 
-      {showHomeBottomNav ? (
-        <MainBottomNav active="home" onSelect={handleMainTabSelect} />
+      {showMainBottomNav ? (
+        <MainBottomNav active={activeMainTab} onSelect={handleMainTabSelect} />
       ) : null}
     </div>
   )

@@ -52,7 +52,7 @@ export function HistoryScreen({
   const isEmpty = !loading && !error && view.length === 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
+    <div className="flex min-h-0 flex-1 flex-col pb-[74px] animate-screenIn">
       <HistoryHeader onBack={onBack} />
       <div className="mt-5">
         <HistorySearchRow value={query} onChange={setQuery} onFilterClick={onRefresh} />
