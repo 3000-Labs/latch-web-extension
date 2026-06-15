@@ -8,7 +8,7 @@ interface SettingsSectionProps {
 export function SettingsSection({ label, children }: SettingsSectionProps) {
   return (
     <div className="flex w-full flex-col gap-4">
-      <p className="text-sm tracking-[-0.28px] text-muted">{label}</p>
+      <p className="text-sm tracking-[-0.28px] text-[#b3b3b3]">{label}</p>
       <div className="flex flex-col gap-2">{children}</div>
     </div>
   )

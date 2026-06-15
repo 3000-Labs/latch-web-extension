@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 
 import closeIconUrl from 'url:../../../assets/home/icon-close.svg'
 import aboutIconUrl from 'url:../../../assets/home/settings-about.svg'
@@ -16,45 +16,107 @@ import permissionsIconUrl from 'url:../../../assets/home/settings-permissions.sv
 import recoveryPhraseIconUrl from 'url:../../../assets/home/settings-recovery-phrase.svg'
 import signersIconUrl from 'url:../../../assets/home/settings-signers.svg'
 
+import { AccountInformationScreen } from './settings/AccountInformationScreen'
 import { ProfileCard } from './settings/ProfileCard'
 import { SettingItem } from './settings/SettingItem'
 import { SettingsSection } from './settings/SettingsSection'
 import { SettingsToggle } from './settings/SettingsToggle'
+import { ViewAccountsScreen, type ViewAccountItem } from './settings/ViewAccountsScreen'
 
 const rowIconClass = 'h-5 w-5 object-contain'
+
+type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts'
 
 export function SettingsScreen({
   accountName,
   accountAddress,
+  accounts,
+  activeAccountId,
   biometricsEnabled,
   onChangeBiometricsEnabled,
-  sidepanelPreferenceSection,
+  sidePanelEnabled,
+  onChangeSidePanelEnabled,
+  onSaveAccountName,
+  onSelectAccount,
+  onAddAccount,
   onClose,
   onLogout,
 }: {
   accountName: string
   accountAddress: string
+  accounts: ViewAccountItem[]
+  activeAccountId?: string
   biometricsEnabled: boolean
   onChangeBiometricsEnabled: (next: boolean) => void
-  sidepanelPreferenceSection?: React.ReactNode
+  sidePanelEnabled?: boolean
+  onChangeSidePanelEnabled?: (next: boolean) => void
+  onSaveAccountName?: (walletName: string) => void
+  onSelectAccount?: (accountId: string) => void
+  onAddAccount?: () => void
   onClose: () => void
   onLogout: () => void
 }) {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-bg pl-6 pr-4 py-6 animate-screenIn">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          className="h-5 w-5 shrink-0"
-          aria-label="Close settings"
-        >
-          <img src={closeIconUrl} alt="" className="h-5 w-5" />
-        </button>
-      </div>
+  const [view, setView] = useState<SettingsView>('menu')
 
-      <div className="mt-2 min-h-0 flex-1 overflow-auto pb-4">
-        <ProfileCard name={accountName} address={accountAddress} />
+  const handleClose = () => {
+    setView('menu')
+    onClose()
+  }
+
+  if (view === 'viewAccounts') {
+    return (
+      <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+        <ViewAccountsScreen
+          accounts={accounts}
+          activeAccountId={activeAccountId}
+          onBack={() => setView('menu')}
+          onAddAccount={() => onAddAccount?.()}
+          onSave={(accountId) => {
+            onSelectAccount?.(accountId)
+            setView('menu')
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (view === 'accountInformation') {
+    return (
+      <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+        <AccountInformationScreen
+          accountName={accountName}
+          accountAddress={accountAddress}
+          onBack={() => setView('menu')}
+          onSave={(walletName) => {
+            onSaveAccountName?.(walletName)
+            setView('menu')
+          }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-full w-full min-h-0 flex-col items-end gap-2 overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+      <button
+        type="button"
+        onClick={handleClose}
+        className="relative size-5 shrink-0"
+        aria-label="Close settings"
+      >
+        <img
+          src={closeIconUrl}
+          alt=""
+          className="pointer-events-none absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2"
+        />
+      </button>
+
+      <div className="w-full min-h-0 flex-1">
+        <ProfileCard
+          name={accountName}
+          address={accountAddress}
+          onClick={() => setView('accountInformation')}
+        />
 
         <div className="mt-5 flex flex-col gap-5">
           <SettingsSection label="Account">
@@ -65,6 +127,7 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={myAccountsIconUrl} alt="" className={rowIconClass} />}
               label="My Accounts"
+              onClick={() => setView('viewAccounts')}
             />
             <SettingItem
               icon={<img src={addressBookIconUrl} alt="" className={rowIconClass} />}
@@ -84,8 +147,13 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={biometricsIconUrl} alt="" className={rowIconClass} />}
               label="Biometrics Authentication"
+              showChevron={false}
               rightElement={
-                <SettingsToggle checked={biometricsEnabled} onChange={onChangeBiometricsEnabled} />
+                <SettingsToggle
+                  checked={biometricsEnabled}
+                  onChange={onChangeBiometricsEnabled}
+                  ariaLabel="Biometrics Authentication"
+                />
               }
             />
             <SettingItem
@@ -111,6 +179,20 @@ export function SettingsScreen({
               icon={<img src={notificationsIconUrl} alt="" className={rowIconClass} />}
               label="Notifications"
             />
+            {onChangeSidePanelEnabled ? (
+              <SettingItem
+                icon={<img src={networkIconUrl} alt="" className={rowIconClass} />}
+                label="Side Panel"
+                showChevron={false}
+                rightElement={
+                  <SettingsToggle
+                    checked={sidePanelEnabled ?? false}
+                    onChange={onChangeSidePanelEnabled}
+                    ariaLabel="Enable side panel"
+                  />
+                }
+              />
+            ) : null}
           </SettingsSection>
 
           <SettingsSection label="Support">
@@ -124,20 +206,13 @@ export function SettingsScreen({
             />
           </SettingsSection>
 
-          {sidepanelPreferenceSection ? (
-            <div className="w-full">{sidepanelPreferenceSection}</div>
-          ) : null}
-
-          <button
-            type="button"
+          <SettingItem
+            icon={<img src={logoutIconUrl} alt="" className={rowIconClass} />}
+            label="Log Out"
+            danger
+            showChevron={false}
             onClick={onLogout}
-            className="flex w-full items-center gap-2 rounded-[14px] bg-card p-3 text-left"
-          >
-            <div className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#1e1e1e] p-1">
-              <img src={logoutIconUrl} alt="" className={rowIconClass} />
-            </div>
-            <span className="text-sm tracking-[-0.28px] text-[#ea471e]">Log Out</span>
-          </button>
+          />
         </div>
       </div>
     </div>

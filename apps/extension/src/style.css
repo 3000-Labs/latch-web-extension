@@ -69,3 +69,22 @@ body,
   height: 0;
 }
 
+@keyframes latch-loading-ring {
+  0%,
+  100% {
+    stroke-dasharray: 0 var(--latch-loading-ring-c);
+    stroke-dashoffset: 0;
+  }
+
+  50% {
+    stroke-dasharray: var(--latch-loading-ring-c) var(--latch-loading-ring-c);
+    stroke-dashoffset: 0;
+  }
+}
+
+.latch-loading-ring {
+  stroke-dasharray: 0 var(--latch-loading-ring-c);
+  stroke-dashoffset: 0;
+  animation: latch-loading-ring 2s linear infinite;
+}
+

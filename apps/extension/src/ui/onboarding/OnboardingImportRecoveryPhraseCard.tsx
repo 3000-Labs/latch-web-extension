@@ -4,7 +4,7 @@ import {
 } from './components/OnboardingCardButtons'
 import { OnboardingCardHeader } from './components/OnboardingCardHeader'
 import { OnboardingSmallEmblem } from './components/OnboardingSmallEmblem'
-import { OnboardingVerifyingLogo } from './components/OnboardingVerifyingLogo'
+import { LatchLoadingOverlay } from '../components/LatchLoadingOverlay'
 import { RecoveryPhraseGrid } from './components/RecoveryPhraseGrid'
 
 export function OnboardingImportRecoveryPhraseCard({
@@ -63,20 +63,7 @@ export function OnboardingImportRecoveryPhraseCard({
         </div>
       </div>
 
-      {verifying ? (
-        <>
-          <div
-            className="absolute inset-0 bg-[#121212]/90"
-            aria-hidden
-          />
-          <div className="absolute left-1/2 top-[calc(50%-0.33px)] flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2">
-            <OnboardingVerifyingLogo />
-            <p className="text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#fbfbfb]">
-              Verifying...
-            </p>
-          </div>
-        </>
-      ) : null}
+      {verifying ? <LatchLoadingOverlay label="Verifying..." /> : null}
     </div>
   )
 }

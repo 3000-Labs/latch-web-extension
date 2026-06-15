@@ -64,7 +64,6 @@ import logoUrl from 'url:../../assets/brand/latch-logo.svg'
 import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
 import successAvatarUrl from 'url:../../assets/avatars/success.png'
 
-import { SectionCard } from './components/SectionCard'
 import { HistoryScreen } from './screens/history/HistoryScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ImportSeedScreen } from './screens/import-seed/ImportSeedScreen'
@@ -1465,38 +1464,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  const sidepanelPreferenceSection = (
-    <div className="mt-2">
-      <SectionCard>
-        <div className="text-base font-extrabold">Side panel</div>
-        <div className="mt-1 text-xs text-muted">
-          When enabled, clicking the Latch icon opens the side panel instead of the popup.
-        </div>
-
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="text-sm font-bold">Enable side panel</div>
-          <button
-            className={[
-              'h-9 w-20 rounded-full border text-sm font-extrabold',
-              pref === 'sidepanel'
-                ? 'border-primary bg-primary text-black'
-                : 'border-border bg-bg text-fg',
-            ].join(' ')}
-            onClick={() => {
-              const next = pref === 'sidepanel' ? 'popup' : 'sidepanel'
-              setPref(next)
-              void setDefaultSurface(next).then(() => {
-                if (next === 'sidepanel') void openSidePanel().catch(() => {})
-              })
-            }}
-          >
-            {pref === 'sidepanel' ? 'On' : 'Off'}
-          </button>
-        </div>
-      </SectionCard>
-    </div>
-  )
-
   async function logout() {
     setError(null)
     setLoading('Logging out…')
@@ -2136,17 +2103,64 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     setRoute('transactionDetail')
                   }}
                 />
-                {showHomeLoadingOverlay ? <HomeLoadingOverlay /> : null}
                 {page === 'settings' ? (
                   <>
-                    <div className="absolute inset-0 z-40 bg-overlay/90" aria-hidden />
-                    <div className="absolute inset-0 z-50 flex min-h-0 flex-col">
+                    <div
+                      className={[
+                        'absolute bottom-0 -left-6 -right-6 z-40 bg-overlay/90',
+                        surface === 'sidepanel' ? '-top-4' : '-top-3',
+                      ].join(' ')}
+                      aria-hidden
+                    />
+                    <div
+                      className={[
+                        'absolute bottom-0 -left-6 -right-6 z-50',
+                        surface === 'sidepanel' ? '-top-4' : '-top-3',
+                      ].join(' ')}
+                    >
                       <SettingsScreen
                         accountName={activeAccountLabel}
                         accountAddress={activeAccount?.smartAccountAddress ?? '—'}
+                        accounts={accounts.map((account, index) => ({
+                          id: account.id,
+                          name: storedAccountLabel(account, index),
+                          address: account.smartAccountAddress,
+                        }))}
+                        activeAccountId={activeAccountId}
                         biometricsEnabled={false}
                         onChangeBiometricsEnabled={() => {}}
-                        sidepanelPreferenceSection={sidepanelPreferenceSection}
+                        sidePanelEnabled={pref === 'sidepanel'}
+                        onChangeSidePanelEnabled={(enabled) => {
+                          const next = enabled ? 'sidepanel' : 'popup'
+                          setPref(next)
+                          void setDefaultSurface(next).then(() => {
+                            if (next === 'sidepanel') void openSidePanel().catch(() => {})
+                          })
+                        }}
+                        onSaveAccountName={(walletName) => {
+                          if (!activeAccount?.id) return
+                          void sendToBackground<{ accountId: string; label?: string }, undefined>({
+                            type: 'RENAME_ACCOUNT',
+                            payload: {
+                              accountId: activeAccount.id,
+                              label: walletName,
+                            },
+                          })
+                            .then(() => refreshAccounts())
+                            .catch(() => {})
+                        }}
+                        onSelectAccount={(accountId) => {
+                          void sendToBackground<SetActiveAccountRequest, undefined>({
+                            type: 'SET_ACTIVE_ACCOUNT',
+                            payload: { accountId },
+                          })
+                            .then(() => refreshAccounts())
+                            .catch(() => {})
+                        }}
+                        onAddAccount={() => {
+                          setPage('main')
+                          setRoute('addAccount')
+                        }}
                         onClose={() => setPage('main')}
                         onLogout={() =>
                           void logout().catch((e) =>
@@ -2450,6 +2464,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       {showMainBottomNav ? (
         <MainBottomNav active={activeMainTab} onSelect={handleMainTabSelect} />
       ) : null}
+
+      {showHomeLoadingOverlay ? (
+        <div className="absolute inset-0 z-40">
+          <HomeLoadingOverlay />
+        </div>
+      ) : null}
+
     </div>
   )
 }

@@ -7,9 +7,10 @@ import userAvatarUrl from 'url:../../../../assets/icons/user.png'
 interface ProfileCardProps {
   name: string
   address: string
+  onClick?: () => void
 }
 
-export function ProfileCard({ name, address }: ProfileCardProps) {
+export function ProfileCard({ name, address, onClick }: ProfileCardProps) {
   const [copied, setCopied] = useState(false)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const shortAddress =
@@ -23,21 +24,26 @@ export function ProfileCard({ name, address }: ProfileCardProps) {
   }, [])
 
   return (
-    <div className="flex w-full items-center justify-between rounded-[14px] bg-card px-3 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center justify-between rounded-[14px] bg-[#201f1e] px-3 py-3 text-left"
+    >
       <div className="flex items-center gap-2">
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-[32px]">
-          <img src={userAvatarUrl} alt="" className="h-full w-full object-cover" />
+        <div className="size-10 shrink-0 overflow-hidden rounded-[32px]">
+          <img src={userAvatarUrl} alt="" className="size-full object-cover" />
         </div>
         <div className="flex flex-col gap-0.5">
-          <div className="text-xl font-semibold tracking-[-0.4px] text-fg">{name}</div>
+          <div className="text-xl font-semibold tracking-[-0.4px] text-[#fcfcfc]">{name}</div>
           <div className="flex items-center gap-1">
-            <span className="text-sm tracking-[-0.28px] text-muted">{shortAddress}</span>
+            <span className="text-sm tracking-[-0.28px] text-[#b3b3b3]">{shortAddress}</span>
             <button
               type="button"
               disabled={disabled}
-              className="inline-flex h-4 w-4 items-center justify-center disabled:opacity-30"
+              className="inline-flex size-4 items-center justify-center disabled:opacity-30"
               aria-label={copied ? 'Copied' : 'Copy address'}
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation()
                 if (disabled) return
                 void navigator.clipboard.writeText(address).then(() => {
                   setCopied(true)
@@ -49,12 +55,12 @@ export function ProfileCard({ name, address }: ProfileCardProps) {
                 })
               }}
             >
-              <img src={copyIconUrl} alt="" className="h-4 w-4" />
+              <img src={copyIconUrl} alt="" className="size-4" />
             </button>
           </div>
         </div>
       </div>
-      <img src={chevronRightUrl} alt="" className="h-6 w-6 shrink-0" aria-hidden />
-    </div>
+      <img src={chevronRightUrl} alt="" className="size-6 shrink-0" aria-hidden />
+    </button>
   )
 }
