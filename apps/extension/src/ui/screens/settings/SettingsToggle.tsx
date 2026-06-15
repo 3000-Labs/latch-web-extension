@@ -19,7 +19,7 @@ export function SettingsToggle({ checked, onChange, ariaLabel = 'Toggle' }: Sett
       <span
         className={[
           'absolute top-[2px] h-6 w-[39px] rounded-full bg-white transition-all duration-200',
-          checked ? 'left-[23px]' : 'left-0.5',
+          checked ? 'left-[23px]' : 'left-[2px]',
         ].join(' ')}
       />
     </button>

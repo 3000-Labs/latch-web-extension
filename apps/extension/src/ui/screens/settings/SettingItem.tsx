@@ -25,20 +25,22 @@ export function SettingItem({
     <Component
       onClick={onClick}
       className={[
-        'flex w-full items-center gap-2 rounded-[14px] bg-[#201f1e] p-3 text-left',
+        'flex w-full items-center gap-2 rounded-[14px] bg-[#2a2928] p-3 text-left',
         onClick ? 'cursor-pointer' : '',
       ].join(' ')}
     >
-      <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#1e1e1e] p-1">
-        {icon}
-      </div>
-      <div
-        className={[
-          'min-w-0 flex-1 text-sm tracking-[-0.28px]',
-          danger ? 'text-[#ea471e]' : 'text-[#fcfcfc]',
-        ].join(' ')}
-      >
-        {label}
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#1e1e1e] p-1">
+          {icon}
+        </div>
+        <div
+          className={[
+            'min-w-0 flex-1 text-sm font-normal leading-[1.34] tracking-[-0.28px]',
+            danger ? 'text-[#ea471e]' : 'text-[#fcfcfc]',
+          ].join(' ')}
+        >
+          {label}
+        </div>
       </div>
       {rightElement ??
         (showChevron ? (

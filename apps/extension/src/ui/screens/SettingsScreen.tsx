@@ -115,7 +115,7 @@ export function SettingsScreen({
         <ProfileCard
           name={accountName}
           address={accountAddress}
-          onClick={() => setView('accountInformation')}
+          onClick={() => setView('viewAccounts')}
         />
 
         <div className="mt-5 flex flex-col gap-5">

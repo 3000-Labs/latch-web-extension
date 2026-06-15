@@ -27,16 +27,16 @@ export function ProfileCard({ name, address, onClick }: ProfileCardProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-[14px] bg-[#201f1e] px-3 py-3 text-left"
+      className="flex w-full items-center justify-between rounded-[14px] bg-[#2a2928] px-3 py-3 text-left"
     >
       <div className="flex items-center gap-2">
         <div className="size-10 shrink-0 overflow-hidden rounded-[32px]">
           <img src={userAvatarUrl} alt="" className="size-full object-cover" />
         </div>
-        <div className="flex flex-col gap-0.5">
-          <div className="text-xl font-semibold tracking-[-0.4px] text-[#fcfcfc]">{name}</div>
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="text-xl font-semibold leading-[1.31] tracking-[-0.4px] text-[#fcfcfc]">{name}</div>
           <div className="flex items-center gap-1">
-            <span className="text-sm tracking-[-0.28px] text-[#b3b3b3]">{shortAddress}</span>
+            <span className="text-sm font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">{shortAddress}</span>
             <button
               type="button"
               disabled={disabled}
