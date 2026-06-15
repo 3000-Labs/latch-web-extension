@@ -72,6 +72,8 @@ import { TransactionDetailScreen } from './screens/transaction-detail/Transactio
 import { MigrationScreen } from './screens/MigrationScreen'
 import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { CreateMultisigScreen } from './screens/multisig/CreateMultisigScreen'
+import { AddMultisigOwnersScreen } from './screens/multisig/AddMultisigOwnersScreen'
 import { ExploreScreen } from './screens/explore/ExploreScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
@@ -128,6 +130,8 @@ type Route =
   | 'passkeyCreated'
   | 'addAccount'
   | 'addAccountPasskey'
+  | 'createMultisig'
+  | 'addMultisigOwners'
   | 'importSeed'
   | 'importSeedEncrypt'
   | 'unlockMnemonic'
@@ -333,6 +337,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [renameAccountId, setRenameAccountId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  const [multisigDraft, setMultisigDraft] = useState<{ walletName: string; purpose: string } | null>(
+    null
+  )
 
   const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
   const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
@@ -1702,6 +1709,47 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
+            {!loading && route === 'createMultisig' ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <CreateMultisigScreen
+                  onContinue={(walletName, purpose) => {
+                    setMultisigDraft({ walletName, purpose })
+                    setRoute('addMultisigOwners')
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'addMultisigOwners' && activeAccount ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <AddMultisigOwnersScreen
+                  creatorSignerAddresses={[
+                    activeAccount.smartAccountAddress,
+                    ...(activeAccount.gAddress ? [activeAccount.gAddress] : []),
+                  ]}
+                  accounts={accounts}
+                  onContinue={(owners) => {
+                    if (!multisigDraft) return
+                    void owners
+                    void multisigDraft.walletName
+                    // Next multisig step — wired when that screen exists.
+                  }}
+                />
+              </div>
+            ) : null}
+
             {!loading && route === 'addAccount' ? (
               <div
                 className={[
@@ -2160,6 +2208,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                         onAddAccount={() => {
                           setPage('main')
                           setRoute('addAccount')
+                        }}
+                        onCreateMultisig={() => {
+                          setPage('main')
+                          setRoute('createMultisig')
                         }}
                         onClose={() => setPage('main')}
                         onLogout={() =>

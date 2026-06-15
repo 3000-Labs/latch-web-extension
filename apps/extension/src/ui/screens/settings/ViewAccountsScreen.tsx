@@ -5,6 +5,7 @@ import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
 import userAvatarUrl from 'url:../../../../assets/icons/user.png'
 
 import { AccountRadio } from './AccountRadio'
+import { AddAccountModal } from './AddAccountModal'
 import { SettingsScreenHeader } from './SettingsScreenHeader'
 
 export type ViewAccountItem = {
@@ -43,7 +44,7 @@ function AccountListRow({
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center justify-between rounded-[14px] bg-[#201f1e] px-3 py-3 text-left"
+      className="flex w-full items-center justify-between rounded-[14px] bg-[#2a2928] px-3 py-3 text-left"
     >
       <div className="flex min-w-0 items-center gap-2">
         <div className="size-10 shrink-0 overflow-hidden rounded-[32px]">
@@ -89,16 +90,19 @@ export function ViewAccountsScreen({
   accounts,
   activeAccountId,
   onBack,
-  onAddAccount,
+  onCreateSmartAccount,
+  onCreateMultisig,
   onSave,
 }: {
   accounts: ViewAccountItem[]
   activeAccountId?: string
   onBack: () => void
-  onAddAccount: () => void
+  onCreateSmartAccount: () => void
+  onCreateMultisig: () => void
   onSave: (accountId: string) => void
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState(activeAccountId ?? accounts[0]?.id ?? '')
+  const [addAccountOpen, setAddAccountOpen] = useState(false)
   const canSave = selectedAccountId !== activeAccountId && selectedAccountId.length > 0
 
   return (
@@ -109,7 +113,7 @@ export function ViewAccountsScreen({
         rightAction={
           <button
             type="button"
-            onClick={onAddAccount}
+            onClick={() => setAddAccountOpen(true)}
             className="flex size-5 shrink-0 items-center justify-center"
             aria-label="Add account"
           >
@@ -149,6 +153,19 @@ export function ViewAccountsScreen({
           Save Changes
         </button>
       </div>
+
+      <AddAccountModal
+        isOpen={addAccountOpen}
+        onClose={() => setAddAccountOpen(false)}
+        onSelectSmartAccount={() => {
+          setAddAccountOpen(false)
+          onCreateSmartAccount()
+        }}
+        onSelectMultisig={() => {
+          setAddAccountOpen(false)
+          onCreateMultisig()
+        }}
+      />
     </div>
   )
 }

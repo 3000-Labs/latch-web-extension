@@ -39,6 +39,7 @@ export function SettingsScreen({
   onSaveAccountName,
   onSelectAccount,
   onAddAccount,
+  onCreateMultisig,
   onClose,
   onLogout,
 }: {
@@ -53,6 +54,7 @@ export function SettingsScreen({
   onSaveAccountName?: (walletName: string) => void
   onSelectAccount?: (accountId: string) => void
   onAddAccount?: () => void
+  onCreateMultisig?: () => void
   onClose: () => void
   onLogout: () => void
 }) {
@@ -70,7 +72,8 @@ export function SettingsScreen({
           accounts={accounts}
           activeAccountId={activeAccountId}
           onBack={() => setView('menu')}
-          onAddAccount={() => onAddAccount?.()}
+          onCreateSmartAccount={() => onAddAccount?.()}
+          onCreateMultisig={() => onCreateMultisig?.()}
           onSave={(accountId) => {
             onSelectAccount?.(accountId)
             setView('menu')
