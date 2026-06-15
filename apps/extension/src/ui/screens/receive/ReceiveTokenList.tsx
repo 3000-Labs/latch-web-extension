@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react'
 import type { SmartAccountBalanceRow } from '@latch/types'
-import { ReceiveTokenCard, type ReceiveToken } from './ReceiveTokenCard'
 
 import stellarIcon from 'url:../../../../assets/icons/stellar.png'
+
+import { tokenDisplayName } from '../../lib/sendAddress'
+import { ReceiveTokenCard, type ReceiveToken } from './ReceiveTokenCard'
 
 export function ReceiveTokenList({
   smartAccountAddress,
@@ -23,12 +25,11 @@ export function ReceiveTokenList({
     const wellKnownCodes = ['XLM', 'USDC', 'EURC']
 
     const wellKnownConfigs: Record<string, { name: string; defaultIcon: string | null }> = {
-      XLM: { name: 'Stellar', defaultIcon: stellarIcon },
+      XLM: { name: tokenDisplayName('XLM'), defaultIcon: stellarIcon },
       USDC: { name: 'USD Coin', defaultIcon: 'https://assets.coincap.io/assets/icons/usdc@2x.png' },
       EURC: { name: 'EURC', defaultIcon: 'https://assets.coincap.io/assets/icons/eurc@2x.png' },
     }
 
-    // 1. Process well-known assets (ensure they are always in the list)
     const list: ReceiveToken[] = wellKnownCodes.map((code) => {
       const config = wellKnownConfigs[code]
       const row = portfolioRows.find((r) => r.code.toUpperCase() === code)
@@ -43,13 +44,12 @@ export function ReceiveTokenList({
       }
     })
 
-    // 2. Append any extra assets from portfolioRows that are not well-known
     portfolioRows.forEach((row) => {
       const codeUpper = row.code.toUpperCase()
       if (!wellKnownCodes.includes(codeUpper)) {
         list.push({
           id: row.sacContractId || codeUpper.toLowerCase(),
-          name: row.code,
+          name: tokenDisplayName(row.code),
           symbol: row.code,
           balance: row.amount,
           address: smartAccountAddress,
@@ -70,23 +70,25 @@ export function ReceiveTokenList({
   }, [tokensList, search])
 
   if (portfolioLoading) {
-    return <div className="py-12 text-center text-sm font-bold text-muted">Loading balances...</div>
+    return <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">Loading balances…</div>
   }
 
   if (portfolioError) {
-    return <div className="py-12 text-center text-sm font-bold text-red-400">{portfolioError}</div>
+    return (
+      <div className="py-12 text-center text-sm tracking-[-0.28px] text-red-300">{portfolioError}</div>
+    )
   }
 
   if (filtered.length === 0) {
     return (
-      <div className="py-12 text-center text-sm font-bold text-muted">
-        No tokens match "{search}"
+      <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">
+        No tokens match &ldquo;{search}&rdquo;
       </div>
     )
   }
 
   return (
-    <div className="space-y-3 pb-6">
+    <div className="flex flex-col gap-2 pb-6">
       {filtered.map((token) => (
         <ReceiveTokenCard key={token.id} token={token} onSelect={() => onSelect(token)} />
       ))}

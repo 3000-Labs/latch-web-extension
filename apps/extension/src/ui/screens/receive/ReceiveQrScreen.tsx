@@ -1,4 +1,5 @@
 import React from 'react'
+
 import { ReceiveQrHeader } from './ReceiveQrHeader'
 import { ReceiveQrCodeCard } from './ReceiveQrCodeCard'
 import { ReceiveAddressCopyButton } from './ReceiveAddressCopyButton'
@@ -7,41 +8,31 @@ import type { ReceiveToken } from './ReceiveTokenCard'
 export function ReceiveQrScreen({
   token,
   onBack,
-  onSimulateReceive,
 }: {
   token: ReceiveToken
   onBack: () => void
-  onSimulateReceive: () => void
+  /** Dev-only: simulate an incoming transfer to preview the receipt screen. */
+  onSimulateReceive?: () => void
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col animate-screenIn pb-6 justify-between">
-      <div>
-        <ReceiveQrHeader tokenName={token.name} onBack={onBack} />
+    <div className="flex min-h-0 flex-1 flex-col gap-4 animate-screenIn">
+      <ReceiveQrHeader tokenName={token.name} onBack={onBack} />
 
-        <div className="flex flex-col items-center mt-4">
+      <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex flex-col items-center justify-center gap-5">
           <ReceiveQrCodeCard value={token.address} logoUrl={token.iconUrl} />
 
-          <h1 className="text-[26px] font-extrabold tracking-tight text-center text-fg mt-4">
-            Your {token.name} Address
-          </h1>
-
-          <p className="text-sm text-center text-muted mt-2 leading-relaxed max-w-[280px]">
-            Use this address to receive tokens <br />
-            on <span className="font-extrabold text-fg">{token.name}</span>.
-          </p>
-
-          {/* Dev Simulation Button */}
-          <button
-            type="button"
-            onClick={onSimulateReceive}
-            className="mt-6 rounded-full border border-border bg-surface/40 hover:bg-surface px-4 py-1.5 text-xs font-bold text-muted hover:text-fg transition-all active:scale-95"
-          >
-            Simulate Incoming Tx
-          </button>
+          <div className="flex w-full flex-col items-center gap-2 text-center">
+            <h1 className="text-[26px] font-medium leading-[1.32] tracking-[-0.52px] text-[#fcfcfc]">
+              Your {token.name} Address
+            </h1>
+            <p className="max-w-[289px] text-lg font-normal leading-[1.36] tracking-[-0.36px] text-[#b3b3b3]">
+              Use this address to receive tokens on{' '}
+              <span className="font-bold text-[#fcfcfc]">{token.name}</span>.
+            </p>
+          </div>
         </div>
-      </div>
 
-      <div className="shrink-0 mt-8">
         <ReceiveAddressCopyButton address={token.address} />
       </div>
     </div>
