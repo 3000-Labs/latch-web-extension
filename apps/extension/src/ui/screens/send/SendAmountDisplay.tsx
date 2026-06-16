@@ -1,7 +1,12 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 
 import { cryptoToFiat, fiatToCrypto } from '../../lib/sendAmount'
 import type { SendInputMode } from '../../types/send'
+
+function AmountCaret({ visible }: { visible: boolean }) {
+  if (!visible) return null
+  return <span aria-hidden className="h-[57px] w-0.5 shrink-0 rounded-[2px] bg-primary" />
+}
 
 export function SendAmountDisplay({
   amount,
@@ -19,38 +24,52 @@ export function SendAmountDisplay({
   onToggleMode: () => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const displayAmount = amount || '0'
-  const secondaryCrypto =
-    inputMode === 'fiat' ? (fiatToCrypto(amount, priceUsd) ?? '0') : amount || '0'
-  const secondaryFiat =
-    inputMode === 'crypto' ? (cryptoToFiat(amount || '0', priceUsd) ?? '0.00') : null
+  const [focused, setFocused] = useState(false)
+  const isEmpty = amount.length === 0
+
+  const secondaryLabel =
+    inputMode === 'fiat'
+      ? `${fiatToCrypto(amount, priceUsd) ?? '0'} ${symbol}`
+      : `$${cryptoToFiat(amount || '0', priceUsd) ?? '0.00'}`
 
   const handleChange = (raw: string) => {
     const cleaned = raw.replace(/[^\d.]/g, '')
     onAmountChange(cleaned)
   }
 
+  const focusInput = () => {
+    inputRef.current?.focus()
+  }
+
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-2">
+    <div className="flex w-full flex-col items-center gap-2">
       <div
-        className="flex cursor-text flex-wrap items-baseline justify-center"
-        onClick={() => inputRef.current?.focus()}
+        className="flex h-[86px] cursor-text items-center justify-center gap-0.5"
+        onClick={focusInput}
         role="presentation"
       >
         {inputMode === 'fiat' ? (
           <>
-            <span className="text-[56px] font-bold leading-none text-white mr-2">$</span>
+            <span className="text-[48px] font-semibold leading-[1.28] tracking-[-1.44px] text-[#fcfcfc]">
+              $
+            </span>
             <input
               ref={inputRef}
               type="text"
               inputMode="decimal"
               value={amount}
               onChange={(e) => handleChange(e.target.value)}
-              placeholder="0.00"
-              className="min-w-[1ch] max-w-[240px] bg-transparent text-[56px] font-bold leading-none text-white outline-none caret-[#FFAD00] placeholder:text-[#8E8E93]"
-              style={{ width: `${Math.max(1, displayAmount.length)}ch` }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder="0"
+              className={[
+                'min-w-[1ch] max-w-[220px] bg-transparent text-[48px] font-semibold leading-[1.28] tracking-[-1.44px] outline-none caret-transparent placeholder:text-[#8a8a8a]',
+                isEmpty ? 'text-[#8a8a8a]' : 'text-[#fcfcfc]',
+              ].join(' ')}
+              style={{ width: `${Math.max(1, (amount || '0').length)}ch` }}
               aria-label="Amount in dollars"
             />
+            <AmountCaret visible={focused} />
           </>
         ) : (
           <>
@@ -60,24 +79,30 @@ export function SendAmountDisplay({
               inputMode="decimal"
               value={amount}
               onChange={(e) => handleChange(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
               placeholder="0"
               className={[
-                'min-w-[1ch] max-w-[240px] bg-transparent text-[56px] font-bold leading-none outline-none caret-[#FFAD00] placeholder:text-[#8E8E93]',
-                !amount ? 'text-[#8E8E93]' : 'text-white',
+                'min-w-[1ch] max-w-[220px] bg-transparent text-[56px] font-bold leading-[1.2] tracking-[-1.68px] outline-none caret-transparent placeholder:text-[#8a8a8a]',
+                isEmpty ? 'text-[#8a8a8a]' : 'text-[#fcfcfc]',
               ].join(' ')}
-              style={{ width: `${Math.max(1, displayAmount.length)}ch` }}
+              style={{ width: `${Math.max(1, (amount || '0').length)}ch` }}
               aria-label={`Amount in ${symbol}`}
             />
-            <span className="text-[56px] font-bold leading-none text-white ml-3">{symbol}</span>
+            <AmountCaret visible={focused} />
+            <span className="text-[48px] font-semibold leading-[1.28] tracking-[-1.44px] text-[#fcfcfc]">
+              {symbol}
+            </span>
           </>
         )}
       </div>
+
       <button
         type="button"
         onClick={onToggleMode}
-        className="mt-6 text-[15px] text-[#8E8E93] hover:text-white transition-colors"
+        className="text-sm font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]"
       >
-        {inputMode === 'fiat' ? `${secondaryCrypto} ${symbol}` : `$${secondaryFiat ?? '0.00'}`}
+        {secondaryLabel}
       </button>
     </div>
   )

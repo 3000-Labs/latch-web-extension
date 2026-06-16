@@ -1,5 +1,6 @@
 import React from 'react'
-import { ChevronLeft } from 'lucide-react'
+
+import backIconUrl from 'url:../../../../assets/home/icon-back.svg'
 
 export function SendEnterAmountHeader({
   title,
@@ -13,21 +14,19 @@ export function SendEnterAmountHeader({
   onNext: () => void
 }) {
   return (
-    <div className="flex shrink-0 items-center justify-between">
-      <button
-        type="button"
-        onClick={onBack}
-        className="grid h-9 w-9 place-items-center text-white hover:text-white/80"
-        aria-label="Back"
-      >
-        <ChevronLeft className="h-[20px] w-[20px]" strokeWidth={2.5} aria-hidden />
+    <div className="grid h-[22px] shrink-0 grid-cols-[20px_1fr_auto] items-center gap-2">
+      <button type="button" onClick={onBack} className="size-5 shrink-0" aria-label="Back">
+        <img src={backIconUrl} alt="" className="size-5" aria-hidden />
       </button>
-      <div className="text-[17px] font-semibold text-white">{title}</div>
+      <p className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb]">{title}</p>
       <button
         type="button"
         disabled={!canContinue}
         onClick={onNext}
-        className="text-[15px] font-semibold text-[#8E8E93] disabled:opacity-50 enabled:text-[#8E8E93] enabled:hover:text-white"
+        className={[
+          'shrink-0 text-sm font-medium tracking-[-0.14px]',
+          canContinue ? 'text-primary' : 'text-[#b3b3b3]',
+        ].join(' ')}
       >
         Next
       </button>

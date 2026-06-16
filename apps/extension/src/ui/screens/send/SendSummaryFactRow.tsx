@@ -1,5 +1,6 @@
 import React from 'react'
-import { ChevronRight } from 'lucide-react'
+
+import chevronRightIconUrl from 'url:../../../../assets/home/icon-chevron-right.svg'
 
 export function SendSummaryFactRow({
   label,
@@ -11,12 +12,16 @@ export function SendSummaryFactRow({
   showChevron?: boolean
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-3">
-      <div className="text-sm font-bold text-muted">{label}</div>
+    <div className="flex w-full items-center justify-between gap-3">
+      <span className="shrink-0 text-xs font-normal leading-[1.34] tracking-[-0.24px] text-[#b3b3b3]">
+        {label}
+      </span>
       <div className="flex min-w-0 items-center gap-1 text-right">
-        <div className="text-sm font-extrabold text-fg">{value}</div>
+        <div className="min-w-0 text-xs font-medium leading-[1.3] tracking-[-0.12px] text-[#fcfcfc]">
+          {value}
+        </div>
         {showChevron ? (
-          <ChevronRight className="h-4 w-4 shrink-0 text-fg/60" strokeWidth={2} aria-hidden />
+          <img src={chevronRightIconUrl} alt="" className="size-4 shrink-0 opacity-60" aria-hidden />
         ) : null}
       </div>
     </div>

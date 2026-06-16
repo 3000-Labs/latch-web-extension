@@ -7,9 +7,7 @@ import { SendFailureMessage } from './SendFailureMessage'
 import { SendTryAgainButton } from './SendTryAgainButton'
 
 export function SendFailureScreen({
-  surface,
   draft,
-  errorDetail,
   priceUsd,
   onTryAgain,
 }: {
@@ -26,18 +24,18 @@ export function SendFailureScreen({
       : (fiatToCrypto(draft.amount, priceUsd) ?? draft.amount)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center">
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-        <SendFailureIllustration />
-        <SendFailureMessage
-          amount={cryptoAmount}
-          symbol={token.code}
-          recipientName={draft.recipientName}
-          recipientAddress={draft.recipientAddress}
-          errorDetail={errorDetail}
-        />
-      </div>
-      <div className={['w-full shrink-0', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
+    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
+      <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex w-full flex-col items-center gap-6">
+          <SendFailureIllustration />
+          <SendFailureMessage
+            amount={cryptoAmount}
+            symbol={token.code}
+            recipientName={draft.recipientName}
+            recipientAddress={draft.recipientAddress}
+          />
+        </div>
+
         <SendTryAgainButton onTryAgain={onTryAgain} />
       </div>
     </div>
