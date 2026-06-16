@@ -18,6 +18,7 @@ import signersIconUrl from 'url:../../../assets/home/settings-signers.svg'
 
 import { AccountInformationScreen } from './settings/AccountInformationScreen'
 import { AddressBookScreen } from './settings/AddressBookScreen'
+import { PermissionsFlow } from './settings/PermissionsFlow'
 import { ProfileCard } from './settings/ProfileCard'
 import { SettingItem } from './settings/SettingItem'
 import { SettingsSection } from './settings/SettingsSection'
@@ -26,7 +27,7 @@ import { ViewAccountsScreen, type ViewAccountItem } from './settings/ViewAccount
 
 const rowIconClass = 'h-5 w-5 object-contain'
 
-type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook'
+type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions'
 
 export function SettingsScreen({
   accountName,
@@ -72,6 +73,14 @@ export function SettingsScreen({
     return (
       <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
         <AddressBookScreen networkLabel={networkLabel} onBack={() => setView('menu')} />
+      </div>
+    )
+  }
+
+  if (view === 'permissions') {
+    return (
+      <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+        <PermissionsFlow onBackToSettings={() => setView('menu')} />
       </div>
     )
   }
@@ -182,6 +191,7 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={permissionsIconUrl} alt="" className={rowIconClass} />}
               label="Permissions"
+              onClick={() => setView('permissions')}
             />
           </SettingsSection>
 
