@@ -2213,6 +2213,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           setPage('main')
                           setRoute('createMultisig')
                         }}
+                        networkLabel={networkLabel}
                         onClose={() => setPage('main')}
                         onLogout={() =>
                           void logout().catch((e) =>

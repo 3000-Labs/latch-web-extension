@@ -75,5 +75,25 @@ export function useAddressBook() {
     await chrome.storage.local.set({ [STORAGE_KEY]: next })
   }, [])
 
-  return { entries, loaded, persist }
+  const reload = useCallback(async () => {
+    const res = await chrome.storage.local.get([STORAGE_KEY])
+    const raw = res[STORAGE_KEY]
+    if (Array.isArray(raw)) {
+      setEntries(
+        raw.filter(
+          (e): e is AddressBookEntry =>
+            typeof e === 'object' &&
+            e != null &&
+            typeof (e as AddressBookEntry).id === 'string' &&
+            typeof (e as AddressBookEntry).name === 'string' &&
+            typeof (e as AddressBookEntry).address === 'string'
+        )
+      )
+    } else {
+      setEntries([])
+    }
+    setLoaded(true)
+  }, [])
+
+  return { entries, loaded, persist, reload }
 }

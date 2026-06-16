@@ -17,6 +17,7 @@ import recoveryPhraseIconUrl from 'url:../../../assets/home/settings-recovery-ph
 import signersIconUrl from 'url:../../../assets/home/settings-signers.svg'
 
 import { AccountInformationScreen } from './settings/AccountInformationScreen'
+import { AddressBookScreen } from './settings/AddressBookScreen'
 import { ProfileCard } from './settings/ProfileCard'
 import { SettingItem } from './settings/SettingItem'
 import { SettingsSection } from './settings/SettingsSection'
@@ -25,7 +26,7 @@ import { ViewAccountsScreen, type ViewAccountItem } from './settings/ViewAccount
 
 const rowIconClass = 'h-5 w-5 object-contain'
 
-type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts'
+type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook'
 
 export function SettingsScreen({
   accountName,
@@ -40,6 +41,7 @@ export function SettingsScreen({
   onSelectAccount,
   onAddAccount,
   onCreateMultisig,
+  networkLabel,
   onClose,
   onLogout,
 }: {
@@ -55,6 +57,7 @@ export function SettingsScreen({
   onSelectAccount?: (accountId: string) => void
   onAddAccount?: () => void
   onCreateMultisig?: () => void
+  networkLabel: string
   onClose: () => void
   onLogout: () => void
 }) {
@@ -63,6 +66,14 @@ export function SettingsScreen({
   const handleClose = () => {
     setView('menu')
     onClose()
+  }
+
+  if (view === 'addressBook') {
+    return (
+      <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+        <AddressBookScreen networkLabel={networkLabel} onBack={() => setView('menu')} />
+      </div>
+    )
   }
 
   if (view === 'viewAccounts') {
@@ -135,6 +146,7 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={addressBookIconUrl} alt="" className={rowIconClass} />}
               label="Address Book"
+              onClick={() => setView('addressBook')}
             />
             <SettingItem
               icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
