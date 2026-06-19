@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { Plus } from 'lucide-react'
 
 import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
 import userAvatarUrl from 'url:../../../../assets/icons/user.png'
 
 import { AccountRadio } from './AccountRadio'
+import { AddAccountFlow } from './add-account/AddAccountFlow'
 import { AddAccountModal } from './AddAccountModal'
 import { SettingsScreenHeader } from './SettingsScreenHeader'
 
@@ -31,10 +32,10 @@ function AccountListRow({
   onSelect: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const disabled = !address || address === '—'
 
-  useEffect(() => {
+  React.useEffect(() => {
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
@@ -87,23 +88,37 @@ function AccountListRow({
 }
 
 export function ViewAccountsScreen({
+  surface,
   accounts,
   activeAccountId,
   onBack,
-  onCreateSmartAccount,
-  onCreateMultisig,
   onSave,
+  onAccountsChanged,
+  onCreateMultisig,
 }: {
+  surface: 'popup' | 'sidepanel'
   accounts: ViewAccountItem[]
   activeAccountId?: string
   onBack: () => void
-  onCreateSmartAccount: () => void
-  onCreateMultisig: () => void
   onSave: (accountId: string) => void
+  onAccountsChanged: () => void
+  onCreateMultisig: () => void
 }) {
   const [selectedAccountId, setSelectedAccountId] = useState(activeAccountId ?? accounts[0]?.id ?? '')
-  const [addAccountOpen, setAddAccountOpen] = useState(false)
+  const [addAccountModalOpen, setAddAccountModalOpen] = useState(false)
+  const [addAccountFlowOpen, setAddAccountFlowOpen] = useState(false)
   const canSave = selectedAccountId !== activeAccountId && selectedAccountId.length > 0
+
+  if (addAccountFlowOpen) {
+    return (
+      <AddAccountFlow
+        surface={surface}
+        onBack={() => setAddAccountFlowOpen(false)}
+        onComplete={() => setAddAccountFlowOpen(false)}
+        onAccountsChanged={onAccountsChanged}
+      />
+    )
+  }
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col gap-4">
@@ -113,7 +128,7 @@ export function ViewAccountsScreen({
         rightAction={
           <button
             type="button"
-            onClick={() => setAddAccountOpen(true)}
+            onClick={() => setAddAccountModalOpen(true)}
             className="flex size-5 shrink-0 items-center justify-center"
             aria-label="Add account"
           >
@@ -155,14 +170,14 @@ export function ViewAccountsScreen({
       </div>
 
       <AddAccountModal
-        isOpen={addAccountOpen}
-        onClose={() => setAddAccountOpen(false)}
+        isOpen={addAccountModalOpen}
+        onClose={() => setAddAccountModalOpen(false)}
         onSelectSmartAccount={() => {
-          setAddAccountOpen(false)
-          onCreateSmartAccount()
+          setAddAccountModalOpen(false)
+          setAddAccountFlowOpen(true)
         }}
         onSelectMultisig={() => {
-          setAddAccountOpen(false)
+          setAddAccountModalOpen(false)
           onCreateMultisig()
         }}
       />

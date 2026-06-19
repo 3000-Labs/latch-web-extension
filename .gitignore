@@ -20,3 +20,6 @@ account-migration-discussion1.md
 account-migration-discussion2.md
 gaddress-to-smart-account-migration-flow.md
 send-token-docs.md
+
+LATCH_API_EXTERNAL_SIGN_SPEC.md
+V0_LATCH_STELLAR_SIGN_DEMO_APP_SPEC.md

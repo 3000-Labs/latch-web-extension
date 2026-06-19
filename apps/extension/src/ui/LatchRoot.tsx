@@ -2167,6 +2167,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                       ].join(' ')}
                     >
                       <SettingsScreen
+                        surface={surface}
                         accountName={activeAccountLabel}
                         accountAddress={activeAccount?.smartAccountAddress ?? '—'}
                         accounts={accounts.map((account, index) => ({
@@ -2205,9 +2206,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                             .then(() => refreshAccounts())
                             .catch(() => {})
                         }}
-                        onAddAccount={() => {
-                          setPage('main')
-                          setRoute('addAccount')
+                        onAccountsChanged={() => {
+                          void refreshAccounts().catch(() => {})
                         }}
                         onCreateMultisig={() => {
                           setPage('main')

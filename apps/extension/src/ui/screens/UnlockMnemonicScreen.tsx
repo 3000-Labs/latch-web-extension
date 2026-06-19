@@ -1,6 +1,12 @@
 import React from 'react'
 
-import logoUrl from 'url:../../../assets/brand/latch-logo.svg'
+import lockIconUrl from 'url:../../../assets/onboarding/web/icon-lock.svg'
+
+import {
+  OnboardingPrimaryButton,
+  OnboardingSecondaryButton,
+} from '../onboarding/components/OnboardingCardButtons'
+import { OnboardingSmallEmblem } from '../onboarding/components/OnboardingSmallEmblem'
 
 export function UnlockMnemonicScreen({
   password,
@@ -18,40 +24,57 @@ export function UnlockMnemonicScreen({
   const canUnlock = password.length >= 8 && !busy
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="text-center">
-        <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-        <h2 className="mt-5 text-center text-[22px] font-bold leading-tight tracking-tight text-fg">
-          Unlock wallet
-        </h2>
-        <p className="mt-2 text-center text-sm font-medium text-muted">
-          Enter the password you chose when securing your recovery phrase on this device.
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
+      <div className="flex w-full shrink-0 flex-col items-center gap-2">
+        <OnboardingSmallEmblem />
+        <div className="flex w-full flex-col gap-2 text-center">
+          <h1 className="text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
+            Welcome Back
+          </h1>
+          <div className="text-[18px] font-normal leading-[1.36] tracking-[-0.36px] text-[#b3b3b3]">
+            <p>Your password will not gain access </p>
+            <p>to your account </p>
+          </div>
+        </div>
       </div>
 
-      <label className="mt-6 block text-xs font-bold text-muted">Password</label>
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => onPasswordChange(e.target.value)}
-        autoComplete="current-password"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && canUnlock) onUnlock()
-        }}
-        className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm text-fg shadow-inner outline-none focus:border-primary"
-      />
+      <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex w-full flex-col gap-1">
+          <label
+            htmlFor="unlock-wallet-password"
+            className="text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]"
+          >
+            Password
+          </label>
+          <div className="flex h-[52px] items-center justify-between rounded-[12px] border border-[#383838] px-3">
+            <input
+              id="unlock-wallet-password"
+              type="password"
+              value={password}
+              onChange={(e) => onPasswordChange(e.target.value)}
+              autoComplete="current-password"
+              placeholder="Enter password"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && canUnlock) onUnlock()
+              }}
+              className="min-w-0 flex-1 bg-transparent text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#fcfcfc] outline-none placeholder:text-[#b3b3b3]"
+            />
+            <img src={lockIconUrl} alt="" className="size-5 shrink-0" draggable={false} />
+          </div>
+          {error ? (
+            <p className="mt-2 text-center text-[14px] leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">
+              {error}
+            </p>
+          ) : null}
+        </div>
 
-      {error ? <p className="mt-3 text-center text-xs font-bold text-red-300">{error}</p> : null}
-
-      <div className="mt-auto space-y-3 pt-6">
-        <button
-          type="button"
-          disabled={!canUnlock}
-          onClick={onUnlock}
-          className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? 'Unlocking…' : 'Unlock'}
-        </button>
+        {canUnlock ? (
+          <OnboardingPrimaryButton onClick={onUnlock}>
+            {busy ? 'Logging in…' : 'Log In'}
+          </OnboardingPrimaryButton>
+        ) : (
+          <OnboardingSecondaryButton disabled>{busy ? 'Logging in…' : 'Log In'}</OnboardingSecondaryButton>
+        )}
       </div>
     </div>
   )

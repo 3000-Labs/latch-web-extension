@@ -30,6 +30,7 @@ const rowIconClass = 'h-5 w-5 object-contain'
 type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions'
 
 export function SettingsScreen({
+  surface,
   accountName,
   accountAddress,
   accounts,
@@ -40,12 +41,13 @@ export function SettingsScreen({
   onChangeSidePanelEnabled,
   onSaveAccountName,
   onSelectAccount,
-  onAddAccount,
+  onAccountsChanged,
   onCreateMultisig,
   networkLabel,
   onClose,
   onLogout,
 }: {
+  surface: 'popup' | 'sidepanel'
   accountName: string
   accountAddress: string
   accounts: ViewAccountItem[]
@@ -56,7 +58,7 @@ export function SettingsScreen({
   onChangeSidePanelEnabled?: (next: boolean) => void
   onSaveAccountName?: (walletName: string) => void
   onSelectAccount?: (accountId: string) => void
-  onAddAccount?: () => void
+  onAccountsChanged?: () => void
   onCreateMultisig?: () => void
   networkLabel: string
   onClose: () => void
@@ -89,10 +91,11 @@ export function SettingsScreen({
     return (
       <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
         <ViewAccountsScreen
+          surface={surface}
           accounts={accounts}
           activeAccountId={activeAccountId}
           onBack={() => setView('menu')}
-          onCreateSmartAccount={() => onAddAccount?.()}
+          onAccountsChanged={() => onAccountsChanged?.()}
           onCreateMultisig={() => onCreateMultisig?.()}
           onSave={(accountId) => {
             onSelectAccount?.(accountId)

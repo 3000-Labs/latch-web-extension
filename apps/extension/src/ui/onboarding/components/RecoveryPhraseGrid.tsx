@@ -6,10 +6,12 @@ export function RecoveryPhraseGrid({
   words,
   onWordChange,
   onPasteWords,
+  cellClassName = 'bg-[#201f1e]',
 }: {
   words: string[]
   onWordChange: (index: number, value: string) => void
   onPasteWords: (text: string, startIndex: number) => void
+  cellClassName?: string
 }) {
   const rows = Array.from({ length: 4 }, (_, row) => row * 3)
 
@@ -33,7 +35,9 @@ export function RecoveryPhraseGrid({
             return (
               <div
                 key={index}
-                className="flex h-[52px] min-w-0 flex-1 items-center rounded-[14px] bg-[#201f1e] p-3"
+                className={['flex h-[52px] min-w-0 flex-1 items-center rounded-[14px] p-3', cellClassName].join(
+                  ' '
+                )}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-[9px]">
                   <span className="shrink-0 text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">
