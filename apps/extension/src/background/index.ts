@@ -58,6 +58,7 @@ import {
   createOrConnectPasskey,
   createOrConnectPhantom,
   ensureFreighterSmartAccountDeployed,
+  getBackendAccounts,
   passkeyAuthenticationBegin,
   passkeyAuthenticationFinish,
   passkeyRegistrationBegin,
@@ -99,6 +100,7 @@ import {
   renameAccount,
   setActiveAccount,
   setDappPermissions,
+  storageKeys,
 } from './storage'
 
 const STORAGE_KEYS = {
@@ -128,6 +130,52 @@ async function setSetupState(req: SetSetupStateRequest): Promise<void> {
   })
 }
 
+const ONBOARDING_TAB_PATH = 'tabs/onboarding.html'
+const ACCOUNTS_STORAGE_KEY = storageKeys().accounts
+
+/**
+ * Stored accounts are the source of truth for whether onboarding should show.
+ * `latch.setupState` can be missing on older installs or after partial logout flows.
+ */
+async function ensureSetupStateMatchesAccounts(): Promise<void> {
+  const { accounts, activeAccountId } = await getAccounts()
+  if (accounts.length === 0) return
+
+  const { setupState } = await getSetupState()
+  if (setupState === 'has_account') return
+
+  const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+  const accountPublicKey =
+    active?.smartAccountAddress?.trim() || active?.gAddress?.trim() || undefined
+
+  await setSetupState({ setupState: 'has_account', accountPublicKey })
+}
+
+async function needsOnboardingFlow(): Promise<boolean> {
+  const { accounts } = await getAccounts()
+  return accounts.length === 0
+}
+
+async function openOnboardingTab(): Promise<void> {
+  const url = chrome.runtime.getURL(ONBOARDING_TAB_PATH)
+
+  try {
+    const existing = await chrome.tabs.query({ url: `${url}*` })
+    const tab = existing.find((t) => t.url?.startsWith(url))
+    if (tab?.id !== undefined) {
+      await chrome.tabs.update(tab.id, { active: true })
+      if (tab.windowId !== undefined) {
+        await chrome.windows.update(tab.windowId, { focused: true })
+      }
+      return
+    }
+  } catch (err) {
+    console.warn('[latch:background] openOnboardingTab query failed; creating tab', err)
+  }
+
+  await chrome.tabs.create({ url })
+}
+
 async function applyUiSurfacePreference(pref: UiSurfacePreference) {
   // Side panel API is Chrome-only; Plasmo will map to Firefox sidebar_action where relevant,
   // but we still need to guard the runtime API surface.
@@ -155,7 +203,57 @@ async function applyUiSurfacePreference(pref: UiSurfacePreference) {
   }
 }
 
-async function initUiSurfacePreference() {
+function handleOnboardingActionClick(): void {
+  void (async () => {
+    if (await needsOnboardingFlow()) {
+      await openOnboardingTab()
+    }
+  })()
+}
+
+let onboardingActionClickListening = false
+
+/**
+ * Chrome toggles the side panel from the toolbar when `openPanelOnActionClick` is true.
+ * A registered `action.onClicked` listener prevents that native toggle, so only attach
+ * it while onboarding (no accounts) still needs the full-screen tab flow.
+ */
+function syncOnboardingActionClickListener(needsOnboarding: boolean): void {
+  if (needsOnboarding && !onboardingActionClickListening) {
+    chrome.action.onClicked.addListener(handleOnboardingActionClick)
+    onboardingActionClickListening = true
+    return
+  }
+  if (!needsOnboarding && onboardingActionClickListening) {
+    chrome.action.onClicked.removeListener(handleOnboardingActionClick)
+    onboardingActionClickListening = false
+  }
+}
+
+/** Popup / side panel when set up; full-screen onboarding tab before `has_account`. */
+async function applyActionClickBehavior(): Promise<void> {
+  try {
+    const needsOnboarding = await needsOnboardingFlow()
+    syncOnboardingActionClickListener(needsOnboarding)
+
+    if (needsOnboarding) {
+      await chrome.action.setPopup({ popup: '' })
+      if ('sidePanel' in chrome) {
+        await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false })
+      }
+      return
+    }
+
+    const res = await chrome.storage.local.get([STORAGE_KEYS.uiSurface])
+    const pref: UiSurfacePreference =
+      res[STORAGE_KEYS.uiSurface] === 'sidepanel' ? 'sidepanel' : 'popup'
+    await applyUiSurfacePreference(pref)
+  } catch (err) {
+    console.error('[latch:background] applyActionClickBehavior failed', err)
+  }
+}
+
+async function initExtensionActionBehavior() {
   const res = await chrome.storage.local.get([STORAGE_KEYS.uiSurface])
   const v = res[STORAGE_KEYS.uiSurface]
 
@@ -163,11 +261,10 @@ async function initUiSurfacePreference() {
     await chrome.storage.local.set({
       [STORAGE_KEYS.uiSurface]: 'popup' satisfies UiSurfacePreference,
     })
-    await applyUiSurfacePreference('popup')
-    return
   }
 
-  await applyUiSurfacePreference(v)
+  await ensureSetupStateMatchesAccounts()
+  await applyActionClickBehavior()
 }
 
 chrome.runtime.onInstalled.addListener((details) => {
@@ -176,25 +273,30 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install' || details.reason === 'update') {
     void chrome.storage.local
       .set({ [STORAGE_KEYS.uiSurface]: 'popup' satisfies UiSurfacePreference })
-      .then(() => applyUiSurfacePreference('popup'))
+      .then(async () => {
+        await ensureSetupStateMatchesAccounts()
+        await applyActionClickBehavior()
+      })
     return
   }
 
-  void initUiSurfacePreference()
+  void initExtensionActionBehavior()
 })
 
 chrome.runtime.onStartup.addListener(() => {
-  void initUiSurfacePreference()
+  void initExtensionActionBehavior()
   void migrateLegacyPublicKeyIfNeeded()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return
-  const change = changes[STORAGE_KEYS.uiSurface]
-  if (!change) return
-  const next = change.newValue
-  const pref: UiSurfacePreference = next === 'sidepanel' ? 'sidepanel' : 'popup'
-  void applyUiSurfacePreference(pref)
+  if (
+    changes[STORAGE_KEYS.uiSurface] ||
+    changes[STORAGE_KEYS.setupState] ||
+    changes[ACCOUNTS_STORAGE_KEY]
+  ) {
+    void ensureSetupStateMatchesAccounts().then(() => applyActionClickBehavior())
+  }
 })
 
 function ok<T>(data?: T): BackgroundResponse<T> {
@@ -367,6 +469,12 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
           passkeyKeyDataHex: data.keyDataHex,
         })
         sendResponse(ok({ ...data, account }))
+        return
+      }
+
+      case 'GET_BACKEND_ACCOUNTS': {
+        const data = await getBackendAccounts()
+        sendResponse(ok(data))
         return
       }
 
@@ -679,6 +787,16 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         })
       }
 
+      case 'OPEN_WALLET_AFTER_ONBOARDING': {
+        await chrome.storage.local.set({
+          [STORAGE_KEYS.uiSurface]: 'sidepanel' satisfies UiSurfacePreference,
+        })
+        await ensureSetupStateMatchesAccounts()
+        await applyActionClickBehavior()
+        sendResponse(ok())
+        return
+      }
+
       default: {
         console.log('[latch:background] message received', message)
         sendResponse(ok())
@@ -691,5 +809,7 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
   return true // keep channel open for async responses
 })
+
+void initExtensionActionBehavior()
 
 export {}

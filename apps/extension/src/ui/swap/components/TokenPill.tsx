@@ -17,7 +17,8 @@ export function TokenPill({ token, onClick }: { token: SwapTokenVm; onClick?: ()
       ? usdtIconUrl
       : token.iconUrl
 
-  const subtitle = token.name === 'Stellar' ? 'Stellar USDT' : 'Tether USDT'
+  const subtitle =
+    token.name === 'Tether' || token.symbol.toUpperCase() === 'USDT' ? 'Tether USDT' : token.name
 
   return (
     <button
@@ -38,16 +39,16 @@ export function TokenPill({ token, onClick }: { token: SwapTokenVm; onClick?: ()
         )}
       </div>
       <div className="flex flex-col">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[17px] font-extrabold text-white leading-none tracking-tight">
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <span className="shrink-0 text-[17px] font-extrabold leading-none tracking-tight text-white">
             {token.name}
           </span>
           <ChevronDown
-            className="h-4.5 w-4.5 text-[#8E8E93] leading-none transition-transform group-hover:translate-y-0.5"
+            className="h-4.5 w-4.5 shrink-0 text-[#8E8E93] leading-none transition-transform group-hover:translate-y-0.5"
             strokeWidth={2.5}
           />
         </div>
-        <span className="text-[13px] font-semibold text-[#8E8E93] mt-1.5 leading-none">
+        <span className="mt-1.5 whitespace-nowrap text-[13px] font-semibold leading-none text-[#8E8E93]">
           {subtitle}
         </span>
       </div>

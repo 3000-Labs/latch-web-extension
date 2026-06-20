@@ -1,6 +1,9 @@
-import React from 'react'
-import { QrCode } from 'lucide-react'
-import { CopyAddressButton } from '../../components/CopyAddressButton'
+import React, { useEffect, useRef, useState } from 'react'
+
+import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
+import qrIconUrl from 'url:../../../../assets/receive/icon-qr.svg'
+
+import { TokenAvatar } from '../../components/TokenAvatar'
 import { formatDisplayAmount2dp } from '../../lib/formatDisplay'
 
 export interface ReceiveToken {
@@ -19,46 +22,68 @@ export function ReceiveTokenCard({
   token: ReceiveToken
   onSelect: () => void
 }) {
+  const [copied, setCopied] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const disabled = !token.address || token.address === '—'
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
+
   return (
-    <div
-      onClick={onSelect}
-      className="flex w-full items-center justify-between rounded-2xl border border-border/40 bg-surface/40 px-4 py-4 text-left hover:bg-surface/60 cursor-pointer transition-all"
-    >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-black flex items-center justify-center p-1 border border-border/30">
-          {token.iconUrl ? (
-            <img src={token.iconUrl} alt={token.name} className="h-full w-full object-contain" />
-          ) : (
-            <div className="text-xs font-extrabold text-primary select-none">
-              {token.symbol.slice(0, 3)}
-            </div>
-          )}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm font-extrabold text-fg">{token.name}</div>
-          <div className="mt-0.5 text-xs font-semibold text-muted tracking-wider">
-            BALANCE{' '}
-            <span className="text-fg">
+    <div className="flex w-full items-center gap-2 rounded-[14px] bg-[#2a2928] p-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <TokenAvatar
+          symbol={token.symbol}
+          iconUrl={token.iconUrl}
+          className="size-8 border-0 bg-[#1e1e1e] p-1"
+          rounded="rounded-lg"
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <p className="truncate text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">
+            {token.name}
+          </p>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="shrink-0 font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">
+              BALANCE
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium leading-[1.3] tracking-[-0.14px] text-[#fbfbfb]">
               {formatDisplayAmount2dp(token.balance)} {token.symbol}
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 shrink-0" onClick={(e) => e.stopPropagation()}>
-        <button
-          type="button"
-          onClick={onSelect}
-          className="text-muted hover:text-fg transition-colors"
-          aria-label="View QR"
-        >
-          <QrCode className="h-[18px] w-[18px]" strokeWidth={2} />
-        </button>
-        <CopyAddressButton
-          address={token.address}
-          className="text-muted hover:text-fg transition-colors"
-        />
-      </div>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="size-5 shrink-0"
+        aria-label={`Show ${token.name} receive QR code`}
+      >
+        <img src={qrIconUrl} alt="" className="size-5" aria-hidden />
+      </button>
+
+      <button
+        type="button"
+        disabled={disabled}
+        className="size-5 shrink-0 disabled:opacity-30"
+        aria-label={copied ? 'Copied' : 'Copy address'}
+        onClick={() => {
+          if (disabled) return
+          void navigator.clipboard.writeText(token.address).then(() => {
+            setCopied(true)
+            if (timeoutRef.current) clearTimeout(timeoutRef.current)
+            timeoutRef.current = setTimeout(() => {
+              setCopied(false)
+              timeoutRef.current = null
+            }, 2000)
+          })
+        }}
+      >
+        <img src={copyIconUrl} alt="" className="size-5" aria-hidden />
+      </button>
     </div>
   )
 }

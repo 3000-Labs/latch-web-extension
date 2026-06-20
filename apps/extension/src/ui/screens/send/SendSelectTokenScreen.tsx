@@ -22,12 +22,10 @@ export function SendSelectTokenScreen({
   const [search, setSearch] = useState('')
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 animate-screenIn">
       <SendSelectTokenHeader onBack={onBack} />
-      <div className="mt-4 shrink-0">
-        <SendSelectTokenSearchRow value={search} onChange={setSearch} />
-      </div>
-      <div className="mt-4 min-h-0 flex-1 overflow-auto">
+      <SendSelectTokenSearchRow value={search} onChange={setSearch} />
+      <div className="min-h-0 flex-1 overflow-auto">
         <SendTokenList
           tokens={tokens}
           search={search}

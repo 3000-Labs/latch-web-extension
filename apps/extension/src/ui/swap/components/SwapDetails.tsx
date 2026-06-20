@@ -1,58 +1,82 @@
 import React from 'react'
-import { ChevronRight, RefreshCw } from 'lucide-react'
-import type { SwapQuoteVm } from '../swapVm'
-import { KeyValueRow } from './KeyValueRow'
+
+import chevronRightIconUrl from 'url:../../../../assets/home/icon-chevron-right.svg'
+import swapIconUrl from 'url:../../../../assets/home/icon-swap-action.svg'
 import liquidMeshLogo from 'url:../../../../assets/brand/LiquidMesh.png'
+import type { SwapQuoteVm } from '../swapVm'
+
+function DetailLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-normal tracking-[-0.24px] text-[#b3b3b3]">{children}</span>
+  )
+}
+
+function DetailValue({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-xs font-medium tracking-[-0.12px] text-[#fcfcfc]">{children}</span>
+  )
+}
+
+function RecommendPill() {
+  return (
+    <span className="flex h-6 items-center justify-center rounded-lg bg-[rgba(255,173,0,0.08)] px-2 py-1 text-xs font-medium tracking-[-0.12px] text-primary">
+      Recommend
+    </span>
+  )
+}
 
 export function SwapDetails({ quote }: { quote: SwapQuoteVm }) {
   return (
-    <div className="space-y-4 px-1">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted font-semibold">Route</span>
+    <div className="flex w-full flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <DetailLabel>Route</DetailLabel>
         <button
           type="button"
-          className="flex items-center gap-2 font-extrabold text-fg hover:opacity-80 transition-opacity focus:outline-none"
+          className="flex items-center gap-1 transition-opacity hover:opacity-80"
         >
-          <img
-            src={liquidMeshLogo}
-            className="h-3.5 w-3.5 shrink-0 rounded object-contain"
-            alt=""
-          />
-          <span>{quote.provider}</span>
-          <span className="rounded-[4px] bg-primary px-1.5 py-0.5 text-[10px] font-extrabold text-black">
-            recommend
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2.5} />
-        </button>
-      </div>
-
-      <KeyValueRow
-        label="Rate"
-        value={
-          <div className="flex items-center gap-1.5">
-            <span>{quote.rateLine}</span>
-            <RefreshCw
-              className="h-3.5 w-3.5 text-muted cursor-pointer hover:text-fg transition-colors"
-              strokeWidth={2.5}
+          <span className="flex items-center gap-1.5">
+            <img
+              src={liquidMeshLogo}
+              alt=""
+              className="h-6 w-[25px] shrink-0 rounded object-cover"
             />
-          </div>
-        }
-      />
-
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted font-semibold">Slippage</span>
-        <button
-          type="button"
-          className="flex items-center gap-1 font-extrabold text-fg hover:opacity-80 transition-opacity focus:outline-none"
-        >
-          <span>{quote.slippageLine}</span>
-          <ChevronRight className="h-4 w-4 text-muted" strokeWidth={2.5} />
+            <DetailValue>{quote.provider}</DetailValue>
+          </span>
+          <RecommendPill />
+          <img src={chevronRightIconUrl} alt="" className="size-4 shrink-0" aria-hidden />
         </button>
       </div>
 
-      <KeyValueRow label="Min. received" value={quote.minReceivedLine} />
+      <div className="flex items-center justify-between">
+        <DetailLabel>Rate</DetailLabel>
+        <div className="flex items-center gap-1">
+          <DetailValue>{quote.rateLine}</DetailValue>
+          <button type="button" className="shrink-0 transition-opacity hover:opacity-80">
+            <img src={swapIconUrl} alt="" className="size-4" aria-hidden />
+          </button>
+        </div>
+      </div>
 
-      <KeyValueRow label="Network fee" value={quote.networkFeeLine} />
+      <div className="flex items-center justify-between">
+        <DetailLabel>Slippage</DetailLabel>
+        <button
+          type="button"
+          className="flex items-center gap-1 transition-opacity hover:opacity-80"
+        >
+          <DetailValue>{quote.slippageLine}</DetailValue>
+          <img src={chevronRightIconUrl} alt="" className="size-4 shrink-0" aria-hidden />
+        </button>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <DetailLabel>Min. Received</DetailLabel>
+        <DetailValue>{quote.minReceivedLine}</DetailValue>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <DetailLabel>Network Fee</DetailLabel>
+        <DetailValue>{quote.networkFeeLine}</DetailValue>
+      </div>
     </div>
   )
 }

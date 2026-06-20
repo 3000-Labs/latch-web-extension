@@ -6,12 +6,25 @@ export default {
   darkMode: ['class'],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          '"SF Pro Rounded"',
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'system-ui',
+          'sans-serif',
+        ],
+      },
       colors: {
         bg: 'rgb(var(--latch-bg) / <alpha-value>)',
         fg: 'rgb(var(--latch-fg) / <alpha-value>)',
         muted: 'rgb(var(--latch-muted) / <alpha-value>)',
         primary: 'rgb(var(--latch-primary) / <alpha-value>)',
         surface: 'rgb(var(--latch-surface) / <alpha-value>)',
+        'surface-2': 'rgb(var(--latch-surface-2) / <alpha-value>)',
+        card: 'rgb(var(--latch-card) / <alpha-value>)',
+        stroke: 'rgb(var(--latch-stroke) / <alpha-value>)',
+        overlay: 'rgb(var(--latch-overlay) / <alpha-value>)',
         border: 'rgb(var(--latch-border) / <alpha-value>)',
       },
       boxShadow: {

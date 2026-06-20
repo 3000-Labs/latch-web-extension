@@ -40,6 +40,9 @@ export function createChromeMock() {
       },
     },
     runtime: {
+      getURL(path: string) {
+        return `chrome-extension://test/${path}`
+      },
       async sendMessage(message: any) {
         const listener = onMessageListeners[onMessageListeners.length - 1]
         if (!listener) throw new Error('No chrome.runtime.onMessage listener registered')
@@ -60,14 +63,29 @@ export function createChromeMock() {
     action: {
       async setPopup() {},
       async openPopup() {},
+      onClicked: {
+        addListener() {},
+      },
+    },
+    tabs: {
+      async query() {
+        return []
+      },
+      async create() {
+        return { id: 1 }
+      },
+      async update() {},
     },
     windows: {
       async getLastFocused() {
         return { id: 1 }
       },
+      async update() {},
     },
     sidePanel: {
       async open() {},
+      async setOptions() {},
+      async setPanelBehavior() {},
     },
   }
 }

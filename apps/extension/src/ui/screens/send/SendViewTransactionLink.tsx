@@ -13,7 +13,7 @@ export function SendViewTransactionLink({ hash, onView }: { hash: string; onView
         onView?.()
         window.open(stellarExpertTxUrl(hash), '_blank', 'noopener,noreferrer')
       }}
-      className="mt-6 text-sm font-extrabold text-primary hover:underline"
+      className="text-[12px] font-normal leading-[1.34] tracking-[-0.24px] text-[#ffad00]"
     >
       View Transaction
     </button>

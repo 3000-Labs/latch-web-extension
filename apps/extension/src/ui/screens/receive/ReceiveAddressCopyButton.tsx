@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { Copy, Check } from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+
+import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
+
+import { truncateMiddle } from '../../lib/sendAddress'
 
 export function ReceiveAddressCopyButton({ address }: { address: string }) {
   const [copied, setCopied] = useState(false)
@@ -11,7 +14,7 @@ export function ReceiveAddressCopyButton({ address }: { address: string }) {
     }
   }, [])
 
-  const displayAddress = address ? `${address.slice(0, 9)}...${address.slice(-6)}` : ''
+  const displayAddress = address ? truncateMiddle(address, 9, 6) : ''
 
   const handleCopy = () => {
     if (!address) return
@@ -29,15 +32,20 @@ export function ReceiveAddressCopyButton({ address }: { address: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="w-full h-14 bg-primary text-black rounded-full font-bold flex items-center justify-center gap-2 hover:bg-primary/95 transition-all text-[15px] px-6 shadow-soft active:scale-[0.98]"
+      disabled={!address}
+      className="relative flex h-12 w-full shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[32px] border border-[#f0a300] px-5 py-3 text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#121212] shadow-[0px_12px_13.1px_-8px_rgba(246,139,7,0.1)] disabled:cursor-not-allowed disabled:opacity-50"
       aria-label={copied ? 'Address copied' : 'Copy address'}
     >
-      <span>{copied ? 'Address Copied!' : displayAddress}</span>
-      {copied ? (
-        <Check className="h-5 w-5 shrink-0" strokeWidth={2.5} />
-      ) : (
-        <Copy className="h-[18px] w-[18px] shrink-0" strokeWidth={2.5} />
-      )}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[32px] bg-[#ffad00]"
+      />
+      <span className="relative whitespace-nowrap">{displayAddress}</span>
+      <img src={copyIconUrl} alt="" className="relative h-4 w-4 shrink-0" aria-hidden />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[32px] shadow-[inset_0px_2px_4px_0px_rgba(255,255,255,0.26)]"
+      />
     </button>
   )
 }

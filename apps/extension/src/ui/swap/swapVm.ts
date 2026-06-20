@@ -21,6 +21,8 @@ export type SwapQuoteVm = {
   slippageLine: string
   minReceivedLine: string
   networkFeeLine: string
+  receiveAmount: number
+  receiveUsdApprox: string
   receiveAmountLine: string
   receiveUsdApproxLine: string
 }
@@ -75,10 +77,12 @@ export function mockQuote(
 
   return {
     provider: 'LiquidMesh',
-    rateLine: `1 ${payToken.symbol} > 0.00084221 ${receiveToken.symbol}`,
+    rateLine: `1 ${payToken.symbol} ≈ 0.00084221 ${receiveToken.symbol}`,
     slippageLine: `Auto | ${slippagePct}%`,
-    minReceivedLine: `${minReceived.toFixed(2)} ${receiveToken.symbol}`,
-    networkFeeLine: `~ ${feeXlm.toFixed(2)} Stellar`,
+    minReceivedLine: `${minReceived.toFixed(6)}  ${receiveToken.symbol}`,
+    networkFeeLine: `~ ${feeXlm.toFixed(5)} Stellar`,
+    receiveAmount: receive,
+    receiveUsdApprox: pay === 0 ? '≈--' : `≈$${receiveUsd.toFixed(5)}`,
     receiveAmountLine: pay === 0 ? '--' : `+${receive.toFixed(2)} ${receiveToken.symbol}`,
     receiveUsdApproxLine: pay === 0 ? '' : `≈ $${receiveUsd.toFixed(2)} (+0.25%)`,
   }

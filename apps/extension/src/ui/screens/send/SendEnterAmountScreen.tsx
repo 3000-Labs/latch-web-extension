@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 
 import {
+  cryptoToFiat,
   fiatToCrypto,
   hasValidDecimalPlaces,
   isAmountWithinBalance,
@@ -14,7 +15,6 @@ import { SendQuickAmountButtons } from './SendQuickAmountButtons'
 import { SendRecipientBar } from './SendRecipientBar'
 
 export function SendEnterAmountScreen({
-  surface,
   draft,
   priceUsd,
   onDraftChange,
@@ -52,35 +52,49 @@ export function SendEnterAmountScreen({
   }
 
   const toggleMode = () => {
-    const nextMode: SendInputMode = draft.inputMode === 'crypto' ? 'fiat' : 'crypto'
-    onDraftChange({ inputMode: nextMode, amount: '' })
+    if (draft.inputMode === 'crypto') {
+      const fiat = cryptoToFiat(draft.amount || '0', priceUsd)
+      onDraftChange({
+        inputMode: 'fiat',
+        amount: draft.amount && fiat ? fiat : '',
+      })
+    } else {
+      const crypto = fiatToCrypto(draft.amount || '0', priceUsd)
+      onDraftChange({
+        inputMode: 'crypto',
+        amount: draft.amount && crypto ? crypto : '',
+      })
+    }
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 animate-screenIn">
       <SendEnterAmountHeader
         title={`Select ${token.code}`}
         canContinue={canContinue}
         onBack={onBack}
         onNext={onNext}
       />
+
       <SendRecipientBar
         recipientName={draft.recipientName}
         recipientAddress={draft.recipientAddress}
         onEdit={onEditRecipient}
       />
-      <SendAmountDisplay
-        amount={draft.amount}
-        inputMode={draft.inputMode}
-        symbol={token.code}
-        priceUsd={priceUsd}
-        onAmountChange={(amount) => onDraftChange({ amount })}
-        onToggleMode={toggleMode}
-      />
-      <div
-        className={['mt-4 shrink-0 space-y-4', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}
-      >
-        <SendQuickAmountButtons onSelect={handlePresetUsd} />
+
+      <div className="flex min-h-0 flex-1 flex-col justify-between gap-6">
+        <div className="flex flex-col items-center gap-4">
+          <SendAmountDisplay
+            amount={draft.amount}
+            inputMode={draft.inputMode}
+            symbol={token.code}
+            priceUsd={priceUsd}
+            onAmountChange={(amount) => onDraftChange({ amount })}
+            onToggleMode={toggleMode}
+          />
+          <SendQuickAmountButtons onSelect={handlePresetUsd} />
+        </div>
+
         <SendAvailableBalanceRow balance={token.amount} symbol={token.code} onMax={handleMax} />
       </div>
     </div>

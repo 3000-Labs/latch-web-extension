@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 17.3333 16.5" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Group">
+<path id="Path" d="M15.75 11.5833V13.25C15.75 14.6307 14.6307 15.75 13.25 15.75H12.4167" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Path_2" d="M0.75 5.75V3.25C0.75 1.86929 1.86929 0.75 3.25 0.75H4.08333" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Path_3" d="M9.08333 15.75C9.08333 14.5994 8.15059 13.6667 7 13.6667H2.83333C1.68274 13.6667 0.75 14.5994 0.75 15.75" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle id="Oval" cx="4.91667" cy="9.5" r="2.08333" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Path_4" d="M7.41667 4.91667V2.41667C7.41667 1.49619 8.16286 0.75 9.08333 0.75H14.0833C15.0038 0.75 15.75 1.49619 15.75 2.41667V3.45833" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Path_5" d="M15.75 6.375V7.41667C15.75 8.33714 15.0038 9.08333 14.0833 9.08333H10.75" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path id="Path_6" fill-rule="evenodd" clip-rule="evenodd" d="M15.125 3.45833H16.1667C16.3968 3.45833 16.5833 3.64488 16.5833 3.875V5.95833C16.5833 6.18845 16.3968 6.375 16.1667 6.375H15.125C14.3196 6.375 13.6667 5.72208 13.6667 4.91667V4.91667C13.6667 4.11125 14.3196 3.45833 15.125 3.45833Z" stroke="var(--stroke-0, #CDCDCD)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

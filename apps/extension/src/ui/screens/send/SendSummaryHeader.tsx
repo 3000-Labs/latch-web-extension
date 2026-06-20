@@ -1,19 +1,27 @@
 import React from 'react'
-import { ChevronLeft } from 'lucide-react'
 
-export function SendSummaryHeader({ onBack }: { onBack: () => void }) {
+import backIconUrl from 'url:../../../../assets/home/icon-back.svg'
+
+export function SendSummaryHeader({
+  onBack,
+  disabled,
+}: {
+  onBack: () => void
+  disabled?: boolean
+}) {
   return (
-    <div className="flex shrink-0 items-center justify-between">
+    <div className="grid h-[22px] shrink-0 grid-cols-[20px_1fr_20px] items-center">
       <button
         type="button"
         onClick={onBack}
-        className="grid h-9 w-9 place-items-center text-fg/80 hover:text-fg"
+        disabled={disabled}
+        className="size-5 shrink-0 disabled:opacity-40"
         aria-label="Back"
       >
-        <ChevronLeft className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+        <img src={backIconUrl} alt="" className="size-5" aria-hidden />
       </button>
-      <div className="text-base font-extrabold">Summary</div>
-      <div className="w-9" />
+      <p className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb]">Summary</p>
+      <div aria-hidden />
     </div>
   )
 }

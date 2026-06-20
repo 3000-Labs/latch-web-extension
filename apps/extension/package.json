@@ -49,11 +49,12 @@
   "manifest": {
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
-    "version": "0.0.3",
+    "version": "0.0.4",
     "permissions": [
       "storage",
       "scripting",
       "sidePanel",
+      "tabs",
       "windows"
     ],
     "host_permissions": [

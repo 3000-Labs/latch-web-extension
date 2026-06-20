@@ -2,17 +2,18 @@ import React, { useMemo, useState } from 'react'
 
 import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from '../swap/swapVm'
 import {
-  formatUsdApprox,
+  formatCompactAmount,
   mockQuote,
   swapTokens as defaultSwapTokens,
   toPositiveNumberOrNull,
 } from '../swap/swapVm'
-import swapIconUrl from 'url:../../../assets/icons/swap-icon-black.svg'
-import { SwapCard } from '../swap/components/SwapCard'
 import { SwapDetails } from '../swap/components/SwapDetails'
-import { SwapHeader } from '../swap/components/SwapHeader'
-import { ToggleSwitch } from '../swap/components/ToggleSwitch'
 import { TokenPickerModal } from '../swap/components/TokenPickerModal'
+import { SwapCardsStack } from './swap/components/SwapCardsStack'
+import { SwapEnterAmountButton } from './swap/components/SwapEnterAmountButton'
+import { SwapScreenHeader } from './swap/components/SwapScreenHeader'
+
+const WALLET_LABEL = 'My Wallet...670d'
 
 export function SwapScreen({
   surface,
@@ -33,8 +34,6 @@ export function SwapScreen({
   const [useExchangeBalance, setUseExchangeBalance] = useState(
     initialState?.useExchangeBalance ?? false
   )
-  const [approved, setApproved] = useState(initialState?.approved ?? false)
-
   const [pickerTarget, setPickerTarget] = useState<'pay' | 'receive' | null>(null)
 
   const payToken = useMemo(
@@ -49,27 +48,31 @@ export function SwapScreen({
   const payN = toPositiveNumberOrNull(payAmount)
   const canApprove = payN !== null && payN > 0
 
-  const payBalance = payToken.symbol === 'XLM' ? 10 : 0
-  const receiveBalance = receiveToken.symbol === 'XLM' ? 10 : 0
+  const payBalance = 10
+  const receiveBalance = 0
 
   const draft: SwapDraft = useMemo(
-    () => ({ payTokenId, receiveTokenId, payAmount, useExchangeBalance, approved }),
-    [approved, payAmount, payTokenId, receiveTokenId, useExchangeBalance]
+    () => ({
+      payTokenId,
+      receiveTokenId,
+      payAmount,
+      useExchangeBalance,
+      approved: canApprove,
+    }),
+    [canApprove, payAmount, payTokenId, receiveTokenId, useExchangeBalance]
   )
 
-  const effectiveQuote = useMemo(
-    () => (approved ? mockQuote(draft, payToken, receiveToken) : null),
-    [approved, draft, payToken, receiveToken]
+  const previewQuote = useMemo(
+    () => (canApprove ? mockQuote(draft, payToken, receiveToken) : null),
+    [canApprove, draft, payToken, receiveToken]
   )
 
-  const payUsdApprox = payN === null ? '≈--' : formatUsdApprox(payN)
-
-  const receiveDisplayAmount = payN === null ? '--' : payAmount
-
-  const receiveUsdApprox = payN === null ? '≈--' : `≈$${(payN * 1.00046).toFixed(2)}`
+  const payUsdApprox = payN === null ? '≈--' : `≈$${(payN * 1.00046).toFixed(5)}`
+  const receiveDisplayAmount =
+    previewQuote === null ? '--' : formatCompactAmount(previewQuote.receiveAmount, 6)
+  const receiveUsdApprox = previewQuote?.receiveUsdApprox ?? '≈--'
 
   const handleSwapTokens = () => {
-    setApproved(false)
     setPayTokenId(receiveTokenId)
     setReceiveTokenId(payTokenId)
   }
@@ -80,120 +83,70 @@ export function SwapScreen({
         handleSwapTokens()
       } else {
         setPayTokenId(tokenId)
-        setApproved(false)
       }
     } else if (pickerTarget === 'receive') {
       if (tokenId === payTokenId) {
         handleSwapTokens()
       } else {
         setReceiveTokenId(tokenId)
-        setApproved(false)
       }
     }
   }
 
-  const handleMaxClick = () => {
-    setPayAmount(String(payBalance))
-    setApproved(false)
-  }
+  const ctaLabel = canApprove ? 'Approve Swap' : 'Enter Amount'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
-      <SwapHeader onBack={onBack} />
+    <>
+      <div
+        className={[
+          'flex min-h-0 flex-1 flex-col overflow-y-auto pb-[74px]',
+          surface === 'sidepanel' ? 'pt-2' : 'pt-3',
+        ].join(' ')}
+      >
+        <SwapScreenHeader onBack={onBack} />
 
-      <div className="mt-4 flex-1 overflow-auto pr-1 pb-4">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-normal text-fg/80">Pay</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs font-normal text-fg/80">Use exchange balance</span>
-              <ToggleSwitch
-                checked={useExchangeBalance}
-                onChange={(v) => setUseExchangeBalance(v)}
-              />
-            </div>
+        <div className="mt-4 flex flex-col gap-5">
+          <div className="flex flex-col gap-8">
+            <SwapCardsStack
+              payToken={payToken}
+              receiveToken={receiveToken}
+              payBalance={payBalance}
+              receiveBalance={receiveBalance}
+              walletLabel={WALLET_LABEL}
+              useExchangeBalance={useExchangeBalance}
+              onExchangeBalanceChange={setUseExchangeBalance}
+              onSwapDirection={handleSwapTokens}
+              onPayTokenSelect={() => setPickerTarget('pay')}
+              onReceiveTokenSelect={() => setPickerTarget('receive')}
+              onAddFundsClick={() => {}}
+              onMaxClick={() => setPayAmount(String(payBalance))}
+              payUsdApprox={payUsdApprox}
+              receiveUsdApprox={receiveUsdApprox}
+              receiveMuted={!canApprove}
+              receiveDisplayAmount={receiveDisplayAmount}
+              payAmountInput={
+                <input
+                  inputMode="decimal"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full min-w-[72px] bg-transparent text-right text-xl font-semibold tracking-[-0.4px] text-white outline-none placeholder:text-white"
+                />
+              }
+            />
+
+            <SwapEnterAmountButton
+              label={ctaLabel}
+              disabled={!canApprove}
+              onClick={() => {
+                if (!canApprove || !previewQuote) return
+                onContinue(previewQuote, { ...draft, approved: true })
+              }}
+            />
           </div>
 
-          <SwapCard
-            token={payToken}
-            type="pay"
-            onTokenSelect={() => setPickerTarget('pay')}
-            rightTop={
-              <input
-                inputMode="decimal"
-                value={payAmount}
-                onChange={(e) => {
-                  setPayAmount(e.target.value)
-                  if (approved) setApproved(false)
-                }}
-                placeholder="0.00"
-                className="w-full bg-transparent text-right text-2xl font-bold tracking-tight text-white outline-none placeholder:text-muted/40"
-              />
-            }
-            rightBottom={payUsdApprox}
-            balance={payBalance}
-            onMaxClick={handleMaxClick}
-            onAddFundsClick={() => {}}
-          />
-
-          <div className="relative mt-2 pt-4">
-            <button
-              type="button"
-              onClick={handleSwapTokens}
-              className="absolute left-1/2 top-0 z-10 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-primary text-black shadow-soft hover:brightness-95 active:brightness-90 cursor-pointer"
-              aria-label="Swap direction"
-            >
-              <img src={swapIconUrl} alt="" className="h-5 w-5" />
-            </button>
-
-            <div className="space-y-2">
-              <span className="px-1 text-xs font-normal text-fg/80">Receive</span>
-              <SwapCard
-                token={receiveToken}
-                type="receive"
-                onTokenSelect={() => setPickerTarget('receive')}
-                rightTop={
-                  <span className={payN === null ? 'text-muted' : 'text-white'}>
-                    {receiveDisplayAmount}
-                  </span>
-                }
-                rightBottom={receiveUsdApprox}
-                balance={receiveBalance}
-              />
-            </div>
-          </div>
+          {previewQuote ? <SwapDetails quote={previewQuote} /> : null}
         </div>
-
-        {approved && effectiveQuote ? (
-          <div className="mt-6">
-            <SwapDetails quote={effectiveQuote} />
-          </div>
-        ) : null}
-      </div>
-
-      <div className={['mt-auto pt-4', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
-        <button
-          type="button"
-          disabled={!canApprove}
-          onClick={() => {
-            if (!canApprove) return
-            if (!approved) {
-              setApproved(true)
-              return
-            }
-            const q = effectiveQuote
-            if (!q) return
-            onContinue(q, { ...draft, approved: true })
-          }}
-          className={[
-            'h-12 w-full rounded-full text-base font-extrabold shadow-soft transition-all duration-200 cursor-pointer',
-            canApprove
-              ? 'bg-primary text-black hover:brightness-105 active:scale-[0.98]'
-              : 'bg-surface/60 text-muted cursor-not-allowed',
-          ].join(' ')}
-        >
-          {!canApprove ? 'Enter amount' : approved ? 'Approved swap' : 'Approve swap'}
-        </button>
       </div>
 
       <TokenPickerModal
@@ -203,6 +156,6 @@ export function SwapScreen({
         selectedTokenId={pickerTarget === 'pay' ? payTokenId : receiveTokenId}
         onSelect={handleSelectToken}
       />
-    </div>
+    </>
   )
 }

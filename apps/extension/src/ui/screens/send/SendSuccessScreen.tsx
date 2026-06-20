@@ -8,7 +8,6 @@ import { SendSuccessMessage } from './SendSuccessMessage'
 import { SendViewTransactionLink } from './SendViewTransactionLink'
 
 export function SendSuccessScreen({
-  surface,
   draft,
   result,
   priceUsd,
@@ -29,18 +28,24 @@ export function SendSuccessScreen({
       : (fiatToCrypto(draft.amount, priceUsd) ?? draft.amount)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col items-center">
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
-        <SendSuccessIllustration />
-        <SendSuccessMessage
-          amount={cryptoAmount}
-          symbol={token.code}
-          recipientName={draft.recipientName}
-          recipientAddress={draft.recipientAddress}
-        />
-        {result.hash ? <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} /> : null}
-      </div>
-      <div className={['w-full shrink-0', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
+    <div className="flex min-h-0 flex-1 flex-col animate-screenIn">
+      <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex w-full flex-col items-center gap-6">
+          <SendSuccessIllustration />
+
+          <div className="flex w-full flex-col items-center gap-3">
+            <SendSuccessMessage
+              amount={cryptoAmount}
+              symbol={token.code}
+              recipientName={draft.recipientName}
+              recipientAddress={draft.recipientAddress}
+            />
+            {result.hash ? (
+              <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} />
+            ) : null}
+          </div>
+        </div>
+
         <SendContinueButton onContinue={onContinue} />
       </div>
     </div>

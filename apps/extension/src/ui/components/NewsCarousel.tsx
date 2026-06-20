@@ -38,8 +38,6 @@ export function NewsCarousel({ className, slidesCount = 3 }: Props) {
 
   const onPointerMove = useCallback((_e: React.PointerEvent<HTMLDivElement>) => {
     if (!drag.current?.isDragging) return
-    // We keep movement purely for intent; actual slide change occurs on release.
-    // This avoids partial transforms that would deviate from the design.
   }, [])
 
   const onPointerUp = useCallback(
@@ -57,9 +55,9 @@ export function NewsCarousel({ className, slidesCount = 3 }: Props) {
   )
 
   return (
-    <div className={className}>
+    <div className={['flex w-full flex-col items-center gap-2', className].filter(Boolean).join(' ')}>
       <div
-        className="overflow-hidden rounded-[16px]"
+        className="w-full overflow-hidden rounded-[18px]"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -76,7 +74,7 @@ export function NewsCarousel({ className, slidesCount = 3 }: Props) {
               <img
                 src={newsSlideUrl}
                 alt=""
-                className="block w-full select-none"
+                className="block w-full select-none rounded-[18px]"
                 draggable={false}
               />
             </div>
@@ -85,7 +83,7 @@ export function NewsCarousel({ className, slidesCount = 3 }: Props) {
       </div>
 
       <div
-        className="mt-3 flex items-center justify-center gap-[10px]"
+        className="flex items-center justify-center gap-0.5"
         aria-label="News carousel pagination"
       >
         {slides.map((i) => {
@@ -96,8 +94,8 @@ export function NewsCarousel({ className, slidesCount = 3 }: Props) {
               type="button"
               onClick={() => goTo(i)}
               className={[
-                'h-2 transition-colors',
-                isActive ? 'w-6 rounded-full bg-primary' : 'w-2 rounded-full bg-white/25',
+                'rounded-full transition-colors',
+                isActive ? 'h-[10px] w-[14px] bg-primary' : 'h-1.5 w-1.5 bg-white/25',
               ].join(' ')}
               aria-label={`Go to slide ${i + 1}`}
               aria-current={isActive ? 'true' : undefined}

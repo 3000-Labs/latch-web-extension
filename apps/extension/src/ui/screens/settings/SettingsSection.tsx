@@ -7,9 +7,9 @@ interface SettingsSectionProps {
 
 export function SettingsSection({ label, children }: SettingsSectionProps) {
   return (
-    <div className="space-y-2">
-      <div className="px-1 text-xs font-bold text-muted/60 uppercase tracking-wider">{label}</div>
-      <div className="space-y-3">{children}</div>
+    <div className="flex w-full flex-col gap-4">
+      <p className="text-sm font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">{label}</p>
+      <div className="flex flex-col gap-2">{children}</div>
     </div>
   )
 }

@@ -1,40 +1,30 @@
 import React from 'react'
-import { QrCode } from 'lucide-react'
 
 export function SendRecipientAddressField({
   value,
   onChange,
-  onQrClick,
   onKeyDown,
-  onBlur,
 }: {
   value: string
   onChange: (next: string) => void
-  onQrClick: () => void
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
-  onBlur?: React.FocusEventHandler<HTMLInputElement>
 }) {
   return (
-    <div>
-      <div className="text-sm font-extrabold">Recipient Address</div>
-      <div className="relative mt-2">
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          onBlur={onBlur}
-          placeholder="G... or C ..."
-          className="w-full rounded-2xl border border-border bg-surface/40 py-3 pl-4 pr-12 text-sm font-bold text-fg outline-none placeholder:text-fg/40"
-        />
-        <button
-          type="button"
-          onClick={onQrClick}
-          className="absolute right-3 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center text-fg/80 hover:text-fg"
-          aria-label="Scan QR code"
-        >
-          <QrCode className="h-5 w-5" strokeWidth={2} aria-hidden />
-        </button>
-      </div>
+    <div className="flex w-full flex-col gap-1">
+      <label
+        htmlFor="send-recipient-address"
+        className="text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]"
+      >
+        Recipient Address
+      </label>
+      <input
+        id="send-recipient-address"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="G... or C ..."
+        className="h-[52px] w-full rounded-xl border border-stroke bg-transparent px-3 text-base leading-[1.36] tracking-[-0.32px] text-[#fcfcfc] outline-none placeholder:text-[#b3b3b3]"
+      />
     </div>
   )
 }

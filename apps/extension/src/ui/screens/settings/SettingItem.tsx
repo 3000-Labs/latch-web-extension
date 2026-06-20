@@ -1,21 +1,22 @@
 import React from 'react'
-import { ChevronRight } from 'lucide-react'
+
+import chevronRightUrl from 'url:../../../../assets/home/icon-chevron-right.svg'
 
 interface SettingItemProps {
   icon: React.ReactNode
   label: string
-  value?: string
   onClick?: () => void
   rightElement?: React.ReactNode
+  danger?: boolean
   showChevron?: boolean
 }
 
 export function SettingItem({
   icon,
   label,
-  value,
   onClick,
   rightElement,
+  danger,
   showChevron = true,
 }: SettingItemProps) {
   const Component = onClick ? 'button' : 'div'
@@ -24,26 +25,27 @@ export function SettingItem({
     <Component
       onClick={onClick}
       className={[
-        'flex w-full items-center justify-between rounded-[20px] border border-border/20 bg-surface px-4 py-[14px] text-left transition-all',
-        onClick ? 'hover:bg-surface/75 active:bg-surface/85 cursor-pointer' : '',
+        'flex w-full items-center gap-2 rounded-[14px] bg-[#2a2928] p-3 text-left',
+        onClick ? 'cursor-pointer' : '',
       ].join(' ')}
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface/80 border border-border/30 text-fg/80">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#1e1e1e] p-1">
           {icon}
         </div>
-        <span className="truncate text-sm font-extrabold text-fg">{label}</span>
+        <div
+          className={[
+            'min-w-0 flex-1 text-sm font-normal leading-[1.34] tracking-[-0.28px]',
+            danger ? 'text-[#ea471e]' : 'text-[#fcfcfc]',
+          ].join(' ')}
+        >
+          {label}
+        </div>
       </div>
-
-      <div className="flex items-center gap-2 shrink-0">
-        {value && (
-          <span className="text-xs font-semibold text-muted/70 tracking-wider">{value}</span>
-        )}
-        {rightElement}
-        {showChevron && !rightElement && (
-          <ChevronRight className="h-[18px] w-[18px] text-fg/40" strokeWidth={2.5} />
-        )}
-      </div>
+      {rightElement ??
+        (showChevron ? (
+          <img src={chevronRightUrl} alt="" className="size-6 shrink-0" aria-hidden />
+        ) : null)}
     </Component>
   )
 }

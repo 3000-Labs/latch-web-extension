@@ -8,9 +8,9 @@ import { SendSummaryFacts } from './SendSummaryFacts'
 import { SendSummaryHeader } from './SendSummaryHeader'
 import { SendSummaryHero } from './SendSummaryHero'
 import { SendSummarySubmitButton } from './SendSummarySubmitButton'
+import { SendTransactionLoadingOverlay } from './SendTransactionLoadingOverlay'
 
 export function SendSummaryScreen({
-  surface,
   draft,
   priceUsd,
   networkLabel,
@@ -31,6 +31,8 @@ export function SendSummaryScreen({
   onFetchFeeEstimate: () => Promise<BuildSendTxResponse | null>
 }) {
   const token = draft.token!
+  const isSending = sendProgressLabel != null
+
   const cryptoAmount = useMemo(() => {
     if (draft.inputMode === 'crypto') return draft.amount
     return fiatToCrypto(draft.amount, priceUsd) ?? '0'
@@ -53,23 +55,35 @@ export function SendSummaryScreen({
   }, [onFetchFeeEstimate])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <SendSummaryHeader onBack={onBack} />
-      <div className="min-h-0 flex-1 overflow-auto">
-        <SendSummaryHero amount={cryptoAmount} symbol={token.code} priceUsd={priceUsd} />
-        <SendSummaryFacts
+    <div className="relative flex min-h-0 flex-1 flex-col gap-4 animate-screenIn">
+      <SendSummaryHeader onBack={onBack} disabled={isSending} />
+      <div className="h-px w-full shrink-0 bg-stroke" aria-hidden />
+
+      <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex w-full flex-col items-center gap-3">
+          <SendSummaryHero amount={cryptoAmount} symbol={token.code} priceUsd={priceUsd} />
+          <SendSummaryFacts
+            recipientName={draft.recipientName}
+            recipientAddress={draft.recipientAddress}
+            networkLabel={networkLabel}
+            feeDisplay={feeDisplay}
+          />
+          {sendError && !isSending ? (
+            <p className="w-full text-center text-sm tracking-[-0.28px] text-red-300">{sendError}</p>
+          ) : null}
+        </div>
+
+        <SendSummarySubmitButton loading={isSending} onSend={onSend} />
+      </div>
+
+      {isSending ? (
+        <SendTransactionLoadingOverlay
+          amount={cryptoAmount}
+          symbol={token.code}
           recipientName={draft.recipientName}
           recipientAddress={draft.recipientAddress}
-          networkLabel={networkLabel}
-          feeDisplay={feeDisplay}
         />
-        {sendError ? (
-          <div className="mt-4 text-center text-sm font-bold text-red-300">{sendError}</div>
-        ) : null}
-      </div>
-      <div className={['mt-4 shrink-0', surface === 'sidepanel' ? 'pb-0' : 'pb-2'].join(' ')}>
-        <SendSummarySubmitButton progressLabel={sendProgressLabel} onSend={onSend} />
-      </div>
+      ) : null}
     </div>
   )
 }

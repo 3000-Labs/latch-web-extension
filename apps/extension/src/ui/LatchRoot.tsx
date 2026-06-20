@@ -31,8 +31,6 @@ import type {
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
-  MigrationDiscoverRequest,
-  MigrationDiscovery,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
@@ -60,13 +58,12 @@ import { Networks } from '@stellar/stellar-sdk'
 import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
-import { ExternalLink, Menu } from 'lucide-react'
+import { ExternalLink } from 'lucide-react'
 
 import logoUrl from 'url:../../assets/brand/latch-logo.svg'
 import biometricsUrl from 'url:../../assets/icons/biometrics.svg'
 import successAvatarUrl from 'url:../../assets/avatars/success.png'
 
-import { SectionCard } from './components/SectionCard'
 import { HistoryScreen } from './screens/history/HistoryScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { ImportSeedScreen } from './screens/import-seed/ImportSeedScreen'
@@ -75,12 +72,16 @@ import { TransactionDetailScreen } from './screens/transaction-detail/Transactio
 import { MigrationScreen } from './screens/MigrationScreen'
 import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { CreateMultisigScreen } from './screens/multisig/CreateMultisigScreen'
+import { AddMultisigOwnersScreen } from './screens/multisig/AddMultisigOwnersScreen'
+import { ExploreScreen } from './screens/explore/ExploreScreen'
 import { SwapScreen } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
 import { AccountMenu } from './components/AccountMenu'
+import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
+import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
 import { storedAccountLabel } from './lib/storedAccountLabel'
 import {
-  isMigrationHomePromoCompleted,
   markMigrationHomePromoCompleted,
 } from './lib/migrationHomePrefs'
 
@@ -129,10 +130,13 @@ type Route =
   | 'passkeyCreated'
   | 'addAccount'
   | 'addAccountPasskey'
+  | 'createMultisig'
+  | 'addMultisigOwners'
   | 'importSeed'
   | 'importSeedEncrypt'
   | 'unlockMnemonic'
   | 'home'
+  | 'explore'
   | 'history'
   | 'transactionDetail'
   | 'swap'
@@ -155,6 +159,7 @@ function routeKeepsUiMountedForWebauthn(route: Route): boolean {
 
 const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
   'home',
+  'explore',
   'history',
   'transactionDetail',
   'swap',
@@ -250,19 +255,6 @@ function useUiSurfacePreference() {
   return { pref, setPref: persist }
 }
 
-function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={[
-        'h-8 w-8 rounded-full border border-border bg-surface/40 text-fg/80',
-        'grid place-items-center hover:bg-surface/60 active:bg-surface/80',
-        props.className ?? '',
-      ].join(' ')}
-    />
-  )
-}
-
 const headerIconClass = 'h-[18px] w-[18px]'
 
 async function openSidePanel() {
@@ -312,7 +304,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  const { theme, setTheme } = useTheme()
+  useTheme()
   const { pref, setPref } = useUiSurfacePreference()
 
   // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
@@ -345,6 +337,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [renameAccountId, setRenameAccountId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
+  const [multisigDraft, setMultisigDraft] = useState<{ walletName: string; purpose: string } | null>(
+    null
+  )
 
   const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
   const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
@@ -364,22 +359,26 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [portfolioRows, setPortfolioRows] = useState<SmartAccountBalanceRow[]>([])
   const [totalBalanceUsd, setTotalBalanceUsd] = useState<string | null>(null)
   const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [portfolioHydrated, setPortfolioHydrated] = useState(false)
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
   const [historySections, setHistorySections] = useState<HistorySectionVm[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyHydrated, setHistoryHydrated] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const portfolioRowsRef = useRef(portfolioRows)
+  portfolioRowsRef.current = portfolioRows
+  const portfolioHydratedRef = useRef(false)
+  const historyHydratedRef = useRef(false)
   const [transactionDetail, setTransactionDetail] = useState<TransactionDetailVm | null>(null)
   const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
   const [pendingMnemonic, setPendingMnemonic] = useState('')
   const seedWords = useSeedPhraseWords()
-  const [migrationDiscovery, setMigrationDiscovery] = useState<
-    MigrationDiscovery | null | undefined
-  >(undefined)
   const [seedExtensionPassphrase, setSeedExtensionPassphrase] = useState('')
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
-  const [migrationHomePromoCompleted, setMigrationHomePromoCompleted] = useState(false)
+  const [transactionDetailReturnRoute, setTransactionDetailReturnRoute] =
+    useState<Route>('history')
 
   const needsMnemonicUnlock = useMemo(
     () =>
@@ -389,21 +388,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [activeAccount, activeAccountHasMnemonicVault, activeAccountMnemonicSignerLoaded]
   )
 
-  const showHomeMigrationPromo =
-    migrationDiscovery?.state === 'not_started' &&
-    Boolean(activeAccount?.id) &&
-    !migrationHomePromoCompleted
-
-  const homePortfolioTokens = useMemo(
-    () =>
-      portfolioRows.map((r) => ({
-        id: r.sacContractId,
-        symbol: r.code,
-        balance: r.amount,
-        balanceUsd: r.balanceUsd ?? null,
-        iconUrl: r.iconUrl,
-      })),
-    [portfolioRows]
+  const recentActivityItems = useMemo(
+    () => historySections.flatMap((section) => section.items),
+    [historySections]
   )
 
   const networkLabel =
@@ -455,52 +442,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
 
   useEffect(() => {
-    if (setupState !== 'has_account') {
-      setMigrationDiscovery(undefined)
-      return
-    }
-    if (page !== 'main') return
-    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-    if (
-      !acc?.id ||
-      acc.mode !== 'mnemonic' ||
-      !acc.gAddress?.trim() ||
-      !acc.smartAccountAddress?.trim()
-    ) {
-      setMigrationDiscovery(null)
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      const res = await sendToBackground<MigrationDiscoverRequest, MigrationDiscovery>({
-        type: 'MIGRATION_DISCOVER',
-        payload: { accountId: acc.id },
-      })
-      if (cancelled) return
-      if (res.ok && res.data) setMigrationDiscovery(res.data)
-      else setMigrationDiscovery(null)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [setupState, page, activeAccountId, accounts])
-
-  useEffect(() => {
-    const accountId = activeAccount?.id
-    if (!accountId) {
-      setMigrationHomePromoCompleted(false)
-      return
-    }
-    let cancelled = false
-    void isMigrationHomePromoCompleted(accountId).then((completed) => {
-      if (!cancelled) setMigrationHomePromoCompleted(completed)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [activeAccount?.id])
-
-  useEffect(() => {
     if (!needsMnemonicUnlock) return
     if (page === 'settings') setPage('main')
     if (ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(route)) {
@@ -510,9 +451,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   useEffect(() => {
     if (route !== 'migrationSuccess' || !activeAccount?.id) return
-    void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
-      setMigrationHomePromoCompleted(true)
-    })
+    void markMigrationHomePromoCompleted(activeAccount.id)
   }, [route, activeAccount?.id])
 
   useEffect(() => {
@@ -642,14 +581,29 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     return { accounts: res.data.accounts, needsMnemonicUnlock: locked }
   }
 
+  useEffect(() => {
+    portfolioHydratedRef.current = false
+    historyHydratedRef.current = false
+    setPortfolioHydrated(false)
+    setHistoryHydrated(false)
+    setPortfolioRows([])
+    setTotalBalanceUsd(null)
+    setHistorySections([])
+    setPortfolioError(null)
+    setHistoryError(null)
+  }, [activeAccountId])
+
   const loadPortfolio = useCallback(async () => {
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
     if (!acc?.id || !acc.smartAccountAddress?.trim()) {
       setPortfolioRows([])
       setPortfolioError(null)
+      portfolioHydratedRef.current = true
+      setPortfolioHydrated(true)
       return
     }
-    setPortfolioLoading(true)
+    const showLoading = !portfolioHydratedRef.current
+    if (showLoading) setPortfolioLoading(true)
     setPortfolioError(null)
     try {
       const res = await sendToBackground<
@@ -668,6 +622,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       setTotalBalanceUsd(res.data?.totalBalanceUsd ?? null)
     } finally {
       setPortfolioLoading(false)
+      portfolioHydratedRef.current = true
+      setPortfolioHydrated(true)
     }
   }, [accounts, activeAccountId])
 
@@ -675,9 +631,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
     if (!acc?.id) {
       setHistorySections([])
+      historyHydratedRef.current = true
+      setHistoryHydrated(true)
       return
     }
-    setHistoryLoading(true)
+    const showLoading = !historyHydratedRef.current
+    if (showLoading) setHistoryLoading(true)
     setHistoryError(null)
     try {
       const res = await sendToBackground<
@@ -693,23 +652,74 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         return
       }
       const items = (res.data?.items ?? []).map((row) =>
-        mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRows, row.assetCode))
+        mapTransactionToHistoryItem(
+          row,
+          iconUrlForCode(portfolioRowsRef.current, row.assetCode)
+        )
       )
       setHistorySections(groupHistoryItems(items))
     } finally {
       setHistoryLoading(false)
+      historyHydratedRef.current = true
+      setHistoryHydrated(true)
     }
-  }, [accounts, activeAccountId, portfolioRows])
+  }, [accounts, activeAccountId])
 
   useEffect(() => {
-    if (setupState !== 'has_account' || page !== 'main' || route !== 'home') return
+    if (page !== 'main' && page !== 'settings') return
+    if (route !== 'home') return
+    if (needsMnemonicUnlock) return
+
+    // Avoid relying on `setupState` for this: on cold start we can render the Home route
+    // before `setupState` finishes hydrating, which would prevent balances from fetching.
+    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    if (!acc?.smartAccountAddress?.trim()) return
+
     void loadPortfolio()
-  }, [setupState, page, route, loadPortfolio, activeAccountId])
+  }, [page, route, needsMnemonicUnlock, accounts, activeAccountId, loadPortfolio])
+
+  const portfolioRetryAttemptRef = useRef(0)
+  useEffect(() => {
+    if (route !== 'home' || (page !== 'main' && page !== 'settings')) {
+      portfolioRetryAttemptRef.current = 0
+      return
+    }
+    if (!portfolioError) {
+      portfolioRetryAttemptRef.current = 0
+      return
+    }
+    const attempt = Math.min(portfolioRetryAttemptRef.current, 5)
+    const backoffMs = [750, 1500, 3000, 5000, 8000, 12000][attempt] ?? 12000
+    portfolioRetryAttemptRef.current = attempt + 1
+    const t = setTimeout(() => {
+      void loadPortfolio()
+    }, backoffMs)
+    return () => clearTimeout(t)
+  }, [route, setupState, page, portfolioError, loadPortfolio])
 
   useEffect(() => {
-    if (route !== 'history') return
+    if (route !== 'history' && route !== 'home' && route !== 'explore') return
     void loadHistory()
   }, [route, loadHistory])
+
+  function openSwapFromNav() {
+    setSwapDraft({
+      payTokenId: 'xlm',
+      receiveTokenId: 'usdt',
+      payAmount: '',
+      useExchangeBalance: false,
+      approved: false,
+    })
+    setSwapQuote(null)
+    setRoute('swap')
+  }
+
+  function handleMainTabSelect(tab: MainTab) {
+    if (tab === 'home') setRoute('home')
+    else if (tab === 'swap') openSwapFromNav()
+    else if (tab === 'history') setRoute('history')
+    else if (tab === 'explore') setRoute('explore')
+  }
 
   async function loadPendingDapp() {
     const res = await sendToBackground<unknown, ListPendingDappRequestsResponse>({
@@ -1461,38 +1471,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  const sidepanelPreferenceSection = (
-    <div className="mt-2">
-      <SectionCard>
-        <div className="text-base font-extrabold">Side panel</div>
-        <div className="mt-1 text-xs text-muted">
-          When enabled, clicking the Latch icon opens the side panel instead of the popup.
-        </div>
-
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <div className="text-sm font-bold">Enable side panel</div>
-          <button
-            className={[
-              'h-9 w-20 rounded-full border text-sm font-extrabold',
-              pref === 'sidepanel'
-                ? 'border-primary bg-primary text-black'
-                : 'border-border bg-bg text-fg',
-            ].join(' ')}
-            onClick={() => {
-              const next = pref === 'sidepanel' ? 'popup' : 'sidepanel'
-              setPref(next)
-              void setDefaultSurface(next).then(() => {
-                if (next === 'sidepanel') void openSidePanel().catch(() => {})
-              })
-            }}
-          >
-            {pref === 'sidepanel' ? 'On' : 'Off'}
-          </button>
-        </div>
-      </SectionCard>
-    </div>
-  )
-
   async function logout() {
     setError(null)
     setLoading('Logging out…')
@@ -1514,19 +1492,38 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const containerClass =
     surface === 'sidepanel' ? 'h-screen w-full min-w-[320px]' : 'h-[600px] w-[360px]'
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
+  const showTopHeader =
+    page === 'main' && !needsMnemonicUnlock && route === 'migration'
+  const showHomeLoadingOverlay =
+    (page === 'main' || page === 'settings') &&
+    route === 'home' &&
+    !loading &&
+    ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
+  const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
+
+  const mainTabRoutes = ['home', 'swap', 'history', 'explore'] as const
+  const showMainBottomNav =
+    !needsMnemonicUnlock && (mainTabRoutes as readonly string[]).includes(route)
+  const activeMainTab: MainTab =
+    route === 'swap'
+      ? 'swap'
+      : route === 'history'
+        ? 'history'
+        : route === 'explore'
+          ? 'explore'
+          : 'home'
 
   return (
-    <div className={['bg-bg text-fg', containerClass].join(' ')}>
+    <div className={['relative bg-bg text-fg', containerClass].join(' ')}>
       <div
         className={[
-          'relative h-full w-full',
-          surface === 'sidepanel' ? 'px-6 pb-6 pt-5' : 'px-6 pb-6 pt-4',
+          'relative flex h-full w-full min-h-0 flex-col',
+          surface === 'sidepanel' ? 'px-6 pt-4' : 'px-6 pt-3',
+          showMainBottomNav ? 'pb-0' : 'pb-6',
         ].join(' ')}
       >
-        <div className="flex items-center justify-between gap-2">
-          {page === 'main' &&
-          !needsMnemonicUnlock &&
-          (route === 'home' || route === 'migration') ? (
+        {showTopHeader ? (
+          <div className="flex items-center justify-between gap-2">
             <AccountMenu
               accountLabel={activeAccountLabel}
               accounts={accounts}
@@ -1557,65 +1554,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 setRenameAccountId(accountId)
               }}
             />
-          ) : (
-            <div className="h-10 w-10" />
-          )}
-          <div className="flex items-center justify-end gap-2">
-            {!needsMnemonicUnlock ? (
-              <IconButton
-                aria-label="Menu"
-                title="Menu"
-                onClick={() => {
-                  setPage('settings')
-                }}
-              >
-                <Menu className={headerIconClass} strokeWidth={2} aria-hidden />
-              </IconButton>
-            ) : (
-              <div className="h-8 w-8" />
-            )}
-          </div>
-        </div>
-
-        {page === 'settings' && !needsMnemonicUnlock ? (
-          <div
-            className={['mt-4 flex min-h-0 flex-1 flex-col animate-screenIn', flowHeightClass].join(
-              ' '
-            )}
-          >
-            <SettingsScreen
-              accountName={activeAccountLabel}
-              accountAddress={activeAccount?.smartAccountAddress ?? '—'}
-              theme={theme}
-              onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              biometricsEnabled={false}
-              onChangeBiometricsEnabled={() => {}}
-              sidepanelPreferenceSection={sidepanelPreferenceSection}
-              onClose={() => setPage('main')}
-              onLogout={() =>
-                void logout().catch((e) => setError(e instanceof Error ? e.message : String(e)))
-              }
-              onOpenMigrateAssets={
-                activeAccount?.mode === 'mnemonic' &&
-                activeAccount.gAddress?.trim() &&
-                activeAccount.smartAccountAddress?.trim() &&
-                migrationDiscovery?.state === 'not_started'
-                  ? () => {
-                      setPage('main')
-                      setRoute('migration')
-                    }
-                  : undefined
-              }
-            />
           </div>
         ) : null}
 
-        {page === 'main' ? (
+        {page === 'main' || page === 'settings' ? (
           <>
             {loading && !routeKeepsUiMountedForWebauthn(route) ? (
               <div
                 className={[
-                  'mt-4 flex flex-col items-center justify-center animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center justify-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -1634,7 +1581,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {error && (!loading || routeKeepsUiMountedForWebauthn(route)) ? (
-              <div className="mt-4 rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
+              <div
+                className={`${routeContentMarginClass} rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft`}
+              >
                 <div className="font-extrabold">Something went wrong</div>
                 <div className="mt-2 text-muted">{error}</div>
                 <button
@@ -1647,7 +1596,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'dappApproval' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Dapp request</h2>
@@ -1702,7 +1657,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'welcome' ? (
               <div
                 className={[
-                  'mt-3 flex flex-col items-center justify-between h-full pb-6 animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center justify-between h-full pb-6 animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -1754,8 +1709,55 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
+            {!loading && route === 'createMultisig' ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <CreateMultisigScreen
+                  onContinue={(walletName, purpose) => {
+                    setMultisigDraft({ walletName, purpose })
+                    setRoute('addMultisigOwners')
+                  }}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'addMultisigOwners' && activeAccount ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <AddMultisigOwnersScreen
+                  creatorSignerAddresses={[
+                    activeAccount.smartAccountAddress,
+                    ...(activeAccount.gAddress ? [activeAccount.gAddress] : []),
+                  ]}
+                  accounts={accounts}
+                  onContinue={(owners) => {
+                    if (!multisigDraft) return
+                    void owners
+                    void multisigDraft.walletName
+                    // Next multisig step — wired when that screen exists.
+                  }}
+                />
+              </div>
+            ) : null}
+
             {!loading && route === 'addAccount' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Add account</h2>
@@ -1803,7 +1805,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {route === 'addAccountPasskey' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Passkey login</h2>
@@ -1846,7 +1854,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'chooseSigner' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Choose Signer</h2>
@@ -1950,7 +1964,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {route === 'createPasskey' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <div className="text-center">
                   <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
                   <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Create Passkey</h2>
@@ -2008,7 +2028,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'passkeyCreated' ? (
               <div
                 className={[
-                  'mt-4 flex flex-col items-center animate-screenIn',
+                  `${routeContentMarginClass} flex flex-col items-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2041,7 +2061,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2085,7 +2105,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'unlockMnemonic' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <UnlockMnemonicScreen
                   password={unlockVaultPassword}
                   onPasswordChange={setUnlockVaultPassword}
@@ -2101,32 +2127,125 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'home' && !needsMnemonicUnlock ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'relative flex min-h-0 flex-1 flex-col animate-screenIn',
+                ].join(' ')}
+              >
                 <HomeScreen
                   accountName={activeAccountLabel}
+                  onOpenSettings={() => setPage('settings')}
+                  onOpenExplore={() => setRoute('explore')}
                   onOpenHistory={() => setRoute('history')}
-                  onOpenMigrateAssets={
-                    showHomeMigrationPromo
-                      ? () => setRoute('migration')
-                      : undefined
-                  }
-                  portfolioTokens={homePortfolioTokens}
-                  portfolioLoading={portfolioLoading}
-                  portfolioError={portfolioError}
+                  recentActivity={recentActivityItems}
                   totalBalanceUsd={totalBalanceUsd}
-                  onOpenSwap={() => {
-                    setSwapDraft({
-                      payTokenId: 'usdt',
-                      receiveTokenId: 'xlm',
-                      payAmount: '',
-                      useExchangeBalance: false,
-                      approved: false,
-                    })
-                    setSwapQuote(null)
-                    setRoute('swap')
-                  }}
+                  balanceChangePercent="0.00%"
+                  onOpenSwap={openSwapFromNav}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
+                  onSelectActivity={(it) => {
+                    const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('home')
+                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
+                    setRoute('transactionDetail')
+                  }}
+                />
+                {page === 'settings' ? (
+                  <>
+                    <div
+                      className={[
+                        'absolute bottom-0 -left-6 -right-6 z-40 bg-overlay/90',
+                        surface === 'sidepanel' ? '-top-4' : '-top-3',
+                      ].join(' ')}
+                      aria-hidden
+                    />
+                    <div
+                      className={[
+                        'absolute bottom-0 -left-6 -right-6 z-50',
+                        surface === 'sidepanel' ? '-top-4' : '-top-3',
+                      ].join(' ')}
+                    >
+                      <SettingsScreen
+                        surface={surface}
+                        accountName={activeAccountLabel}
+                        accountAddress={activeAccount?.smartAccountAddress ?? '—'}
+                        accounts={accounts.map((account, index) => ({
+                          id: account.id,
+                          name: storedAccountLabel(account, index),
+                          address: account.smartAccountAddress,
+                        }))}
+                        activeAccountId={activeAccountId}
+                        biometricsEnabled={false}
+                        onChangeBiometricsEnabled={() => {}}
+                        sidePanelEnabled={pref === 'sidepanel'}
+                        onChangeSidePanelEnabled={(enabled) => {
+                          const next = enabled ? 'sidepanel' : 'popup'
+                          setPref(next)
+                          void setDefaultSurface(next).then(() => {
+                            if (next === 'sidepanel') void openSidePanel().catch(() => {})
+                          })
+                        }}
+                        onSaveAccountName={(walletName) => {
+                          if (!activeAccount?.id) return
+                          void sendToBackground<{ accountId: string; label?: string }, undefined>({
+                            type: 'RENAME_ACCOUNT',
+                            payload: {
+                              accountId: activeAccount.id,
+                              label: walletName,
+                            },
+                          })
+                            .then(() => refreshAccounts())
+                            .catch(() => {})
+                        }}
+                        onSelectAccount={(accountId) => {
+                          void sendToBackground<SetActiveAccountRequest, undefined>({
+                            type: 'SET_ACTIVE_ACCOUNT',
+                            payload: { accountId },
+                          })
+                            .then(() => refreshAccounts())
+                            .catch(() => {})
+                        }}
+                        onAccountsChanged={() => {
+                          void refreshAccounts().catch(() => {})
+                        }}
+                        onCreateMultisig={() => {
+                          setPage('main')
+                          setRoute('createMultisig')
+                        }}
+                        networkLabel={networkLabel}
+                        onClose={() => setPage('main')}
+                        onLogout={() =>
+                          void logout().catch((e) =>
+                            setError(e instanceof Error ? e.message : String(e))
+                          )
+                        }
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!loading && route === 'explore' && !needsMnemonicUnlock ? (
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <ExploreScreen
+                  items={recentActivityItems}
+                  loading={historyLoading}
+                  error={historyError}
+                  onBack={() => setRoute('home')}
+                  onSelectItem={(it) => {
+                    const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('explore')
+                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
+                    setRoute('transactionDetail')
+                  }}
                 />
               </div>
             ) : null}
@@ -2134,7 +2253,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'migration' && activeAccount?.id ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2156,7 +2275,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'migrationSuccess' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col items-center animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col items-center animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2173,11 +2292,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   className="mt-8 h-12 w-full max-w-xs rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
                   onClick={() => {
                     if (activeAccount?.id) {
-                      void markMigrationHomePromoCompleted(activeAccount.id).then(() => {
-                        setMigrationHomePromoCompleted(true)
-                      })
+                      void markMigrationHomePromoCompleted(activeAccount.id)
                     }
-                    setMigrationDiscovery(undefined)
                     void loadPortfolio()
                     setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
                   }}
@@ -2190,7 +2306,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'history' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2203,6 +2319,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   onRefresh={() => void loadHistory()}
                   onSelectItem={(it) => {
                     const c = activeAccount?.smartAccountAddress ?? ''
+                    setTransactionDetailReturnRoute('history')
                     setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
                     setRoute('transactionDetail')
                   }}
@@ -2213,20 +2330,26 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'transactionDetail' && transactionDetail ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
                 <TransactionDetailScreen
                   surface={surface}
                   detail={transactionDetail}
-                  onBack={() => setRoute('history')}
+                  onBack={() => setRoute(transactionDetailReturnRoute)}
                 />
               </div>
             ) : null}
 
             {!loading && route === 'swap' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 <SwapScreen
                   surface={surface}
                   initialState={swapDraft ?? undefined}
@@ -2242,12 +2365,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             ) : null}
 
             {!loading && route === 'swapConfirm' ? (
-              <div className={['mt-4 flex flex-col animate-screenIn', flowHeightClass].join(' ')}>
+              <div
+                className={[
+                  routeContentMarginClass,
+                  'flex min-h-0 flex-1 flex-col animate-screenIn',
+                  flowHeightClass,
+                ].join(' ')}
+              >
                 {swapDraft && swapQuote ? (
                   <ConfirmSwapScreen
                     surface={surface}
                     draft={swapDraft}
                     quote={swapQuote}
+                    swapTokenCatalog={swapTokenCatalog}
+                    receiveAddress={activeAccount?.smartAccountAddress}
                     onBackOrCancel={() => setRoute('swap')}
                     onConfirm={() => {
                       setSwapDraft(null)
@@ -2273,7 +2404,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'send' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2312,7 +2443,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             {!loading && route === 'receive' ? (
               <div
                 className={[
-                  'mt-4 flex min-h-0 flex-1 flex-col animate-screenIn',
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
@@ -2382,6 +2513,17 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           </div>
         ) : null}
       </div>
+
+      {showMainBottomNav ? (
+        <MainBottomNav active={activeMainTab} onSelect={handleMainTabSelect} />
+      ) : null}
+
+      {showHomeLoadingOverlay ? (
+        <div className="absolute inset-0 z-40">
+          <HomeLoadingOverlay />
+        </div>
+      ) : null}
+
     </div>
   )
 }

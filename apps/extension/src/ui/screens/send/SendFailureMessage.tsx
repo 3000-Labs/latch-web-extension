@@ -1,13 +1,13 @@
 import React from 'react'
 
 import { truncateMiddle } from '../../lib/sendAddress'
+import { formatSummaryAmountLine } from './SendSummaryHero'
 
 export function SendFailureMessage({
   amount,
   symbol,
   recipientName,
   recipientAddress,
-  errorDetail,
 }: {
   amount: string
   symbol: string
@@ -15,26 +15,21 @@ export function SendFailureMessage({
   recipientAddress: string
   errorDetail?: string
 }) {
+  const amountLine = formatSummaryAmountLine(amount, symbol)
   const recipientLabel = recipientName
     ? `${recipientName} {${truncateMiddle(recipientAddress)}}`
     : `{${truncateMiddle(recipientAddress)}}`
 
   return (
-    <div className="mt-8 px-4 text-center">
-      <h2 className="text-2xl font-extrabold tracking-tight text-fg">Token Not Sent!</h2>
-      <p className="mt-4 text-sm leading-relaxed">
-        <span className="font-extrabold text-fg">
-          {amount}
-          {symbol}
-        </span>
-        <span className="font-bold text-muted"> failed to send to </span>
-        <span className="font-extrabold text-fg">{recipientLabel}</span>
+    <div className="flex w-full flex-col items-center gap-2 text-center">
+      <h2 className="w-full text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
+        Token Not Sent!
+      </h2>
+      <p className="w-full text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
+        <span className="font-bold text-[#fcfcfc]">{amountLine}</span>
+        <span> failed to send to </span>
+        <span className="font-bold text-[#fcfcfc]">{recipientLabel}</span>
       </p>
-      {errorDetail ? (
-        <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-left text-xs font-bold leading-relaxed text-red-300">
-          {errorDetail}
-        </p>
-      ) : null}
     </div>
   )
 }

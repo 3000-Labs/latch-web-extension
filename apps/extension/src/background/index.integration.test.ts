@@ -26,4 +26,27 @@ describe('background message routing (smoke)', () => {
     expect(getRes.data.setupState).toBe('has_account')
     expect(getRes.data.accountPublicKey).toBe('GABC')
   })
+
+  it('self-heals setupState to has_account when accounts already exist', async () => {
+    vi.resetModules()
+    await chrome.storage.local.set({
+      'latch.accounts': [
+        {
+          id: 'acct-1',
+          mode: 'passkey',
+          smartAccountAddress: 'GABC123',
+          createdAt: 1,
+        },
+      ],
+      'latch.activeAccountId': 'acct-1',
+    })
+
+    await import('./index')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    const getRes = await chrome.runtime.sendMessage({ type: 'GET_SETUP_STATE', payload: undefined })
+    expect(getRes.ok).toBe(true)
+    expect(getRes.data.setupState).toBe('has_account')
+    expect(getRes.data.accountPublicKey).toBe('GABC123')
+  })
 })
