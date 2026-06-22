@@ -8,6 +8,7 @@ import { HomeActionButtons } from './home/components/HomeActionButtons'
 import { HomeBalanceOverview } from './home/components/HomeBalanceOverview'
 import { HomeProfileButton } from './home/components/HomeProfileButton'
 import { HomeRecentActivity } from './home/components/HomeRecentActivity'
+import { MAIN_BOTTOM_NAV_CLEARANCE_PX } from './home/components/MainBottomNav'
 
 export function HomeScreen({
   accountName,
@@ -41,7 +42,10 @@ export function HomeScreen({
   const recentItems = useMemo(() => recentActivity.slice(0, 4), [recentActivity])
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-[21px] overflow-auto pb-[74px]">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-[21px] overflow-auto"
+      style={{ paddingBottom: MAIN_BOTTOM_NAV_CLEARANCE_PX }}
+    >
       <div className="flex items-center justify-between">
         <HomeProfileButton accountName={accountName} onClick={onOpenSettings} />
         <button

@@ -12,6 +12,7 @@ import { TokenPickerModal } from '../swap/components/TokenPickerModal'
 import { SwapCardsStack } from './swap/components/SwapCardsStack'
 import { SwapEnterAmountButton } from './swap/components/SwapEnterAmountButton'
 import { SwapScreenHeader } from './swap/components/SwapScreenHeader'
+import { MAIN_BOTTOM_NAV_CLEARANCE_PX } from './home/components/MainBottomNav'
 
 const WALLET_LABEL = 'My Wallet...670d'
 
@@ -99,9 +100,10 @@ export function SwapScreen({
     <>
       <div
         className={[
-          'flex min-h-0 flex-1 flex-col overflow-y-auto pb-[74px]',
+          'flex min-h-0 flex-1 flex-col overflow-y-auto',
           surface === 'sidepanel' ? 'pt-2' : 'pt-3',
         ].join(' ')}
+        style={{ paddingBottom: MAIN_BOTTOM_NAV_CLEARANCE_PX }}
       >
         <SwapScreenHeader onBack={onBack} />
 
