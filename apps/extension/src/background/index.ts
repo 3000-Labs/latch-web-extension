@@ -9,6 +9,8 @@
  * Security rule: NEVER send raw private keys in chrome.runtime.sendMessage responses.
  */
 
+import './cleanup-main-injector'
+
 import type {
   BackgroundMessage,
   BackgroundResponse,
@@ -46,6 +48,10 @@ import type {
   SubmitPhantomTxRequest,
   SubmitWebauthnTxRequest,
   UnlockMnemonicVaultRequest,
+  RunExternalSignFlowRequest,
+  ExternalSignResult,
+  SignTransactionResponse,
+  DappOpenSignRequestPayload,
 } from '@latch/types'
 
 import {
@@ -67,6 +73,13 @@ import {
   submitTxPhantom,
   submitTxWebauthn,
 } from './backend'
+
+import { getActiveNetworkFromEnv } from './externalSign/callbackUrl'
+import { buildSignRequestSearchParams } from './externalSign/parseSignRequest'
+import {
+  runExternalSignFlow,
+  type ExternalSignDecision,
+} from './externalSign/orchestrator'
 
 import { signDelegatedGAddressEntry } from './delegatedLocalSign'
 import {
@@ -309,56 +322,106 @@ function toSerializableError(err: unknown): SerializableError {
   return { message: String(err) }
 }
 
-type PendingResolver = (result: { approved: boolean; signedXdr?: string }) => void
+type PendingResolver = (result: ExternalSignDecision) => void
 const pendingDappResolvers = new Map<string, PendingResolver>()
+const approvalPopupWindowIds = new Set<number>()
 
 function mergePermissions<T extends string>(base: T[], add: T): T[] {
   return base.includes(add) ? base : [...base, add]
 }
 
-async function openApprovalPopup() {
+function waitForExternalSignDecision(requestId: string): Promise<ExternalSignDecision> {
+  return new Promise((resolve) => {
+    pendingDappResolvers.set(requestId, resolve)
+  })
+}
+
+function rejectPendingOnWindowClose(windowId: number) {
+  if (!approvalPopupWindowIds.has(windowId)) return
+  approvalPopupWindowIds.delete(windowId)
+  for (const [requestId, resolver] of pendingDappResolvers.entries()) {
+    resolver({ approved: false })
+    pendingDappResolvers.delete(requestId)
+    void removePendingDappRequest(requestId)
+  }
+}
+
+if (chrome.windows?.onRemoved) {
+  chrome.windows.onRemoved.addListener((windowId) => {
+    rejectPendingOnWindowClose(windowId)
+  })
+}
+
+async function openApprovalPopup(): Promise<number | undefined> {
   try {
-    // Prefer openPopup when available
     if ('action' in chrome && typeof chrome.action.openPopup === 'function') {
       await chrome.action.openPopup()
-      return
+      return undefined
     }
   } catch {
     // fall through to window.create
   }
 
   try {
-    await chrome.windows.create({
+    const win = await chrome.windows.create({
       url: chrome.runtime.getURL('popup.html'),
       type: 'popup',
       width: 400,
       height: 650,
     })
+    if (win.id !== undefined) {
+      approvalPopupWindowIds.add(win.id)
+      return win.id
+    }
   } catch (err) {
     console.error('[latch:background] openApprovalPopup failed', err)
   }
+  return undefined
 }
 
 async function requireDappApproval(args: {
   origin: string
   kind: PendingDappRequest['kind']
-}): Promise<{
-  approved: boolean
-  signedXdr?: string
-}> {
+  signRequest?: PendingDappRequest['signRequest']
+  prepared?: PendingDappRequest['prepared']
+  source?: PendingDappRequest['source']
+}): Promise<ExternalSignDecision> {
   const requestId = crypto.randomUUID()
   const pending: PendingDappRequest = {
     id: requestId,
     origin: args.origin,
     kind: args.kind,
     createdAt: Date.now(),
+    signRequest: args.signRequest,
+    prepared: args.prepared,
+    source: args.source,
   }
   await addPendingDappRequest(pending)
   await openApprovalPopup()
+  return await waitForExternalSignDecision(requestId)
+}
 
-  return await new Promise((resolve) => {
-    pendingDappResolvers.set(requestId, resolve)
-  })
+function mapExternalSignResultToProviderResponse(
+  result: ExternalSignResult
+): SignTransactionResponse {
+  if (result.status === 'rejected') {
+    throw new BackendError(result.message ?? 'User rejected', {
+      status: 403,
+      code: result.code ?? 'user_rejected',
+    })
+  }
+  if (result.status === 'error') {
+    throw new BackendError(result.message ?? 'Signing failed', {
+      status: 400,
+      code: result.code ?? 'error',
+    })
+  }
+  return {
+    txHash: result.txHash,
+    signedAuthEntry: result.signedAuthEntry,
+    signedTxXdr: result.signedTxXdr,
+    signedXdr: result.signedTxXdr ?? result.txHash,
+  }
 }
 
 chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, sendResponse) => {
@@ -739,8 +802,70 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         const resolver = pendingDappResolvers.get(req.requestId)
         pendingDappResolvers.delete(req.requestId)
         await removePendingDappRequest(req.requestId)
-        resolver?.({ approved: req.approved, signedXdr: req.signedXdr })
+        resolver?.({
+          approved: req.approved,
+          signedXdr: req.signedXdr,
+          txHash: req.txHash,
+          signedAuthEntry: req.signedAuthEntry,
+          signedTxXdr: req.signedTxXdr,
+        })
         sendResponse(ok())
+        return
+      }
+
+      case 'PING_EXTENSION': {
+        sendResponse(ok({ connected: true as const }))
+        return
+      }
+
+      case 'GET_ACTIVE_NETWORK': {
+        sendResponse(ok({ network: getActiveNetworkFromEnv() }))
+        return
+      }
+
+      case 'PREPARE_EXTERNAL_SIGN': {
+        const req = message.payload as RunExternalSignFlowRequest
+        const result = await runExternalSignFlow({
+          source: 'sign-request-tab',
+          request: req.request,
+          senderUrl: undefined,
+          waitForDecision: waitForExternalSignDecision,
+          enqueueReview: async (pending) => {
+            await addPendingDappRequest(pending)
+          },
+        })
+        sendResponse(ok(result))
+        return
+      }
+
+      case 'RUN_EXTERNAL_SIGN_FLOW': {
+        const req = message.payload as RunExternalSignFlowRequest
+        if (req.source === 'sign-request-tab') {
+          const result = await runExternalSignFlow({
+            source: 'sign-request-tab',
+            request: req.request,
+            waitForDecision: waitForExternalSignDecision,
+            enqueueReview: async (pending) => {
+              await addPendingDappRequest(pending)
+            },
+          })
+          sendResponse(ok(result))
+          return
+        }
+
+        const result = await runExternalSignFlow({
+          source: 'provider',
+          request: req.request,
+          senderUrl: undefined,
+          waitForDecision: waitForExternalSignDecision,
+          enqueueReview: async (pending) => {
+            await addPendingDappRequest(pending)
+          },
+          openPopup: async () => {
+            await openApprovalPopup()
+          },
+        })
+        sendResponse(ok(result as ExternalSignResult))
         return
       }
 
@@ -762,29 +887,58 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         return
       }
 
-      case 'DAPP_SIGN_TRANSACTION': {
-        const req = message.payload as any
-        const origin =
-          (req?.origin as string | undefined) ?? (req?.request?.origin as string | undefined)
-        const normalizedOrigin = origin ?? 'unknown'
-        const allowed = await getDappPermissions(normalizedOrigin)
-        if (!allowed.includes('signTransaction')) {
-          const approval = await requireDappApproval({
-            origin: normalizedOrigin,
-            kind: 'signTransaction',
-          })
+      case 'DAPP_OPEN_SIGN_REQUEST': {
+        const req = message.payload as DappOpenSignRequestPayload
+        const allowed = await getDappPermissions(req.origin)
+        if (!allowed.includes('getPublicKey')) {
+          const approval = await requireDappApproval({ origin: req.origin, kind: 'getPublicKey' })
           if (!approval.approved)
             throw new BackendError('User rejected', { status: 403, code: 'user_rejected' })
-          if (!approval.signedXdr)
-            throw new BackendError('Signing not completed', { status: 400, code: 'no_signature' })
-          await setDappPermissions(normalizedOrigin, mergePermissions(allowed, 'signTransaction'))
-          sendResponse(ok({ response: { signedXdr: approval.signedXdr } }))
-          return
+          await setDappPermissions(req.origin, mergePermissions(allowed, 'getPublicKey'))
         }
-        throw new BackendError('signTransaction requires user gesture via popup', {
-          status: 400,
-          code: 'not_supported',
+        const query = buildSignRequestSearchParams(req.request)
+        const url = chrome.runtime.getURL(`tabs/sign-request.html?${query}`)
+        await chrome.tabs.create({ url })
+        sendResponse(ok())
+        return
+      }
+
+      case 'DAPP_SIGN_TRANSACTION': {
+        const req = message.payload as {
+          origin?: string
+          request: { xdr: string; network: 'testnet' | 'mainnet'; accountToSign: string }
+        }
+        const origin = req.origin ?? 'unknown'
+        const allowed = await getDappPermissions(origin)
+        if (!allowed.includes('getPublicKey')) {
+          throw new BackendError('Site not connected — call getPublicKey first', {
+            status: 403,
+            code: 'not_connected',
+          })
+        }
+
+        const flowResult = await runExternalSignFlow({
+          source: 'provider',
+          request: {
+            network: req.request.network,
+            smartAccountAddress: req.request.accountToSign,
+            unsignedTxXdr: req.request.xdr,
+            origin,
+            submit: true,
+          },
+          senderUrl: undefined,
+          waitForDecision: waitForExternalSignDecision,
+          enqueueReview: async (pending) => {
+            await addPendingDappRequest(pending)
+          },
+          openPopup: async () => {
+            await openApprovalPopup()
+          },
         })
+
+        const response = mapExternalSignResultToProviderResponse(flowResult as ExternalSignResult)
+        sendResponse(ok({ response }))
+        return
       }
 
       case 'OPEN_WALLET_AFTER_ONBOARDING': {

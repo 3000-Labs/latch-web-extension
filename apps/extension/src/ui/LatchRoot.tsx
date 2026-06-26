@@ -8,10 +8,8 @@ import type {
   BackendWebauthnAuthenticationFinishResponse,
   BackendWebauthnBeginResponse,
   BackendWebauthnRegistrationFinishResponse,
-  BuildDelegatedTxResponse,
   BuildSendTxRequest,
   BuildSendTxResponse,
-  BuildTxResponse,
   SetupSendRulesRequest,
   SetupSendRulesResponse,
   CreateOrConnectFreighterRequest,
@@ -84,6 +82,9 @@ import { storedAccountLabel } from './lib/storedAccountLabel'
 import {
   markMigrationHomePromoCompleted,
 } from './lib/migrationHomePrefs'
+import { GrantAccessScreen } from './screens/dapp/GrantAccessScreen'
+import { ExternalSignReviewScreen } from './screens/dapp/ExternalSignReviewScreen'
+import { extractTransactionHash, signAndSubmitBuiltTx } from './lib/signBuiltTx'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
@@ -323,6 +324,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | undefined>(undefined)
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([])
+  const [dappBusy, setDappBusy] = useState(false)
+  const [dappError, setDappError] = useState<string | null>(null)
+  const [dappProgressLabel, setDappProgressLabel] = useState<string | null>(null)
+  const [dappNetwork, setDappNetwork] = useState<'testnet' | 'mainnet'>('testnet')
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === activeAccountId) ?? accounts[0],
@@ -341,8 +346,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     null
   )
 
-  const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
-  const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
 
@@ -544,6 +547,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [])
 
   useEffect(() => {
+    function onStorage(
+      changes: { [key: string]: chrome.storage.StorageChange },
+      area: string
+    ) {
+      if (area !== 'local') return
+      if (changes['latch.pendingDappRequests']) {
+        void loadPendingDapp().catch(() => {})
+      }
+    }
+    chrome.storage.onChanged.addListener(onStorage)
+    return () => chrome.storage.onChanged.removeListener(onStorage)
+  }, [])
+
+  useEffect(() => {
     if (setupState === 'has_account' && accounts.length > 0) {
       setRoute((prev) =>
         resolveMainRoute({
@@ -728,7 +745,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     })
     if (!res.ok || !res.data) return
     setPendingDappRequests(res.data.requests)
-    if (res.data.requests.length > 0) setRoute('dappApproval')
+    if (res.data.requests.length > 0) {
+      const netRes = await sendToBackground<undefined, { network: 'testnet' | 'mainnet' }>({
+        type: 'GET_ACTIVE_NETWORK',
+        payload: undefined,
+      })
+      if (netRes.ok && netRes.data?.network) setDappNetwork(netRes.data.network)
+      setRoute('dappApproval')
+    }
   }
 
   async function connectFreighter() {
@@ -931,44 +955,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  async function buildForActiveAccount() {
-    if (!activeAccount) throw new Error('No active account')
-    if (!activeAccount.smartAccountAddress) throw new Error('Account not ready')
-
-    if (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') {
-      if (!activeAccount.gAddress) throw new Error('Missing G-address for delegated account')
-      const res = await sendToBackground<
-        { smartAccountAddress: string; gAddress: string },
-        BuildDelegatedTxResponse
-      >({
-        type: 'BUILD_DELEGATED_TX',
-        payload: {
-          smartAccountAddress: activeAccount.smartAccountAddress,
-          gAddress: activeAccount.gAddress,
-        },
-      })
-      if (!res.ok) throw new Error(friendlyError(res.error))
-      setBuiltDelegatedTx(res.data!)
-      setBuiltTx(null)
-      return res.data!
-    }
-
-    const res = await sendToBackground<
-      { smartAccountAddress: string; signerG?: string },
-      BuildTxResponse
-    >({
-      type: 'BUILD_TX',
-      payload: {
-        smartAccountAddress: activeAccount.smartAccountAddress,
-        signerG: activeAccount.gAddress,
-      },
-    })
-    if (!res.ok) throw new Error(friendlyError(res.error))
-    setBuiltTx(res.data!)
-    setBuiltDelegatedTx(null)
-    return res.data!
-  }
-
   function resetSendFlow() {
     setSendDraft(INITIAL_SEND_DRAFT)
     setSendStep('selectToken')
@@ -1011,13 +997,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       cancelled = true
     }
   }, [route, sendDraft.token?.code, loadMarketPriceForToken])
-
-  function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
-    if (!data) return undefined
-    if (typeof data.transactionHash === 'string') return data.transactionHash
-    if (typeof data.hash === 'string') return data.hash
-    return undefined
-  }
 
   async function signAndSubmitBuilt(build: BuildSendTxResponse): Promise<SubmitTxResponse> {
     if (!activeAccount) throw new Error('No active account')
@@ -1242,229 +1221,30 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  async function signAndSubmit(): Promise<string> {
-    if (!activeAccount) throw new Error('No active account')
-    setError(null)
-    setLoading('Building transaction…')
-    try {
-      await buildForActiveAccount()
-
-      if (activeAccount.mode === 'freighter') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
-        const b =
-          builtDelegatedTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; gAddress: string },
-              BuildDelegatedTxResponse
-            >({
-              type: 'BUILD_DELEGATED_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                gAddress: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build delegated transaction.')
-        setLoading('Awaiting Freighter signature…')
-        const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
-            ? Networks.PUBLIC
-            : Networks.TESTNET
-        if (!b.gAddressEntryTemplateXdr) {
-          throw new Error('Missing delegated auth entry template from build response.')
-        }
-        const signed = await signAuthEntry(b.gAddressEntryTemplateXdr, {
-          networkPassphrase,
-          address: activeAccount.gAddress,
-        })
-        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
-        const signerAddress = signed.signerAddress
-        const signedAuthEntryBase64 = signed.signedAuthEntry
-          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-          : undefined
-        if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: b.txXdr,
-            smartAccountAuthEntryXdr: b.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      if (activeAccount.mode === 'mnemonic') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for mnemonic account')
-        const b =
-          builtDelegatedTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; gAddress: string },
-              BuildDelegatedTxResponse
-            >({
-              type: 'BUILD_DELEGATED_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                gAddress: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build delegated transaction.')
-        setLoading('Signing with local key…')
-        const signRes = await sendToBackground<
-          SignDelegatedGAuthEntryRequest,
-          SignDelegatedGAuthEntryResponse
-        >({
-          type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
-          payload: {
-            accountId: activeAccount.id,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            networkPassphrase: Networks.TESTNET,
-          },
-        })
-        if (!signRes.ok) throw new Error(friendlyError(signRes.error))
-        const signedAuthEntryBase64 = signRes.data!.signedAuthEntryBase64
-        const signerAddress = signRes.data!.signerAddress
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: b.txXdr,
-            smartAccountAuthEntryXdr: b.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      if (activeAccount.mode === 'phantom') {
-        const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
-          .phantom?.solana
-        if (!provider) throw new Error('Phantom not detected.')
-        const b =
-          builtTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; signerG?: string },
-              BuildTxResponse
-            >({
-              type: 'BUILD_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                signerG: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build transaction.')
-
-        const prefixedMessage = `Stellar Smart Account Auth:\n${b.authDigestHex.toLowerCase()}`
-        const msgBytes = new TextEncoder().encode(prefixedMessage)
-        setLoading('Awaiting Phantom signature…')
-        const signed = await provider.signMessage(msgBytes)
-        const sigBytes: Uint8Array =
-          signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
-        if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
-        const authSignatureHex = bytesToHex(sigBytes)
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_PHANTOM',
-          payload: {
-            txXdr: b.txXdr,
-            authEntryXdr: b.authEntryXdr,
-            authSignatureHex,
-            prefixedMessage,
-            publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
-            contextRuleId: b.contextRuleId,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      // passkey
-      const b =
-        builtTx ??
-        (
-          await sendToBackground<
-            { smartAccountAddress: string; signerG?: string },
-            BuildTxResponse
-          >({
-            type: 'BUILD_TX',
-            payload: {
-              smartAccountAddress: activeAccount.smartAccountAddress,
-              signerG: activeAccount.gAddress,
-            },
-          })
-        ).data
-      if (!b) throw new Error('Failed to build transaction.')
-      if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
-        throw new Error('Missing passkey data for this account.')
-      }
-
-      if (!b.authDigestHex?.trim()) {
-        throw new Error('Missing auth digest from transaction build.')
-      }
-      setLoading('Awaiting passkey authentication…')
-      const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
-        credentialId: activeAccount.passkeyCredentialId,
-        authDigestHex: b.authDigestHex,
-      })
-      const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
-        ReturnType<typeof startAuthentication>
-      >
-      const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
-
-      setLoading('Submitting transaction…')
-      const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_WEBAUTHN',
-        payload: {
-          txXdr: b.txXdr,
-          authEntryXdr: b.authEntryXdr,
-          sigDataXdr,
-          keyDataHex: activeAccount.passkeyKeyDataHex,
-          contextRuleId: b.contextRuleId,
-        },
-      })
-      if (!submitRes.ok) {
-        const errMsg = friendlyError(submitRes.error)
-        throw new Error(
-          await enrichWebauthnRpIdHashErrorMessage(errMsg, {
-            optionsJSON,
-            credentialResponse: assertion,
-          })
-        )
-      }
-      setRoute('home')
-      return b.txXdr
-    } finally {
-      setLoading(null)
-    }
-  }
-
   async function resolvePendingDapp(
     req: PendingDappRequest,
     approved: boolean,
-    signedXdr?: string
+    extra?: {
+      signedXdr?: string
+      txHash?: string
+      signedAuthEntry?: string
+      signedTxXdr?: string
+    }
   ) {
     await sendToBackground({
       type: 'RESOLVE_PENDING_DAPP_REQUEST',
-      payload: { requestId: req.id, approved, signedXdr },
+      payload: {
+        requestId: req.id,
+        approved,
+        signedXdr: extra?.signedXdr,
+        txHash: extra?.txHash,
+        signedAuthEntry: extra?.signedAuthEntry,
+        signedTxXdr: extra?.signedTxXdr,
+      },
     })
+    setDappBusy(false)
+    setDappProgressLabel(null)
+    setDappError(null)
     await loadPendingDapp()
     if (pendingDappRequests.length <= 1) {
       setRoute(accounts.length > 0 ? 'home' : 'welcome')
@@ -1603,54 +1383,67 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Dapp request</h2>
-                  <p className="mt-2 text-sm text-muted">Approve access for this site</p>
-                </div>
-
-                {pendingDappRequests[0] ? (
-                  <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
-                    <div className="text-xs font-bold text-muted">Origin</div>
-                    <div className="mt-2 break-all text-sm font-extrabold">
-                      {pendingDappRequests[0].origin}
-                    </div>
-                    <div className="mt-3 text-xs text-muted">Request</div>
-                    <div className="mt-1 text-sm font-bold">{pendingDappRequests[0].kind}</div>
-                  </div>
-                ) : null}
-
-                <div className="mt-auto space-y-3">
-                  <button
-                    onClick={() => {
+                {pendingDappRequests[0]?.kind === 'externalSignReview' &&
+                pendingDappRequests[0].prepared ? (
+                  <ExternalSignReviewScreen
+                    origin={pendingDappRequests[0].origin}
+                    prepared={pendingDappRequests[0].prepared}
+                    busy={dappBusy}
+                    progressLabel={dappProgressLabel}
+                    error={dappError}
+                    onConfirm={() => {
                       const req = pendingDappRequests[0]
-                      if (!req) return
+                      if (!req?.prepared || !activeAccount) return
                       void (async () => {
-                        if (req.kind === 'signTransaction') {
-                          const signedXdr = await signAndSubmit()
-                          await resolvePendingDapp(req, true, signedXdr)
-                          return
+                        setDappBusy(true)
+                        setDappError(null)
+                        try {
+                          const submitData = await signAndSubmitBuiltTx({
+                            build: req.prepared!,
+                            activeAccount,
+                            surface,
+                            onProgress: setDappProgressLabel,
+                          })
+                          const txHash = extractTransactionHash(submitData)
+                          await resolvePendingDapp(req, true, { txHash })
+                        } catch (e) {
+                          setDappError(e instanceof Error ? e.message : String(e))
+                          setDappBusy(false)
+                          setDappProgressLabel(null)
                         }
-                        await resolvePendingDapp(req, true)
-                      })().catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                      })()
                     }}
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => {
+                    onReject={() => {
                       const req = pendingDappRequests[0]
                       if (!req) return
                       void resolvePendingDapp(req, false).catch((e) =>
-                        setError(e instanceof Error ? e.message : String(e))
+                        setDappError(e instanceof Error ? e.message : String(e))
                       )
                     }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    Reject
-                  </button>
-                </div>
+                  />
+                ) : pendingDappRequests[0] ? (
+                  <GrantAccessScreen
+                    origin={pendingDappRequests[0].origin}
+                    kind={pendingDappRequests[0].kind}
+                    network={dappNetwork}
+                    smartAccountAddress={activeAccount?.smartAccountAddress ?? '—'}
+                    busy={dappBusy}
+                    onApprove={() => {
+                      const req = pendingDappRequests[0]
+                      if (!req) return
+                      void resolvePendingDapp(req, true).catch((e) =>
+                        setDappError(e instanceof Error ? e.message : String(e))
+                      )
+                    }}
+                    onReject={() => {
+                      const req = pendingDappRequests[0]
+                      if (!req) return
+                      void resolvePendingDapp(req, false).catch((e) =>
+                        setDappError(e instanceof Error ? e.message : String(e))
+                      )
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
 

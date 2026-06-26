@@ -13,7 +13,11 @@ export interface SignTransactionRequest {
 }
 
 export interface SignTransactionResponse {
-  signedXdr: string
+  txHash?: string
+  signedAuthEntry?: string
+  signedTxXdr?: string
+  /** @deprecated Prefer txHash when wallet submits on behalf of dapp */
+  signedXdr?: string
 }
 
 export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic'
@@ -398,13 +402,16 @@ export interface BackendWebauthnAuthenticationFinishResponse {
 
 export type DappPermission = 'getPublicKey' | 'signTransaction'
 
-export type PendingDappRequestKind = DappPermission
+export type PendingDappRequestKind = DappPermission | 'externalSignReview'
 
 export interface PendingDappRequest {
   id: string
   origin: string
   kind: PendingDappRequestKind
   createdAt: number
+  signRequest?: import('./externalSign').ExternalSignRequest
+  prepared?: import('./externalSign').PrepareSignResponse
+  source?: import('./externalSign').ExternalSignSource
 }
 
 export type ListPendingDappRequestsRequest = Record<string, never>
@@ -417,6 +424,9 @@ export interface ResolvePendingDappRequest {
   requestId: string
   approved: boolean
   signedXdr?: string
+  txHash?: string
+  signedAuthEntry?: string
+  signedTxXdr?: string
 }
 
 export interface GetDappPermissionsRequest {
@@ -438,6 +448,7 @@ export interface DappGetPublicKeyResponse {
 }
 
 export interface DappSignTransactionRequest {
+  origin?: string
   request: SignTransactionRequest
 }
 
@@ -548,6 +559,7 @@ export type MessageType =
   | 'RESOLVE_PENDING_DAPP_REQUEST'
   | 'DAPP_GET_PUBLIC_KEY'
   | 'DAPP_SIGN_TRANSACTION'
+  | 'DAPP_OPEN_SIGN_REQUEST'
   | 'MIGRATION_DISCOVER'
   | 'MIGRATION_SWEEP_XLM'
   | 'MIGRATION_SWEEP_TOKEN'
@@ -558,6 +570,10 @@ export type MessageType =
   | 'BUILD_SEND_TX'
   | 'SETUP_SEND_RULES'
   | 'OPEN_WALLET_AFTER_ONBOARDING'
+  | 'PREPARE_EXTERNAL_SIGN'
+  | 'RUN_EXTERNAL_SIGN_FLOW'
+  | 'GET_ACTIVE_NETWORK'
+  | 'PING_EXTENSION'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -611,6 +627,7 @@ export type BackgroundRequestPayloadByType = {
   RESOLVE_PENDING_DAPP_REQUEST: ResolvePendingDappRequest
   DAPP_GET_PUBLIC_KEY: GetDappPermissionsRequest
   DAPP_SIGN_TRANSACTION: DappSignTransactionRequest
+  DAPP_OPEN_SIGN_REQUEST: import('./externalSign').DappOpenSignRequestPayload
   MIGRATION_DISCOVER: MigrationDiscoverRequest
   MIGRATION_SWEEP_XLM: MigrationSweepXlmRequest
   MIGRATION_SWEEP_TOKEN: MigrationSweepTokenRequest
@@ -621,6 +638,10 @@ export type BackgroundRequestPayloadByType = {
   BUILD_SEND_TX: BuildSendTxRequest
   SETUP_SEND_RULES: SetupSendRulesRequest
   OPEN_WALLET_AFTER_ONBOARDING: undefined
+  PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowRequest
+  RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').RunExternalSignFlowRequest
+  GET_ACTIVE_NETWORK: undefined
+  PING_EXTENSION: undefined
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -656,6 +677,7 @@ export type BackgroundResponseDataByType = {
   RESOLVE_PENDING_DAPP_REQUEST: undefined
   DAPP_GET_PUBLIC_KEY: DappGetPublicKeyResponse
   DAPP_SIGN_TRANSACTION: DappSignTransactionResponse
+  DAPP_OPEN_SIGN_REQUEST: undefined
   MIGRATION_DISCOVER: MigrationDiscovery
   MIGRATION_SWEEP_XLM: MigrationSweepResult
   MIGRATION_SWEEP_TOKEN: MigrationSweepResult
@@ -666,4 +688,10 @@ export type BackgroundResponseDataByType = {
   BUILD_SEND_TX: BuildSendTxResponse
   SETUP_SEND_RULES: SetupSendRulesResponse
   OPEN_WALLET_AFTER_ONBOARDING: undefined
+  PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowPreparedResponse
+  RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').ExternalSignResult
+  GET_ACTIVE_NETWORK: { network: Network }
+  PING_EXTENSION: { connected: true }
 } & Record<string, unknown>
+
+export * from './externalSign'

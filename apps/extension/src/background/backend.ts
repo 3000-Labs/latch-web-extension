@@ -25,6 +25,9 @@ import type {
   SubmitPhantomTxRequest,
   SubmitTxResponse,
   SubmitWebauthnTxRequest,
+  PrepareSignRequest,
+  PrepareSignResponse,
+  SignPayloadStoreResponse,
 } from '@latch/types'
 
 const DEFAULT_LATCH_API_URL = 'https://v0-latch-stellar.vercel.app'
@@ -302,5 +305,19 @@ export async function submitTxWebauthn(req: SubmitWebauthnTxRequest): Promise<Su
   return await jsonFetch<SubmitTxResponse>('/api/transaction/submit-webauthn', {
     method: 'POST',
     body: webauthnFinishBody(req),
+  })
+}
+
+export async function prepareSign(req: PrepareSignRequest): Promise<PrepareSignResponse> {
+  return await jsonFetch<PrepareSignResponse>('/api/transaction/prepare-sign', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export async function fetchSignPayload(payloadRef: string): Promise<SignPayloadStoreResponse> {
+  const ref = encodeURIComponent(payloadRef)
+  return await jsonFetch<SignPayloadStoreResponse>(`/api/sign-payload/${ref}`, {
+    method: 'GET',
   })
 }

@@ -1,0 +1,265 @@
+import type {
+  ExternalSignRequest,
+  ExternalSignResult,
+  ExternalSignSource,
+  PendingDappRequest,
+  PrepareSignResponse,
+  RunExternalSignFlowPreparedResponse,
+  SendSignerType,
+  StoredAccount,
+} from '@latch/types'
+
+import { BackendError, fetchSignPayload, prepareSign } from '../backend'
+import { getAccounts } from '../storage'
+import { isOriginAllowedForSigning } from './allowList'
+import { assertAllowedCallbackUrl } from './callbackUrl'
+
+export type ExternalSignDecision = {
+  approved: boolean
+  txHash?: string
+  signedAuthEntry?: string
+  signedTxXdr?: string
+  signedXdr?: string
+}
+
+export type WaitForExternalSignDecision = (requestId: string) => Promise<ExternalSignDecision>
+
+function accountModeToSignerType(account: StoredAccount): SendSignerType {
+  if (account.mode === 'phantom') return 'phantom'
+  if (account.mode === 'passkey') return 'passkey'
+  return 'freighter'
+}
+
+function resolveOrigin(
+  request: ExternalSignRequest,
+  senderUrl?: string
+): string {
+  if (request.origin?.trim()) return request.origin.trim()
+  if (senderUrl) {
+    try {
+      return new URL(senderUrl).origin
+    } catch {
+      // fall through
+    }
+  }
+  return 'unknown'
+}
+
+async function resolveUnsignedXdr(
+  request: ExternalSignRequest
+): Promise<{ unsignedTxXdr: string; signRequest: ExternalSignRequest }> {
+  if (request.unsignedTxXdr?.trim()) {
+    return { unsignedTxXdr: request.unsignedTxXdr.trim(), signRequest: request }
+  }
+  if (!request.payloadRef?.trim()) {
+    throw new BackendError('Missing unsigned transaction XDR', { code: 'validation_error' })
+  }
+
+  const stored = await fetchSignPayload(request.payloadRef.trim())
+  if (request.callback && stored.callback !== request.callback) {
+    throw new BackendError('Callback URL mismatch for payload reference', {
+      code: 'validation_error',
+    })
+  }
+  if (request.network && stored.network !== request.network) {
+    throw new BackendError('Network mismatch for payload reference', { code: 'validation_error' })
+  }
+  if (
+    request.smartAccountAddress &&
+    stored.smartAccountAddress !== request.smartAccountAddress
+  ) {
+    throw new BackendError('Account mismatch for payload reference', { code: 'account_mismatch' })
+  }
+
+  const signRequest: ExternalSignRequest = {
+    network: stored.network,
+    smartAccountAddress: stored.smartAccountAddress,
+    unsignedTxXdr: stored.unsignedTxXdr,
+    callback: stored.callback ?? request.callback,
+    requestId: stored.requestId ?? request.requestId,
+    origin: stored.origin ?? request.origin,
+    submit: stored.submit ?? request.submit,
+    payloadRef: request.payloadRef,
+  }
+  return { unsignedTxXdr: stored.unsignedTxXdr, signRequest }
+}
+
+async function getActiveAccountOrThrow(): Promise<StoredAccount> {
+  const { accounts, activeAccountId } = await getAccounts()
+  const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+  if (!active?.smartAccountAddress) {
+    throw new BackendError('No active account', { status: 400, code: 'no_account' })
+  }
+  return active
+}
+
+export async function prepareExternalSignSession(args: {
+  source: ExternalSignSource
+  request: ExternalSignRequest
+  senderUrl?: string
+  skipAllowlist?: boolean
+}): Promise<{
+  origin: string
+  signRequest: ExternalSignRequest
+  prepared: PrepareSignResponse
+}> {
+  const origin = resolveOrigin(args.request, args.senderUrl)
+
+  if (args.source === 'provider' && !args.skipAllowlist) {
+    const allowed = await isOriginAllowedForSigning(origin)
+    if (!allowed) {
+      throw new BackendError('Site not connected', { status: 403, code: 'not_connected' })
+    }
+  }
+
+  if (args.request.callback) {
+    assertAllowedCallbackUrl(args.request.callback)
+  }
+
+  const { unsignedTxXdr, signRequest } = await resolveUnsignedXdr(args.request)
+  const active = await getActiveAccountOrThrow()
+
+  if (signRequest.smartAccountAddress !== active.smartAccountAddress) {
+    throw new BackendError('Transaction account does not match active wallet account', {
+      code: 'account_mismatch',
+    })
+  }
+
+  const signerType = accountModeToSignerType(active)
+  const prepared = await prepareSign({
+    network: signRequest.network,
+    smartAccountAddress: signRequest.smartAccountAddress,
+    unsignedTxXdr,
+    signerType,
+    signerG: active.gAddress,
+  })
+
+  return { origin, signRequest, prepared }
+}
+
+export function buildPendingExternalSignRequest(args: {
+  origin: string
+  signRequest: ExternalSignRequest
+  prepared: PrepareSignResponse
+  source: ExternalSignSource
+}): PendingDappRequest {
+  return {
+    id: crypto.randomUUID(),
+    origin: args.origin,
+    kind: 'externalSignReview',
+    createdAt: Date.now(),
+    signRequest: args.signRequest,
+    prepared: args.prepared,
+    source: args.source,
+  }
+}
+
+export function decisionToExternalSignResult(
+  signRequest: ExternalSignRequest,
+  decision: ExternalSignDecision
+): ExternalSignResult {
+  if (!decision.approved) {
+    return {
+      status: 'rejected',
+      code: 'user_rejected',
+      message: 'User rejected',
+      requestId: signRequest.requestId,
+      network: signRequest.network,
+    }
+  }
+
+  const submit = signRequest.submit !== false
+  if (submit) {
+    if (!decision.txHash) {
+      return {
+        status: 'error',
+        code: 'no_tx_hash',
+        message: 'Signing completed without transaction hash',
+        requestId: signRequest.requestId,
+        network: signRequest.network,
+      }
+    }
+    return {
+      status: 'signed',
+      txHash: decision.txHash,
+      requestId: signRequest.requestId,
+      network: signRequest.network,
+    }
+  }
+
+  return {
+    status: 'signed',
+    signedAuthEntry: decision.signedAuthEntry,
+    signedTxXdr: decision.signedTxXdr ?? decision.signedXdr,
+    requestId: signRequest.requestId,
+    network: signRequest.network,
+  }
+}
+
+export function backendErrorToExternalSignResult(
+  err: unknown,
+  signRequest?: ExternalSignRequest
+): ExternalSignResult {
+  if (err instanceof BackendError) {
+    return {
+      status: 'error',
+      code: err.code ?? 'error',
+      message: err.message,
+      requestId: signRequest?.requestId,
+      network: signRequest?.network,
+    }
+  }
+  return {
+    status: 'error',
+    code: 'error',
+    message: err instanceof Error ? err.message : String(err),
+    requestId: signRequest?.requestId,
+    network: signRequest?.network,
+  }
+}
+
+export async function runExternalSignFlow(args: {
+  source: ExternalSignSource
+  request: ExternalSignRequest
+  senderUrl?: string
+  waitForDecision: WaitForExternalSignDecision
+  enqueueReview: (pending: PendingDappRequest) => Promise<void>
+  openPopup?: () => Promise<void>
+}): Promise<ExternalSignResult | RunExternalSignFlowPreparedResponse> {
+  let signRequest = args.request
+  try {
+    const session = await prepareExternalSignSession({
+      source: args.source,
+      request: args.request,
+      senderUrl: args.senderUrl,
+    })
+    signRequest = session.signRequest
+
+    const pending = buildPendingExternalSignRequest({
+      origin: session.origin,
+      signRequest: session.signRequest,
+      prepared: session.prepared,
+      source: args.source,
+    })
+
+    await args.enqueueReview(pending)
+
+    if (args.source === 'sign-request-tab') {
+      return {
+        requestId: pending.id,
+        origin: session.origin,
+        signRequest: session.signRequest,
+        prepared: session.prepared,
+      }
+    }
+
+    if (args.openPopup) {
+      await args.openPopup()
+    }
+
+    const decision = await args.waitForDecision(pending.id)
+    return decisionToExternalSignResult(session.signRequest, decision)
+  } catch (err) {
+    return backendErrorToExternalSignResult(err, signRequest)
+  }
+}
