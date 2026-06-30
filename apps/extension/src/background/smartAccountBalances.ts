@@ -3,6 +3,7 @@ import { loadSmartAccountPortfolioRows, STELLAR_SAC_DISPLAY_DECIMALS } from '@la
 import type { GetSmartAccountBalancesResponse, SmartAccountBalanceRow } from '@latch/types'
 
 import { resolveIconDataUrlForAsset } from './assetIcons'
+import { getKnownSacProbes } from './knownSacProbes'
 import {
   getStellarNetworkFromEnv,
   horizonUrlFromEnv,
@@ -92,12 +93,15 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
 
   // Hard cap for portfolio load (Horizon + Soroban RPC). Without this, cold starts can hang forever.
   const portfolioSignal = AbortSignal.timeout(12_000)
+  const knownProbes = await getKnownSacProbes(accountId)
   const core = await loadSmartAccountPortfolioRows({
     rpcUrl,
     networkPassphrase: passphrase,
+    network,
     cAddress: c,
     gAddress: g,
     horizonUrl,
+    additionalProbes: knownProbes,
     signal: portfolioSignal,
   })
 

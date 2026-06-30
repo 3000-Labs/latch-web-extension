@@ -4,6 +4,7 @@ import {
   buildTokenMap,
   iconFromTokenMap,
   iconFromTokenLists,
+  listJsonMatchesNetwork,
   type TokenListItem,
 } from './assetTokenLists'
 
@@ -65,6 +66,17 @@ describe('iconFromTokenMap', () => {
 
   it('returns null for unknown assets', () => {
     expect(iconFromTokenMap(map, { code: 'UNKNOWN' })).toBeNull()
+  })
+})
+
+describe('listJsonMatchesNetwork', () => {
+  it('rejects mainnet-declared lists on testnet', () => {
+    expect(listJsonMatchesNetwork({ network: 'mainnet', assets: [] }, 'testnet')).toBe(false)
+    expect(listJsonMatchesNetwork({ network: 'mainnet', assets: [] }, 'mainnet')).toBe(true)
+  })
+
+  it('accepts lists without a network field', () => {
+    expect(listJsonMatchesNetwork({ assets: [] }, 'testnet')).toBe(true)
   })
 })
 

@@ -1,8 +1,10 @@
-import { Asset } from '@stellar/stellar-sdk'
+import { Asset, Networks } from '@stellar/stellar-sdk'
 
+import { curatedPortfolioProbes, type StellarNetwork } from './curatedAssets'
 import type { HorizonAccountRecord } from './horizonTypes'
 import { isHorizonCreditBalance } from './horizonTypes'
 import { parseHorizonAccountJson } from './migrationBalances'
+import { mergePortfolioProbes } from './portfolioProbes'
 import { fetchSacBalanceRaw, formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
 
 export type PortfolioTokenProbe = {
@@ -63,39 +65,79 @@ export interface SmartAccountPortfolioRow {
   amount: string
 }
 
+function networkFromPassphrase(networkPassphrase: string): StellarNetwork {
+  return networkPassphrase === Networks.PUBLIC ? 'mainnet' : 'testnet'
+}
+
+async function gTrustlineProbes(
+  horizonUrl: string,
+  gAddress: string,
+  networkPassphrase: string,
+  signal?: AbortSignal
+): Promise<PortfolioTokenProbe[]> {
+  try {
+    const json = await fetchHorizonAccountJson(horizonUrl, gAddress.trim(), signal)
+    const record = parseHorizonAccountJson(json)
+    if (!record) return []
+    return portfolioProbesFromHorizonAccount(record, networkPassphrase)
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Build deduped SAC probe list for a smart account (no RPC balance reads).
+ */
+export async function buildSmartAccountPortfolioProbes(params: {
+  network: StellarNetwork
+  networkPassphrase: string
+  gAddress?: string
+  horizonUrl: string
+  additionalProbes?: PortfolioTokenProbe[]
+  signal?: AbortSignal
+}): Promise<PortfolioTokenProbe[]> {
+  const nativeSac = Asset.native().contractId(params.networkPassphrase)
+  const xlmProbe: PortfolioTokenProbe = { code: 'XLM', sacContractId: nativeSac }
+
+  const gProbes = params.gAddress?.trim()
+    ? await gTrustlineProbes(
+        params.horizonUrl,
+        params.gAddress,
+        params.networkPassphrase,
+        params.signal
+      )
+    : []
+
+  return mergePortfolioProbes([
+    [xlmProbe],
+    curatedPortfolioProbes(params.networkPassphrase, params.network),
+    gProbes,
+    params.additionalProbes ?? [],
+  ])
+}
+
 /**
  * Reads Soroban SAC balances for C-address for each probe (parallel RPC).
  */
 export async function loadSmartAccountPortfolioRows(params: {
   rpcUrl: string
   networkPassphrase: string
+  network?: StellarNetwork
   cAddress: string
   gAddress?: string
   horizonUrl: string
+  additionalProbes?: PortfolioTokenProbe[]
   signal?: AbortSignal
 }): Promise<SmartAccountPortfolioRow[]> {
-  const probes: PortfolioTokenProbe[] = [
-    { code: 'XLM', sacContractId: Asset.native().contractId(params.networkPassphrase) },
-  ]
-
-  if (params.gAddress?.trim()) {
-    try {
-      const json = await fetchHorizonAccountJson(
-        params.horizonUrl,
-        params.gAddress.trim(),
-        params.signal
-      )
-      const record = parseHorizonAccountJson(json)
-      if (record) {
-        const fromG = portfolioProbesFromHorizonAccount(record, params.networkPassphrase)
-        for (const p of fromG) {
-          if (!probes.some((x) => x.sacContractId === p.sacContractId)) probes.push(p)
-        }
-      }
-    } catch {
-      // keep native-only
-    }
-  }
+  const network = params.network ?? networkFromPassphrase(params.networkPassphrase)
+  const probes = await buildSmartAccountPortfolioProbes({
+    network,
+    networkPassphrase: params.networkPassphrase,
+    gAddress: params.gAddress,
+    horizonUrl: params.horizonUrl,
+    additionalProbes: params.additionalProbes,
+    signal: params.signal,
+  })
 
   const results = await Promise.all(
     probes.map(async (p) => {

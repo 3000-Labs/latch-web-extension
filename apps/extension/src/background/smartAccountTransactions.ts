@@ -1,7 +1,8 @@
-import { fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
+import { buildSmartAccountPortfolioProbes, fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
 
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
 
+import { getKnownSacProbes, recordKnownSacProbes } from './knownSacProbes'
 import {
   getStellarNetworkFromEnv,
   horizonUrlFromEnv,
@@ -91,6 +92,15 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
     rpcUrl: sorobanRpcUrlFromEnv(),
     networkPassphrase: networkPassphraseFromEnv(),
   })
+
+  const network = getStellarNetworkFromEnv()
+  void buildSmartAccountPortfolioProbes({
+    network,
+    networkPassphrase: networkPassphraseFromEnv(),
+    gAddress: g,
+    horizonUrl: horizonUrlFromEnv(),
+    additionalProbes: await getKnownSacProbes(accountId),
+  }).then((probes) => recordKnownSacProbes(accountId, probes))
 
   const codes = payments.map((p) => p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET'))
   const { pricesByCodeUpper } = await getMarketPrices(codes)

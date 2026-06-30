@@ -139,6 +139,8 @@ export interface BuildSendTxResponse {
   estimatedFeeXlm?: string
   estimatedFeeUsd?: string
   feeLabel?: string
+  delegatedGAuthEntrySynthesized?: boolean
+  delegatedNativeAuthEntryIndices?: number[]
   [k: string]: unknown
 }
 
@@ -169,6 +171,15 @@ export interface GetSmartAccountBalancesRequest {
 export interface GetSmartAccountBalancesResponse {
   rows: SmartAccountBalanceRow[]
   totalBalanceUsd?: string
+}
+
+export interface RecordKnownSacProbeRequest {
+  accountId: string
+  probe: {
+    code: string
+    issuer?: string
+    sacContractId: string
+  }
 }
 
 export type SmartAccountTransactionKind = 'sent' | 'received' | 'deposit' | 'swap'
@@ -340,6 +351,9 @@ export interface SubmitDelegatedTxRequest {
   /** Base64 of raw 64-byte Ed25519 signature (not full signed auth entry XDR). */
   signedAuthEntryBase64: string
   signerAddress: string
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  delegatedGAuthEntrySynthesized?: boolean
 }
 
 export interface SubmitWebauthnTxRequest {
@@ -348,6 +362,9 @@ export interface SubmitWebauthnTxRequest {
   sigDataXdr: string
   keyDataHex: string
   contextRuleId: string
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  delegatedGAuthEntrySynthesized?: boolean
 }
 
 export interface SubmitTxResponse {
@@ -574,6 +591,11 @@ export type MessageType =
   | 'RUN_EXTERNAL_SIGN_FLOW'
   | 'GET_ACTIVE_NETWORK'
   | 'PING_EXTENSION'
+  | 'GET_SWAP_TOKEN_CATALOG'
+  | 'GET_SWAP_QUOTE'
+  | 'PREPARE_SWAP_TX'
+  | 'SETUP_SWAP_RULES'
+  | 'RECORD_KNOWN_SAC_PROBE'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -642,6 +664,11 @@ export type BackgroundRequestPayloadByType = {
   RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').RunExternalSignFlowRequest
   GET_ACTIVE_NETWORK: undefined
   PING_EXTENSION: undefined
+  GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogRequest
+  GET_SWAP_QUOTE: import('./swap').GetSwapQuoteRequest
+  PREPARE_SWAP_TX: import('./swap').PrepareSwapTxRequest
+  SETUP_SWAP_RULES: import('./swap').SetupSwapRulesRequest
+  RECORD_KNOWN_SAC_PROBE: RecordKnownSacProbeRequest
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -692,6 +719,12 @@ export type BackgroundResponseDataByType = {
   RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').ExternalSignResult
   GET_ACTIVE_NETWORK: { network: Network }
   PING_EXTENSION: { connected: true }
+  GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogResponse
+  GET_SWAP_QUOTE: import('./swap').GetSwapQuoteResponse
+  PREPARE_SWAP_TX: import('./swap').PrepareSwapTxResponse
+  SETUP_SWAP_RULES: import('./swap').SetupSwapRulesResponse
+  RECORD_KNOWN_SAC_PROBE: undefined
 } & Record<string, unknown>
 
 export * from './externalSign'
+export * from './swap'

@@ -13,6 +13,7 @@
   "dependencies": {
     "@latch/crypto": "workspace:*",
     "@latch/stellar": "workspace:*",
+    "@latch/swap": "workspace:*",
     "@latch/types": "workspace:*",
     "@latch/ui": "workspace:*",
     "@noble/curves": "^2.2.0",
@@ -63,6 +64,9 @@
       "https://horizon.stellar.org/*",
       "https://soroban-testnet.stellar.org/*",
       "https://soroban-rpc.mainnet.stellar.org/*",
+      "https://amm-api-testnet.aqua.network/*",
+      "https://amm-api.aqua.network/*",
+      "https://api.soroswap.finance/*",
       "https://*/*",
       "http://localhost:3000/*",
       "http://localhost:8000/*",

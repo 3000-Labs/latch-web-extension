@@ -4,6 +4,7 @@ export type TokenListItem = {
   contract?: string
   icon: string
   name?: string
+  decimals?: number
 }
 
 /** @deprecated use TokenListItem */
@@ -48,8 +49,13 @@ function normalizeAssetEntry(raw: unknown): TokenListItem | null {
         ? o.contract_id.trim()
         : undefined
   const name = typeof o.name === 'string' ? o.name.trim() : undefined
+  const decimalsRaw = o.decimals
+  const decimals =
+    typeof decimalsRaw === 'number' && Number.isFinite(decimalsRaw) && decimalsRaw >= 0
+      ? decimalsRaw
+      : undefined
   if (!code || !icon || !icon.startsWith('http')) return null
-  return { code, issuer: issuer || '', contract, icon, name }
+  return { code, issuer: issuer || '', contract, icon, name, decimals }
 }
 
 /** Parse SEP-0042 lists, Soroswap, Lobstr, and similar shapes. */
@@ -124,14 +130,32 @@ export function iconFromTokenLists(
   return iconFromTokenMap(buildTokenMap(lists), params)
 }
 
-async function fetchListUrl(url: string): Promise<TokenListItem[]> {
+export function listJsonMatchesNetwork(
+  json: unknown,
+  network: 'mainnet' | 'testnet'
+): boolean {
+  if (!json || typeof json !== 'object') return true
+  const declared = (json as Record<string, unknown>).network
+  if (typeof declared !== 'string') return true
+  const n = declared.toLowerCase()
+  if (n === 'public' || n === 'mainnet') return network === 'mainnet'
+  if (n === 'testnet') return network === 'testnet'
+  return true
+}
+
+async function fetchListUrl(
+  url: string,
+  network: 'mainnet' | 'testnet'
+): Promise<TokenListItem[]> {
   try {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) return []
-    return normalizeListJson(await res.json())
+    const json = await res.json()
+    if (!listJsonMatchesNetwork(json, network)) return []
+    return normalizeListJson(json)
   } catch {
     return []
   }
@@ -156,7 +180,7 @@ async function persistMap(network: 'mainnet' | 'testnet', map: TokenMap): Promis
 
 async function fetchTokenListFromNetwork(network: 'mainnet' | 'testnet'): Promise<TokenMap> {
   const urls = LISTS[network]
-  const settled = await Promise.allSettled(urls.map((url) => fetchListUrl(url)))
+  const settled = await Promise.allSettled(urls.map((url) => fetchListUrl(url, network)))
 
   const combined: TokenListItem[] = []
   for (const result of settled) {

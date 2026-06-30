@@ -20,6 +20,7 @@ import type {
   BuildSendTxRequest,
   BuildTxRequest,
   SetupSendRulesRequest,
+  SetupSwapRulesRequest,
   CreateOrConnectFreighterRequest,
   CreateOrConnectPasskeyRequest,
   CreateOrConnectPhantomRequest,
@@ -38,6 +39,10 @@ import type {
   MigrationSweepXlmRequest,
   GetMarketPricesRequest,
   GetMarketPricesResponse,
+  GetSwapQuoteRequest,
+  GetSwapTokenCatalogRequest,
+  PrepareSwapTxRequest,
+  RecordKnownSacProbeRequest,
   ResolvePendingDappRequest,
   SetActiveAccountRequest,
   SetDappPermissionsRequest,
@@ -60,6 +65,7 @@ import {
   buildSendTx,
   buildTx,
   setupSendRules,
+  setupSwapRules,
   createOrConnectFreighter,
   createOrConnectPasskey,
   createOrConnectPhantom,
@@ -97,6 +103,12 @@ import {
 import { runMigrationDiscover } from './migration/discover'
 import { runMigrationSweepToken, runMigrationSweepXlm } from './migration/sweep'
 import { runGetSmartAccountBalances } from './smartAccountBalances'
+import { recordKnownSacProbe } from './knownSacProbes'
+import {
+  runGetSwapQuote,
+  runGetSwapTokenCatalog,
+  runPrepareSwapTx,
+} from './swap/handlers'
 import { runGetSmartAccountTransactions } from './smartAccountTransactions'
 import { deriveStellarKeypairFromMnemonic } from './stellarMnemonic'
 import { getMarketPrices } from './marketPrices'
@@ -773,6 +785,41 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         const req = message.payload as SetupSendRulesRequest
         const data = await setupSendRules(req)
         sendResponse(ok(data))
+        return
+      }
+
+      case 'GET_SWAP_TOKEN_CATALOG': {
+        const req = message.payload as GetSwapTokenCatalogRequest
+        const data = await runGetSwapTokenCatalog(req)
+        sendResponse(ok(data))
+        return
+      }
+
+      case 'GET_SWAP_QUOTE': {
+        const req = message.payload as GetSwapQuoteRequest
+        const data = await runGetSwapQuote(req)
+        sendResponse(ok(data))
+        return
+      }
+
+      case 'PREPARE_SWAP_TX': {
+        const req = message.payload as PrepareSwapTxRequest
+        const data = await runPrepareSwapTx(req)
+        sendResponse(ok(data))
+        return
+      }
+
+      case 'SETUP_SWAP_RULES': {
+        const req = message.payload as SetupSwapRulesRequest
+        const data = await setupSwapRules(req)
+        sendResponse(ok(data))
+        return
+      }
+
+      case 'RECORD_KNOWN_SAC_PROBE': {
+        const req = message.payload as RecordKnownSacProbeRequest
+        await recordKnownSacProbe(req.accountId, req.probe)
+        sendResponse(ok(undefined))
         return
       }
 

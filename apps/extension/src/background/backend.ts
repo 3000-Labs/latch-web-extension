@@ -13,6 +13,10 @@ import type {
   BuildTxResponse,
   SetupSendRulesRequest,
   SetupSendRulesResponse,
+  SetupSwapRulesRequest,
+  SetupSwapRulesResponse,
+  BuildSwapTxRequest,
+  BuildSwapTxResponse,
   CreateOrConnectFreighterRequest,
   CreateOrConnectFreighterResponse,
   CreateOrConnectPasskeyRequest,
@@ -264,8 +268,22 @@ export async function buildSendTx(req: BuildSendTxRequest): Promise<BuildSendTxR
   })
 }
 
+export async function buildSwapTx(req: BuildSwapTxRequest): Promise<BuildSwapTxResponse> {
+  return await jsonFetch<BuildSwapTxResponse>('/api/transaction/build-swap', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
 export async function setupSendRules(req: SetupSendRulesRequest): Promise<SetupSendRulesResponse> {
   return await jsonFetch<SetupSendRulesResponse>('/api/smart-account/setup-send-rules', {
+    method: 'POST',
+    body: JSON.stringify(req),
+  })
+}
+
+export async function setupSwapRules(req: SetupSwapRulesRequest): Promise<SetupSwapRulesResponse> {
+  return await jsonFetch<SetupSwapRulesResponse>('/api/smart-account/setup-swap-rules', {
     method: 'POST',
     body: JSON.stringify(req),
   })

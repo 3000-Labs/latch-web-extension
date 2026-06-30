@@ -21,7 +21,7 @@ import {
 } from '../webauthn/passkey'
 import { openPasskeyBridgeAndWait } from '../webauthn/passkeyBridge'
 import { bytesToHex } from '../webauthn/utils'
-import { contextRuleIdString, isDelegatedSendBuild } from './sendTx'
+import { contextRuleIdString, isDelegatedSendBuild, multiAuthSubmitFields } from './sendTx'
 import { friendlyError, sendToBackground } from './backgroundClient'
 
 type PhantomSolanaProvider = {
@@ -92,6 +92,7 @@ export async function signAndSubmitBuiltTx(args: {
           gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
           signedAuthEntryBase64,
           signerAddress,
+          ...multiAuthSubmitFields(build),
         },
       })
       if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
@@ -119,6 +120,7 @@ export async function signAndSubmitBuiltTx(args: {
         gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
         signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
         signerAddress: signRes.data!.signerAddress,
+        ...multiAuthSubmitFields(build),
       },
     })
     if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
@@ -155,6 +157,15 @@ export async function signAndSubmitBuiltTx(args: {
   if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
     throw new Error('Missing passkey data for this account.')
   }
+  if (
+    isDelegatedSendBuild(build) &&
+    (build.submitMethod === 'delegated' || build.submitMethod === 'bundler-delegated')
+  ) {
+    throw new Error(
+      'This smart account authorizes swaps via a delegated G-address, not your passkey. ' +
+        'Reconnect with Freighter using the delegated signer G-address, or log out and sign in with passkey to run one-time swap setup.'
+    )
+  }
   if (!build.authDigestHex?.trim()) {
     throw new Error('Missing auth digest from transaction build.')
   }
@@ -174,6 +185,7 @@ export async function signAndSubmitBuiltTx(args: {
       sigDataXdr,
       keyDataHex: activeAccount.passkeyKeyDataHex,
       contextRuleId: contextRuleIdString(build),
+      ...multiAuthSubmitFields(build),
     },
   })
   if (!submitRes.ok) {

@@ -12,14 +12,18 @@ export interface PrepareSignRequest {
   unsignedTxXdr: string
   signerType?: SendSignerType
   signerG?: string
+  /** Bundler public G when tx source is fee-payer; delegated entry synthesis only. */
+  feePayerG?: string
 }
 
 /** Extends BuildSendTxResponse with review metadata from prepare-sign. */
 export interface PrepareSignResponse extends BuildSendTxResponse {
   network: Network
   smartAccountAddress: string
-  operations: PreparedSignOperation[]
+  operations?: PreparedSignOperation[]
   warnings?: string[]
+  delegatedGAuthEntrySynthesized?: boolean
+  submitMethod?: 'webauthn' | 'delegated' | 'bundler-delegated'
 }
 
 export interface ExternalSignRequest {

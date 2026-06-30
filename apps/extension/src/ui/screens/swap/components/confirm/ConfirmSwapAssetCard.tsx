@@ -11,7 +11,7 @@ export function ConfirmSwapAssetCard({
 }: {
   token: SwapTokenVm
   title: string
-  subtitle: string
+  subtitle?: string
   trailing?: React.ReactNode
 }) {
   return (
@@ -22,7 +22,9 @@ export function ConfirmSwapAssetCard({
           <p className="truncate text-lg font-semibold tracking-[-0.36px] text-[#fcfcfc]">
             {title}
           </p>
-          <p className="truncate text-sm tracking-[-0.28px] text-[#b3b3b3]">{subtitle}</p>
+          {subtitle ? (
+            <p className="truncate text-sm tracking-[-0.28px] text-[#b3b3b3]">{subtitle}</p>
+          ) : null}
         </div>
       </div>
       {trailing ? <div className="ml-2 shrink-0">{trailing}</div> : null}

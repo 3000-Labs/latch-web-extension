@@ -82,11 +82,16 @@ export function buildSetupRequestFromDraft(
     if (!verifierAddress) return null
     req.keyDataHex = keyDataHex
     req.verifierAddress = verifierAddress
+    if (account.passkeyCredentialId?.trim()) {
+      req.credentialId = account.passkeyCredentialId.trim()
+    }
   }
-  if (signerType === 'phantom' && account.phantomPublicKeyHex) {
+  if (signerType === 'phantom') {
+    if (!account.phantomPublicKeyHex?.trim()) return null
     req.publicKeyHex = account.phantomPublicKeyHex
   }
-  if (signerType === 'freighter' && account.gAddress) {
+  if (signerType === 'freighter') {
+    if (!account.gAddress?.trim()) return null
     req.gAddress = account.gAddress
   }
 
@@ -95,6 +100,35 @@ export function buildSetupRequestFromDraft(
 
 export function isNoContextRuleError(error?: { code?: string; status?: number }): boolean {
   return error?.status === 409 && error?.code === 'NO_CONTEXT_RULE'
+}
+
+export function isSignerMismatchError(error?: { code?: string; status?: number }): boolean {
+  return error?.status === 409 && error?.code === 'SIGNER_MISMATCH'
+}
+
+export function isBundlerMismatchError(error?: { code?: string; status?: number }): boolean {
+  return error?.status === 409 && error?.code === 'BUNDLER_MISMATCH'
+}
+
+/** On-chain rules need reconfiguration (wrong signer type or stale bundler G). */
+export function isSwapRuleReconfigureError(error?: { code?: string; status?: number }): boolean {
+  return isSignerMismatchError(error) || isBundlerMismatchError(error)
+}
+
+/** Pass full auth entry list to submit when API built swap with bundler fee-payer. */
+export function multiAuthSubmitFields(build: BuildSendTxResponse): {
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  delegatedGAuthEntrySynthesized?: boolean
+} {
+  if (!build.authEntriesXdr?.length) return {}
+  return {
+    authEntriesXdr: build.authEntriesXdr,
+    smartAccountAuthEntryIndex: build.smartAccountAuthEntryIndex ?? 0,
+    ...(build.delegatedGAuthEntrySynthesized === true
+      ? { delegatedGAuthEntrySynthesized: true as const }
+      : {}),
+  }
 }
 
 export function isDelegatedSendBuild(build: BuildSendTxResponse): build is BuildSendTxResponse & {

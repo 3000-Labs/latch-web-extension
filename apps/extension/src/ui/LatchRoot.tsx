@@ -25,6 +25,15 @@ import type {
   GetAssetIconDataUrlsResponse,
   GetMarketPricesRequest,
   GetMarketPricesResponse,
+  GetSwapTokenCatalogRequest,
+  GetSwapTokenCatalogResponse,
+  GetSwapQuoteRequest,
+  GetSwapQuoteResponse,
+  PrepareSwapTxRequest,
+  PrepareSwapTxResponse,
+  RecordKnownSacProbeRequest,
+  SetupSwapRulesRequest,
+  SetupSwapRulesResponse,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
@@ -73,8 +82,12 @@ import { SettingsScreen } from './screens/SettingsScreen'
 import { CreateMultisigScreen } from './screens/multisig/CreateMultisigScreen'
 import { AddMultisigOwnersScreen } from './screens/multisig/AddMultisigOwnersScreen'
 import { ExploreScreen } from './screens/explore/ExploreScreen'
-import { SwapScreen } from './screens/SwapScreen'
+import { SwapScreen, swapWalletLabel } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
+import { SwapFailureScreen } from './screens/swap/SwapFailureScreen'
+import { SwapSuccessScreen } from './screens/swap/SwapSuccessScreen'
+import { SwapCatalogLoadingOverlay } from './screens/swap/components/SwapCatalogLoadingOverlay'
+import { SwapTransactionLoadingOverlay } from './screens/swap/components/SwapTransactionLoadingOverlay'
 import { AccountMenu } from './components/AccountMenu'
 import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
 import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
@@ -96,8 +109,12 @@ import {
 } from './webauthn/passkey'
 import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
-import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
-import { swapTokens } from './swap/swapVm'
+import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from './swap/swapVm'
+import {
+  mergeSwapTokenCatalogs,
+  pickDefaultReceiveTokenId,
+  swapQuotePayloadToVm,
+} from './swap/swapVm'
 import {
   buildTransactionDetail,
   groupHistoryItems,
@@ -116,8 +133,15 @@ import {
   contextRuleIdString,
   isDelegatedSendBuild,
   isNoContextRuleError,
+  isSwapRuleReconfigureError,
+  multiAuthSubmitFields,
   passkeySetupPrerequisiteError,
 } from './lib/sendTx'
+import {
+  buildSetupSwapRequestFromQuote,
+  swapBuildNeedsSignerReconfigure,
+  swapSetupPrerequisiteError,
+} from './lib/swapTx'
 
 type Theme = 'dark' | 'light'
 type Surface = 'popup' | 'sidepanel'
@@ -155,7 +179,7 @@ type SignerId = 'freighter' | 'phantom' | 'passkey'
  * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.
  */
 function routeKeepsUiMountedForWebauthn(route: Route): boolean {
-  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send'
+  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send' || route === 'swapConfirm'
 }
 
 const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
@@ -348,6 +372,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
+  const [swapPayTokenCatalog, setSwapPayTokenCatalog] = useState<SwapTokenVm[]>([])
+  const [swapReceiveTokenCatalog, setSwapReceiveTokenCatalog] = useState<SwapTokenVm[]>([])
+  const [swapPreferredReceiveTokenIds, setSwapPreferredReceiveTokenIds] = useState<string[]>([])
+  const [swapCatalogLoading, setSwapCatalogLoading] = useState(false)
+  const [swapBusy, setSwapBusy] = useState(false)
+  const [swapStep, setSwapStep] = useState<'confirm' | 'success' | 'failure'>('confirm')
+  const [swapTokenPriceUsdBySymbol, setSwapTokenPriceUsdBySymbol] = useState<
+    Record<string, number>
+  >({})
 
   const [sendStep, setSendStep] = useState<SendStep>('selectToken')
   const [sendDraft, setSendDraft] = useState<SendDraft>(INITIAL_SEND_DRAFT)
@@ -401,38 +434,146 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [swapIconByCode, setSwapIconByCode] = useState<Record<string, string | null>>({})
 
+  const mapSwapTokenVm = useCallback(
+    (t: {
+      id: string
+      symbol: string
+      name: string
+      assetId: string
+      contractId: string
+      decimals: number
+      balance: string
+      issuer?: string
+      iconUrl?: string | null
+    }): SwapTokenVm => ({
+      id: t.id,
+      symbol: t.symbol,
+      name: t.name,
+      assetId: t.assetId,
+      contractId: t.contractId,
+      decimals: t.decimals,
+      balance: t.balance,
+      issuer: t.issuer,
+      iconUrl: t.iconUrl,
+    }),
+    []
+  )
+
+  const loadSwapCatalog = useCallback(async () => {
+    if (!activeAccount?.id) return
+    setSwapCatalogLoading(true)
+    try {
+      const res = await sendToBackground<
+        GetSwapTokenCatalogRequest,
+        GetSwapTokenCatalogResponse
+      >({
+        type: 'GET_SWAP_TOKEN_CATALOG',
+        payload: { accountId: activeAccount.id },
+      })
+      if (res.ok && res.data) {
+        setSwapPayTokenCatalog(res.data.payTokens.map(mapSwapTokenVm))
+        setSwapReceiveTokenCatalog(res.data.receiveTokens.map(mapSwapTokenVm))
+        setSwapPreferredReceiveTokenIds(res.data.preferredReceiveTokenIds)
+      }
+    } finally {
+      setSwapCatalogLoading(false)
+    }
+  }, [activeAccount?.id, mapSwapTokenVm])
+
   useEffect(() => {
-    if (setupState !== 'has_account') return
+    if (route !== 'swap' && route !== 'swapConfirm') return
+    void loadSwapCatalog()
+  }, [route, loadSwapCatalog])
+
+  const swapTokensUnion = useMemo(
+    () => mergeSwapTokenCatalogs(swapPayTokenCatalog, swapReceiveTokenCatalog),
+    [swapPayTokenCatalog, swapReceiveTokenCatalog]
+  )
+
+  useEffect(() => {
+    if (route !== 'swap' && route !== 'swapConfirm') return
+    const codes = swapTokensUnion.map((t) => t.symbol).filter(Boolean)
+    if (codes.length === 0) return
+    let cancelled = false
+    void (async () => {
+      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+        type: 'GET_MARKET_PRICES',
+        payload: { tokens: codes },
+      })
+      if (cancelled || !res.ok || !res.data) return
+      const map: Record<string, number> = {}
+      for (const [code, row] of Object.entries(res.data.pricesByCodeUpper)) {
+        if (row?.priceUsd != null) map[code] = row.priceUsd
+      }
+      setSwapTokenPriceUsdBySymbol(map)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [route, swapTokensUnion])
+
+  useEffect(() => {
+    if (setupState !== 'has_account' || swapTokensUnion.length === 0) return
     let cancelled = false
     void (async () => {
       const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>(
         {
           type: 'GET_ASSET_ICON_DATA_URLS',
-          payload: { assets: swapTokens.map((t) => ({ code: t.symbol })) },
+          payload: {
+            assets: swapTokensUnion.map((t) => ({
+              code: t.symbol,
+              issuer: t.issuer,
+              sacContractId: t.contractId,
+            })),
+          },
         }
       )
       if (cancelled || !res.ok || !res.data) return
       const map: Record<string, string | null> = {}
-      swapTokens.forEach((t, i) => {
-        map[t.symbol] = res.data!.icons[i] ?? null
+      swapTokensUnion.forEach((t, i) => {
+        map[t.symbol] = res.data!.icons[i] ?? t.iconUrl ?? null
       })
       setSwapIconByCode(map)
     })()
     return () => {
       cancelled = true
     }
-  }, [setupState])
+  }, [setupState, swapTokensUnion])
 
-  const swapTokenCatalog = useMemo(() => {
-    return swapTokens.map((t) => {
-      const fromPortfolio = portfolioRows.find((r) => r.code === t.symbol)?.iconUrl
-      const fromResolver = swapIconByCode[t.symbol]
-      return {
+  const applySwapTokenIcons = useCallback(
+    (catalog: SwapTokenVm[]) =>
+      catalog.map((t) => ({
         ...t,
-        iconUrl: fromPortfolio ?? fromResolver ?? null,
-      }
-    })
-  }, [portfolioRows, swapIconByCode])
+        iconUrl: swapIconByCode[t.symbol] ?? t.iconUrl ?? null,
+      })),
+    [swapIconByCode]
+  )
+
+  const swapPayTokenCatalogWithIcons = useMemo(
+    () => applySwapTokenIcons(swapPayTokenCatalog),
+    [applySwapTokenIcons, swapPayTokenCatalog]
+  )
+
+  const swapReceiveTokenCatalogWithIcons = useMemo(
+    () => applySwapTokenIcons(swapReceiveTokenCatalog),
+    [applySwapTokenIcons, swapReceiveTokenCatalog]
+  )
+
+  const swapTokenById = useMemo(() => {
+    const map = new Map<string, SwapTokenVm>()
+    for (const t of mergeSwapTokenCatalogs(
+      swapPayTokenCatalogWithIcons,
+      swapReceiveTokenCatalogWithIcons
+    )) {
+      map.set(t.id, t)
+    }
+    return map
+  }, [swapPayTokenCatalogWithIcons, swapReceiveTokenCatalogWithIcons])
+
+  const resolveSwapToken = useCallback(
+    (id: string) => swapTokenById.get(id),
+    [swapTokenById]
+  )
 
   /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
   const passkeyPrefetchRef = useRef<
@@ -719,16 +860,31 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     void loadHistory()
   }, [route, loadHistory])
 
+  function resetSwapFlow() {
+    setSwapDraft(null)
+    setSwapQuote(null)
+    setSwapBusy(false)
+    setSwapStep('confirm')
+  }
+
   function openSwapFromNav() {
+    const payId = swapPayTokenCatalogWithIcons[0]?.id ?? 'native'
+    const receiveId = pickDefaultReceiveTokenId(
+      payId,
+      swapReceiveTokenCatalogWithIcons,
+      swapPreferredReceiveTokenIds
+    )
     setSwapDraft({
-      payTokenId: 'xlm',
-      receiveTokenId: 'usdt',
+      payTokenId: payId,
+      receiveTokenId: receiveId,
       payAmount: '',
       useExchangeBalance: false,
       approved: false,
     })
     setSwapQuote(null)
+    setSwapStep('confirm')
     setRoute('swap')
+    void loadSwapCatalog()
   }
 
   function handleMainTabSelect(tab: MainTab) {
@@ -998,6 +1154,146 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }, [route, sendDraft.token?.code, loadMarketPriceForToken])
 
+  async function refreshSwapQuoteForConfirm(): Promise<SwapQuoteVm> {
+    if (!activeAccount?.id || !swapDraft || !swapQuote) {
+      throw new Error('Swap session expired')
+    }
+    const payToken = resolveSwapToken(swapDraft.payTokenId)
+    const receiveToken = resolveSwapToken(swapDraft.receiveTokenId)
+    if (!payToken || !receiveToken) throw new Error('Unknown swap token')
+
+    const res = await sendToBackground<GetSwapQuoteRequest, GetSwapQuoteResponse>({
+      type: 'GET_SWAP_QUOTE',
+      payload: {
+        accountId: activeAccount.id,
+        assetInId: payToken.id,
+        assetOutId: receiveToken.id,
+        amountIn: swapDraft.payAmount,
+        slippageBps: swapQuote.quotePayload.slippageBps,
+        providerId: swapQuote.quotePayload.providerId,
+      },
+    })
+    if (!res.ok || !res.data) throw new Error(friendlyError(res.error))
+
+    const payUsd = swapTokenPriceUsdBySymbol[payToken.symbol.toUpperCase()]
+    const receiveUsd = swapTokenPriceUsdBySymbol[receiveToken.symbol.toUpperCase()]
+    const refreshed = swapQuotePayloadToVm(res.data.quote, payUsd, receiveUsd)
+    setSwapQuote(refreshed)
+    return refreshed
+  }
+
+  async function executeSwapWithSetupLoop(quoteForTx: SwapQuoteVm): Promise<PrepareSwapTxResponse> {
+    if (!activeAccount?.id) throw new Error('No active account')
+    const setupBody = buildSetupSwapRequestFromQuote(quoteForTx.quotePayload, activeAccount)
+    if (!setupBody) {
+      throw new Error(
+        swapSetupPrerequisiteError(activeAccount, quoteForTx.quotePayload) ??
+          passkeySetupPrerequisiteError(activeAccount) ??
+          'Invalid swap setup details'
+      )
+    }
+    const setupPayload = setupBody
+
+    async function runSwapRuleSetup(): Promise<void> {
+      const setupRes = await sendToBackground<SetupSwapRulesRequest, SetupSwapRulesResponse>({
+        type: 'SETUP_SWAP_RULES',
+        payload: setupPayload,
+      })
+      if (!setupRes.ok) {
+        const code = setupRes.error?.code
+        if (code === 'signer_already_exists') return
+        throw new Error(friendlyError(setupRes.error))
+      }
+      const setup = setupRes.data!
+      if (setup.alreadyConfigured) return
+      await signAndSubmitBuiltTx({
+        build: setup,
+        activeAccount,
+        surface,
+      })
+      if ((setup.remainingSetupCount ?? 0) > 0) return
+    }
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const prepareRes = await sendToBackground<PrepareSwapTxRequest, PrepareSwapTxResponse>({
+        type: 'PREPARE_SWAP_TX',
+        payload: {
+          accountId: activeAccount.id,
+          quote: quoteForTx.quotePayload,
+        },
+      })
+
+      if (prepareRes.ok && prepareRes.data) {
+        if (swapBuildNeedsSignerReconfigure(prepareRes.data, activeAccount)) {
+          await runSwapRuleSetup()
+          continue
+        }
+        return prepareRes.data
+      }
+
+      if (isNoContextRuleError(prepareRes.error) || isSwapRuleReconfigureError(prepareRes.error)) {
+        await runSwapRuleSetup()
+        continue
+      }
+
+      throw new Error(friendlyError(prepareRes.error))
+    }
+
+    throw new Error('Swap setup did not complete')
+  }
+
+  async function handleConfirmSwap() {
+    if (!activeAccount?.id || !swapQuote) return
+    setSwapBusy(true)
+    try {
+      const quoteForTx =
+        Date.now() >= swapQuote.quotePayload.expiresAtMs - 5_000
+          ? await refreshSwapQuoteForConfirm()
+          : swapQuote
+
+      const prepared = await executeSwapWithSetupLoop(quoteForTx)
+      if (prepared.estimatedFeeXlm || prepared.feeLabel) {
+        setSwapQuote((prev) =>
+          prev
+            ? {
+                ...prev,
+                networkFeeLine: prepared.feeLabel
+                  ? prepared.feeLabel
+                  : `~ ${prepared.estimatedFeeXlm} Stellar`,
+              }
+            : prev
+        )
+      }
+
+      const submitData = await signAndSubmitBuiltTx({
+        build: prepared,
+        activeAccount,
+        surface,
+      })
+      const txHash = extractTransactionHash(submitData)
+      setSwapStep('success')
+      const assetOut = quoteForTx.quotePayload.assetOut
+      void sendToBackground<RecordKnownSacProbeRequest, undefined>({
+        type: 'RECORD_KNOWN_SAC_PROBE',
+        payload: {
+          accountId: activeAccount.id,
+          probe: {
+            code: assetOut.symbol,
+            issuer: assetOut.issuer,
+            sacContractId: assetOut.contractId,
+          },
+        },
+      })
+      void loadPortfolio()
+      if (txHash) console.info('[latch:swap] submitted', txHash)
+    } catch (e) {
+      console.error('[latch:swap]', e)
+      setSwapStep('failure')
+    } finally {
+      setSwapBusy(false)
+    }
+  }
+
   async function signAndSubmitBuilt(build: BuildSendTxResponse): Promise<SubmitTxResponse> {
     if (!activeAccount) throw new Error('No active account')
 
@@ -1118,6 +1414,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         sigDataXdr,
         keyDataHex: activeAccount.passkeyKeyDataHex,
         contextRuleId: contextRuleIdString(build),
+        ...multiAuthSubmitFields(build),
       },
     })
     if (!submitRes.ok) {
@@ -1279,6 +1576,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     route === 'home' &&
     !loading &&
     ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
+  const showSwapCatalogLoadingOverlay =
+    (page === 'main' || page === 'settings') &&
+    route === 'swap' &&
+    !loading &&
+    swapCatalogLoading &&
+    swapPayTokenCatalogWithIcons.length === 0
+  const showSwapLoadingOverlay = swapBusy && route === 'swapConfirm' && swapStep === 'confirm'
   const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
 
   const mainTabRoutes = ['home', 'swap', 'history', 'explore'] as const
@@ -2143,17 +2447,25 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <SwapScreen
-                  surface={surface}
-                  initialState={swapDraft ?? undefined}
-                  swapTokenCatalog={swapTokenCatalog}
-                  onBack={() => setRoute('home')}
-                  onContinue={(q, d) => {
-                    setSwapDraft(d)
-                    setSwapQuote(q)
-                    setRoute('swapConfirm')
-                  }}
-                />
+                {!(swapCatalogLoading && swapPayTokenCatalogWithIcons.length === 0) ? (
+                  <SwapScreen
+                    surface={surface}
+                    accountId={activeAccount?.id ?? ''}
+                    walletLabel={swapWalletLabel(activeAccount?.smartAccountAddress)}
+                    initialState={swapDraft ?? undefined}
+                    payTokenCatalog={swapPayTokenCatalogWithIcons}
+                    receiveTokenCatalog={swapReceiveTokenCatalogWithIcons}
+                    preferredReceiveTokenIds={swapPreferredReceiveTokenIds}
+                    tokenPriceUsdBySymbol={swapTokenPriceUsdBySymbol}
+                    onBack={() => setRoute('home')}
+                    onContinue={(q, d) => {
+                      setSwapDraft(d)
+                      setSwapQuote(q)
+                      setSwapStep('confirm')
+                      setRoute('swapConfirm')
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
 
@@ -2166,19 +2478,46 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 ].join(' ')}
               >
                 {swapDraft && swapQuote ? (
-                  <ConfirmSwapScreen
-                    surface={surface}
-                    draft={swapDraft}
-                    quote={swapQuote}
-                    swapTokenCatalog={swapTokenCatalog}
-                    receiveAddress={activeAccount?.smartAccountAddress}
-                    onBackOrCancel={() => setRoute('swap')}
-                    onConfirm={() => {
-                      setSwapDraft(null)
-                      setSwapQuote(null)
-                      setRoute('home')
-                    }}
-                  />
+                  swapStep === 'success' ? (
+                    <SwapSuccessScreen
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      onBackToHome={() => {
+                        resetSwapFlow()
+                        setRoute('home')
+                      }}
+                    />
+                  ) : swapStep === 'failure' ? (
+                    <SwapFailureScreen
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      onBack={() => {
+                        resetSwapFlow()
+                        setRoute('swap')
+                      }}
+                      onTryAgain={() => {
+                        setSwapStep('confirm')
+                      }}
+                    />
+                  ) : (
+                    <ConfirmSwapScreen
+                      surface={surface}
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      receiveAddress={activeAccount?.smartAccountAddress}
+                      busy={swapBusy}
+                      onBackOrCancel={() => {
+                        if (swapBusy) return
+                        setRoute('swap')
+                      }}
+                      onConfirm={() => {
+                        void handleConfirmSwap()
+                      }}
+                    />
+                  )
                 ) : (
                   <div className="rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
                     <div className="font-extrabold">Swap session expired</div>
@@ -2314,6 +2653,28 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       {showHomeLoadingOverlay ? (
         <div className="absolute inset-0 z-40">
           <HomeLoadingOverlay />
+        </div>
+      ) : null}
+
+      {showSwapCatalogLoadingOverlay ? (
+        <div
+          className="absolute inset-0 z-40"
+          role="status"
+          aria-live="polite"
+          aria-label="Loading tokens"
+        >
+          <SwapCatalogLoadingOverlay />
+        </div>
+      ) : null}
+
+      {showSwapLoadingOverlay ? (
+        <div
+          className="absolute inset-0 z-50"
+          role="status"
+          aria-live="polite"
+          aria-label="Swapping"
+        >
+          <SwapTransactionLoadingOverlay />
         </div>
       ) : null}
 
