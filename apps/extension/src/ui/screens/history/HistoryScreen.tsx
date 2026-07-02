@@ -7,6 +7,7 @@ import { HistoryFilterChips, type HistoryFilter } from './HistoryFilterChips'
 import { HistoryHeader } from './HistoryHeader'
 import { HistorySearchRow } from './HistorySearchRow'
 import { HistorySectionList } from './HistorySectionList'
+import { MAIN_BOTTOM_NAV_CLEARANCE_PX } from '../home/components/MainBottomNav'
 
 export type HistorySurface = 'popup' | 'sidepanel'
 
@@ -52,7 +53,10 @@ export function HistoryScreen({
   const isEmpty = !loading && !error && view.length === 0
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-[74px] animate-screenIn">
+    <div
+      className="flex min-h-0 flex-1 flex-col animate-screenIn"
+      style={{ paddingBottom: MAIN_BOTTOM_NAV_CLEARANCE_PX }}
+    >
       <HistoryHeader onBack={onBack} />
       <div className="mt-5">
         <HistorySearchRow value={query} onChange={setQuery} onFilterClick={onRefresh} />

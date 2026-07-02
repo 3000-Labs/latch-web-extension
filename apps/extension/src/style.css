@@ -88,3 +88,38 @@ body,
   animation: latch-loading-ring 2s linear infinite;
 }
 
+@keyframes latch-nav-icon-wobble {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  16% {
+    transform: rotate(-18deg);
+  }
+
+  32% {
+    transform: rotate(15deg);
+  }
+
+  48% {
+    transform: rotate(-10deg);
+  }
+
+  64% {
+    transform: rotate(6deg);
+  }
+
+  80% {
+    transform: rotate(-3deg);
+  }
+
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.latch-nav-icon-wobble {
+  transform-origin: 50% 100%;
+  animation: latch-nav-icon-wobble 380ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
