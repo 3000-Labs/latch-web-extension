@@ -3,11 +3,9 @@ import lockupUrl from 'url:../../../assets/onboarding/web/latch-onboarding-locku
 export function OnboardingWelcomeCard({
   onCreateWallet,
   onImportWallet,
-  onImportRecoveryPhrase,
 }: {
   onCreateWallet: () => void
   onImportWallet: () => void
-  onImportRecoveryPhrase: () => void
 }) {
   return (
     <div className="flex h-[500px] w-[420px] flex-col rounded-[24px] bg-[#1c1c1c] p-6 shadow-[-5px_6px_7.7px_rgba(9,9,9,0.3)]">
@@ -60,14 +58,6 @@ export function OnboardingWelcomeCard({
             />
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={onImportRecoveryPhrase}
-          className="shrink-0 whitespace-nowrap text-center text-[18px] font-medium leading-[1.36] tracking-[-0.36px] text-[#ffad00]"
-        >
-          Import with recovery phrase
-        </button>
       </div>
     </div>
   )

@@ -54,10 +54,6 @@ export function OnboardingFlow() {
         <OnboardingWelcomeCard
           onCreateWallet={() => setStep('createAccount')}
           onImportWallet={() => setStep('haveWallet')}
-          onImportRecoveryPhrase={() => {
-            setImportMethod('seedPhrase')
-            setStep('importRecoveryPhrase')
-          }}
         />
       ) : null}
 
