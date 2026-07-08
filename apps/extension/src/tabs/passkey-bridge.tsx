@@ -3,7 +3,11 @@ import '../style.css'
 import { useEffect, useState } from 'react'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
-import { formatWebauthnBrowserError } from '../ui/webauthn/passkey'
+import {
+  formatWebauthnBrowserError,
+  prepareAuthenticationOptionsForGet,
+  prepareRegistrationOptionsForCreate,
+} from '../ui/webauthn/passkey'
 import {
   LATCH_PASSKEY_BRIDGE_RESULT,
   passkeyBridgeStorageKey,
@@ -36,11 +40,11 @@ export default function PasskeyBridgeTab() {
         let response: unknown
         if (payload.mode === 'registration') {
           response = await startRegistration({
-            optionsJSON: payload.optionsJSON,
+            optionsJSON: prepareRegistrationOptionsForCreate(payload.optionsJSON),
           } as Parameters<typeof startRegistration>[0])
         } else {
           response = await startAuthentication({
-            optionsJSON: payload.optionsJSON,
+            optionsJSON: prepareAuthenticationOptionsForGet(payload.optionsJSON),
           } as Parameters<typeof startAuthentication>[0])
         }
         await chrome.runtime.sendMessage({

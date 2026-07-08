@@ -16,27 +16,40 @@ export function HomeActionButtons({
   onSend,
   onReceive,
   onSwap,
+  swapDisabled,
 }: {
   onFund?: () => void
   onSend?: () => void
   onReceive?: () => void
   onSwap?: () => void
+  swapDisabled?: boolean
 }) {
   const actions: Action[] = [
     { label: 'Fund', iconUrl: fundIconUrl, onClick: onFund },
     { label: 'Send', iconUrl: sendIconUrl, onClick: onSend },
     { label: 'Receive', iconUrl: receiveIconUrl, onClick: onReceive },
-    { label: 'Swap', iconUrl: swapIconUrl, onClick: onSwap },
+    {
+      label: 'Swap',
+      iconUrl: swapIconUrl,
+      onClick: swapDisabled ? undefined : onSwap,
+    },
   ]
 
   return (
     <div className="flex w-full items-center justify-between self-stretch">
-      {actions.map((action) => (
+      {actions.map((action) => {
+        const disabled = action.label === 'Swap' && swapDisabled
+        return (
         <button
           key={action.label}
           type="button"
+          disabled={disabled}
           onClick={action.onClick}
-          className="flex w-[70.6px] shrink-0 flex-col items-center gap-2"
+          className={[
+            'flex w-[70.6px] shrink-0 flex-col items-center gap-2',
+            disabled ? 'cursor-not-allowed opacity-40' : '',
+          ].join(' ')}
+          title={disabled ? 'Swap not available for multisig wallets yet' : undefined}
         >
           <span className="flex size-16 shrink-0 items-center justify-center rounded-[36px] bg-[rgb(var(--latch-surface-2))]">
             {action.label === 'Fund' ? (
@@ -58,7 +71,8 @@ export function HomeActionButtons({
             {action.label}
           </span>
         </button>
-      ))}
+        )
+      })}
     </div>
   )
 }

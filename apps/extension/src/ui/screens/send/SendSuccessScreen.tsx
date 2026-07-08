@@ -34,13 +34,25 @@ export function SendSuccessScreen({
           <SendSuccessIllustration />
 
           <div className="flex w-full flex-col items-center gap-3">
-            <SendSuccessMessage
-              amount={cryptoAmount}
-              symbol={token.code}
-              recipientName={draft.recipientName}
-              recipientAddress={draft.recipientAddress}
-            />
-            {result.hash ? (
+            {result.proposalId ? (
+              <div className="flex w-full flex-col items-center gap-2 text-center">
+                <h2 className="w-full text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
+                  Proposal created
+                </h2>
+                <p className="w-full text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
+                  Co-owners must approve before this send can execute. You can approve now from the
+                  proposal screen.
+                </p>
+              </div>
+            ) : (
+              <SendSuccessMessage
+                amount={cryptoAmount}
+                symbol={token.code}
+                recipientName={draft.recipientName}
+                recipientAddress={draft.recipientAddress}
+              />
+            )}
+            {result.hash && !result.proposalId ? (
               <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} />
             ) : null}
           </div>

@@ -112,6 +112,7 @@ import {
 import { runGetSmartAccountTransactions } from './smartAccountTransactions'
 import { deriveStellarKeypairFromMnemonic } from './stellarMnemonic'
 import { getMarketPrices } from './marketPrices'
+import { tryHandleMultisigMessage } from './multisig/handlers'
 
 import {
   createAccount,
@@ -440,8 +441,13 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
   const message = rawMessage as BackgroundMessage
 
   ;(async () => {
+    if (await tryHandleMultisigMessage(message, sendResponse, ok)) {
+      return
+    }
+
     switch (message?.type) {
       case 'GET_SETUP_STATE': {
+        await ensureSetupStateMatchesAccounts()
         const data = await getSetupState()
         sendResponse(ok<GetSetupStateResponse>(data))
         return
@@ -456,12 +462,13 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       case 'LOGOUT': {
         clearMnemonicSessionKeys()
         await disconnectSessionForLogoutDev()
-        await setSetupState({ setupState: 'new', accountPublicKey: undefined })
+        await ensureSetupStateMatchesAccounts()
         sendResponse(ok())
         return
       }
 
       case 'GET_ACCOUNTS': {
+        await ensureSetupStateMatchesAccounts()
         const data = await getAccounts()
         let activeAccountHasMnemonicVault: boolean | undefined
         let activeAccountMnemonicSignerLoaded: boolean | undefined
@@ -994,6 +1001,12 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         })
         await ensureSetupStateMatchesAccounts()
         await applyActionClickBehavior()
+        sendResponse(ok())
+        return
+      }
+
+      case 'OPEN_ONBOARDING_TAB': {
+        await openOnboardingTab()
         sendResponse(ok())
         return
       }

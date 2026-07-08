@@ -1,10 +1,4 @@
-import { BackendError } from './backend'
-import { latchMarketApiBaseUrl } from './marketEnv'
-
-type PricesResponse = {
-  data?: Record<string, { price: string; change_24h: number }>
-  error?: { code?: string; message?: string }
-}
+import { fetchMarketPricesNormalized } from './api/market'
 
 export type TokenPriceUsd = { priceUsd: number; change24h: number }
 
@@ -15,7 +9,6 @@ type Snapshot = {
 
 const STORAGE_KEY_SNAPSHOT = 'latch.marketPrices.snapshot.v1'
 
-const FETCH_TIMEOUT_MS = 10_000
 const FRESH_TTL_MS = 60_000
 const MAX_STALE_MS = 10 * 60_000
 
@@ -73,70 +66,12 @@ function mergePrices(base: Snapshot | null, add: Snapshot): Snapshot {
   return merged
 }
 
-async function fetchJsonWithTimeout(url: string): Promise<PricesResponse> {
-  const controller = new AbortController()
-  const t = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const res = await fetch(url, { method: 'GET', signal: controller.signal })
-    const text = await res.text()
-    let data: unknown = undefined
-    if (text) {
-      try {
-        data = JSON.parse(text) as unknown
-      } catch {
-        throw new BackendError(`Market API response was not valid JSON (${res.status}).`, {
-          status: res.status,
-          code: 'invalid_json',
-        })
-      }
-    }
-    const body = data as PricesResponse
-    if (!res.ok) {
-      const message =
-        body?.error?.message ??
-        (typeof (body as any)?.message === 'string' ? (body as any).message : undefined) ??
-        `Request failed: ${res.status}`
-      throw new BackendError(message, {
-        status: res.status,
-        code: body?.error?.code ?? (body as any)?.code,
-        details: body,
-      })
-    }
-    return body
-  } catch (err) {
-    if (err instanceof BackendError) throw err
-    if (err instanceof Error && err.name === 'AbortError') {
-      throw new BackendError('Request timed out', { code: 'timeout' })
-    }
-    throw new BackendError(err instanceof Error ? err.message : String(err))
-  } finally {
-    clearTimeout(t)
-  }
-}
-
 async function fetchPricesSnapshot(tokensLower: string[]): Promise<Snapshot> {
-  const base = latchMarketApiBaseUrl()
-  const q = encodeURIComponent(tokensLower.join(','))
-  const url = `${base}/prices?tokens=${q}`
-  const body = await fetchJsonWithTimeout(url)
-
-  const pricesByCodeUpper: Record<string, TokenPriceUsd> = {}
-  for (const [code, v] of Object.entries(body.data ?? {})) {
-    const upper = code.toUpperCase()
-    const priceUsd = parseFloat(v.price)
-    const change24h = typeof v.change_24h === 'number' ? v.change_24h : Number(v.change_24h)
-    if (!Number.isFinite(priceUsd)) continue
-    pricesByCodeUpper[upper] = {
-      priceUsd,
-      change24h: Number.isFinite(change24h) ? change24h : 0,
-    }
-  }
-
-  const snapshot: Snapshot = {
+  const pricesByCodeUpper = await fetchMarketPricesNormalized(tokensLower)
+  return {
     updatedAtMs: Date.now(),
     pricesByCodeUpper,
   }
-  return snapshot
 }
 
 /**
@@ -207,4 +142,3 @@ export async function getMarketPrices(tokens: string[]): Promise<{
   const s = memoryCache
   return { updatedAtMs: s?.updatedAtMs ?? null, pricesByCodeUpper: s?.pricesByCodeUpper ?? {} }
 }
-

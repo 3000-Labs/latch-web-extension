@@ -23,6 +23,7 @@ export function SendFlow({
   networkLabel,
   sendProgressLabel,
   sendError,
+  createProposalMode,
   onDraftChange,
   onStepChange,
   onBackFromSend,
@@ -42,6 +43,7 @@ export function SendFlow({
   networkLabel: string
   sendProgressLabel: string | null
   sendError: string | null
+  createProposalMode?: boolean
   onDraftChange: (patch: Partial<SendDraft>) => void
   onStepChange: (step: SendStep) => void
   onBackFromSend: () => void
@@ -106,6 +108,7 @@ export function SendFlow({
         networkLabel={networkLabel}
         sendProgressLabel={sendProgressLabel}
         sendError={sendError}
+        submitLabel={createProposalMode ? 'Create proposal' : 'Send'}
         onBack={() => onStepChange('enterAmount')}
         onSend={onSubmitSend}
         onFetchFeeEstimate={onFetchFeeEstimate}

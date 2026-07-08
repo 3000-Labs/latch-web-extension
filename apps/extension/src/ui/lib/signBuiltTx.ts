@@ -13,15 +13,24 @@ import { signAuthEntry } from '@stellar/freighter-api'
 import { Networks } from '@stellar/stellar-sdk'
 import { startAuthentication } from '@simplewebauthn/browser'
 
-import { normalizeDelegatedSignatureBase64 } from '../../lib/delegatedAuthSubmit'
+import { normalizeDelegatedSignatureBase64, resolveDelegatedAuthEntryForSigner } from '../../lib/delegatedAuthSubmit'
 import {
+  assertPasskeyAssertionMatchesAuthDigest,
   buildPasskeySigDataXdrFromAssertion,
   enrichWebauthnRpIdHashErrorMessage,
   passkeyAuthenticationOptionsForAuthDigest,
+  prepareAuthenticationOptionsForGet,
 } from '../webauthn/passkey'
 import { openPasskeyBridgeAndWait } from '../webauthn/passkeyBridge'
 import { bytesToHex } from '../webauthn/utils'
-import { contextRuleIdString, isDelegatedSendBuild, multiAuthSubmitFields } from './sendTx'
+import {
+  contextRuleIdForSubmit,
+  delegatedSubmitFields,
+  isDelegatedSendBuild,
+  multiAuthSubmitFields,
+  normalizeDelegatedBuildFields,
+  resolvePasskeyAuthEntryXdr,
+} from './sendTx'
 import { friendlyError, sendToBackground } from './backgroundClient'
 
 type PhantomSolanaProvider = {
@@ -46,19 +55,24 @@ async function runPasskeyAuth(
     })) as Awaited<ReturnType<typeof startAuthentication>>
   }
   return await startAuthentication({
-    optionsJSON,
+    optionsJSON: prepareAuthenticationOptionsForGet(optionsJSON),
   } as Parameters<typeof startAuthentication>[0])
 }
 
 export async function signAndSubmitBuiltTx(args: {
   build: BuildSendTxResponse
   activeAccount: StoredAccount
+  /** When `activeAccount.mode === 'multisig'`, passkey credentials from this account. */
+  signingAccount?: StoredAccount
   surface?: 'popup' | 'sidepanel'
   onProgress?: (label: string) => void
 }): Promise<SubmitTxResponse> {
-  const { build, activeAccount } = args
+  const { build: rawBuild, activeAccount } = args
+  const build = normalizeDelegatedBuildFields(rawBuild)
   const surface = args.surface ?? 'popup'
   const progress = args.onProgress ?? (() => {})
+  const passkeySource =
+    activeAccount.mode === 'multisig' ? (args.signingAccount ?? activeAccount) : activeAccount
 
   if (
     (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
@@ -70,10 +84,16 @@ export async function signAndSubmitBuiltTx(args: {
         process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
           ? Networks.PUBLIC
           : Networks.TESTNET
-      if (!build.gAddressEntryTemplateXdr) {
-        throw new Error('Missing delegated auth entry template from build response.')
+      const delegated = resolveDelegatedAuthEntryForSigner({
+        authEntriesXdr: build.authEntriesXdr,
+        delegatedNativeAuthEntryIndices: build.delegatedNativeAuthEntryIndices,
+        gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+        signerG: activeAccount.gAddress,
+      })
+      if (!delegated) {
+        throw new Error('Could not find delegated auth entry for your G-address in this transaction.')
       }
-      const signed = await signAuthEntry(build.gAddressEntryTemplateXdr, {
+      const signed = await signAuthEntry(delegated.templateXdr, {
         networkPassphrase,
         address: activeAccount.gAddress,
       })
@@ -88,15 +108,26 @@ export async function signAndSubmitBuiltTx(args: {
         type: 'SUBMIT_TX_DELEGATED',
         payload: {
           txXdr: build.txXdr,
-          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr!,
+          gAddressEntryTemplateXdr: delegated.templateXdr,
           signedAuthEntryBase64,
           signerAddress,
-          ...multiAuthSubmitFields(build),
+          contextRuleId: contextRuleIdForSubmit(build),
+          ...delegatedSubmitFields(build, delegated.entryIndex),
         },
       })
       if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
       return submitRes.data ?? {}
+    }
+
+    const delegated = resolveDelegatedAuthEntryForSigner({
+      authEntriesXdr: build.authEntriesXdr,
+      delegatedNativeAuthEntryIndices: build.delegatedNativeAuthEntryIndices,
+      gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+      signerG: activeAccount.gAddress ?? '',
+    })
+    if (!delegated) {
+      throw new Error('Could not find delegated auth entry for this account in the transaction.')
     }
 
     const signRes = await sendToBackground<
@@ -106,7 +137,7 @@ export async function signAndSubmitBuiltTx(args: {
       type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
       payload: {
         accountId: activeAccount.id,
-        gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+        gAddressEntryTemplateXdr: delegated.templateXdr,
         networkPassphrase: Networks.TESTNET,
       },
     })
@@ -116,11 +147,12 @@ export async function signAndSubmitBuiltTx(args: {
       type: 'SUBMIT_TX_DELEGATED',
       payload: {
         txXdr: build.txXdr,
-        smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-        gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+        smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr!,
+        gAddressEntryTemplateXdr: delegated.templateXdr,
         signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
         signerAddress: signRes.data!.signerAddress,
-        ...multiAuthSubmitFields(build),
+        contextRuleId: contextRuleIdForSubmit(build),
+        ...delegatedSubmitFields(build, delegated.entryIndex),
       },
     })
     if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
@@ -147,15 +179,19 @@ export async function signAndSubmitBuiltTx(args: {
         authSignatureHex: bytesToHex(sigBytes),
         prefixedMessage,
         publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
-        contextRuleId: contextRuleIdString(build),
+        contextRuleId: contextRuleIdForSubmit(build),
       },
     })
     if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
     return submitRes.data ?? {}
   }
 
-  if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
-    throw new Error('Missing passkey data for this account.')
+  if (!passkeySource.passkeyCredentialId || !passkeySource.passkeyKeyDataHex) {
+    throw new Error(
+      activeAccount.mode === 'multisig'
+        ? 'No passkey account is available to sign for this multisig wallet.'
+        : 'Missing passkey data for this account.'
+    )
   }
   if (
     isDelegatedSendBuild(build) &&
@@ -170,21 +206,22 @@ export async function signAndSubmitBuiltTx(args: {
     throw new Error('Missing auth digest from transaction build.')
   }
   const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
-    credentialId: activeAccount.passkeyCredentialId,
+    credentialId: passkeySource.passkeyCredentialId,
     authDigestHex: build.authDigestHex,
   })
   progress('Signing…')
   const assertion = await runPasskeyAuth(surface, optionsJSON)
+  assertPasskeyAssertionMatchesAuthDigest(assertion, build.authDigestHex)
   const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
   progress('Submitting…')
   const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
     type: 'SUBMIT_TX_WEBAUTHN',
     payload: {
       txXdr: build.txXdr,
-      authEntryXdr: build.authEntryXdr,
+      authEntryXdr: resolvePasskeyAuthEntryXdr(build),
       sigDataXdr,
-      keyDataHex: activeAccount.passkeyKeyDataHex,
-      contextRuleId: contextRuleIdString(build),
+      keyDataHex: passkeySource.passkeyKeyDataHex,
+      contextRuleId: contextRuleIdForSubmit(build),
       ...multiAuthSubmitFields(build),
     },
   })

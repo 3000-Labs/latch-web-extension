@@ -1,4 +1,4 @@
-import { scValToNative, xdr } from '@stellar/stellar-sdk'
+import { Address, scValToNative, xdr } from '@stellar/stellar-sdk'
 
 /**
  * Latch `submit-delegated` expects `signedAuthEntryBase64` to be base64 of the raw
@@ -95,4 +95,63 @@ function extractEd25519SignatureBase64FromSignedAuthEntry(signedAuthEntryBase64:
     throw new Error(`Expected address credentials, got ${credType.name}`)
   }
   return readEd25519SignatureBytes(entry.credentials().address()).toString('base64')
+}
+
+/** G-address on a native delegated Soroban auth entry, when credentials are address-type. */
+export function authEntrySignerPublicKey(entryXdrBase64: string): string | null {
+  try {
+    const entry = xdr.SorobanAuthorizationEntry.fromXDR(entryXdrBase64, 'base64')
+    const creds = entry.credentials()
+    if (creds.switch() !== xdr.SorobanCredentialsType.sorobanCredentialsAddress()) {
+      return null
+    }
+    const addr = creds.address().address()
+    if (addr.switch() === xdr.ScAddressType.scAddressTypeAccount()) {
+      return Address.fromScAddress(addr).toString()
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null
+}
+
+/**
+ * Pick the delegated auth entry template the user must sign.
+ * Swaps may include multiple delegated rows (user G + bundler G); always match `signerG`.
+ */
+export function resolveDelegatedAuthEntryForSigner(args: {
+  authEntriesXdr?: string[]
+  delegatedNativeAuthEntryIndices?: number[]
+  gAddressEntryTemplateXdr?: string
+  signerG: string
+}): { templateXdr: string; entryIndex: number } | null {
+  const signer = args.signerG.trim()
+  if (!signer) return null
+
+  const candidateIndices: number[] = []
+  for (const idx of args.delegatedNativeAuthEntryIndices ?? []) {
+    if (!candidateIndices.includes(idx)) candidateIndices.push(idx)
+  }
+  for (let i = 0; i < (args.authEntriesXdr?.length ?? 0); i++) {
+    if (!candidateIndices.includes(i)) candidateIndices.push(i)
+  }
+
+  for (const idx of candidateIndices) {
+    const entryXdr = args.authEntriesXdr?.[idx]
+    if (!entryXdr) continue
+    if (authEntrySignerPublicKey(entryXdr) === signer) {
+      return { templateXdr: entryXdr, entryIndex: idx }
+    }
+  }
+
+  const explicit = args.gAddressEntryTemplateXdr
+  if (explicit) {
+    const pk = authEntrySignerPublicKey(explicit)
+    if (!pk || pk === signer) {
+      const idx = args.delegatedNativeAuthEntryIndices?.[0] ?? 0
+      return { templateXdr: explicit, entryIndex: idx }
+    }
+  }
+
+  return null
 }

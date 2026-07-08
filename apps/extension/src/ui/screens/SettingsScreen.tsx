@@ -43,6 +43,8 @@ export function SettingsScreen({
   onSelectAccount,
   onAccountsChanged,
   onCreateMultisig,
+  onOpenMultisigWallets,
+  onOpenMultisigProposals,
   networkLabel,
   onClose,
   onLogout,
@@ -60,6 +62,8 @@ export function SettingsScreen({
   onSelectAccount?: (accountId: string) => void
   onAccountsChanged?: () => void
   onCreateMultisig?: () => void
+  onOpenMultisigWallets?: () => void
+  onOpenMultisigProposals?: () => void
   networkLabel: string
   onClose: () => void
   onLogout: () => void
@@ -163,7 +167,15 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
               label="Multisig Wallets"
+              onClick={() => onOpenMultisigWallets?.()}
             />
+            {onOpenMultisigProposals ? (
+              <SettingItem
+                icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
+                label="Multisig Proposals"
+                onClick={() => onOpenMultisigProposals()}
+              />
+            ) : null}
             <SettingItem
               icon={<img src={recoveryPhraseIconUrl} alt="" className={rowIconClass} />}
               label="Recovery Phrase"

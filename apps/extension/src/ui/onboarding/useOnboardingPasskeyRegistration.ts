@@ -12,14 +12,15 @@ import type {
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import {
   assertBeginOptionsRpIdMatchesExtension,
+  assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   nextPasskeyAccountDisplayName,
+  prepareRegistrationOptionsForCreate,
 } from '../webauthn/passkey'
 
 type PrefetchState = {
   kind: 'registration'
-  optionsJSON: unknown
   displayName: string
 }
 
@@ -56,18 +57,7 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
 
         const displayName = nextPasskeyAccountDisplayName(accountsRes.data?.accounts ?? [])
-        const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
-          {
-            type: 'PASSKEY_REG_BEGIN',
-            payload: { displayName },
-          }
-        )
-        if (cancelled) return
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
-
-        const optionsJSON = begin.data?.options
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
-        prefetchRef.current = { kind: 'registration', optionsJSON, displayName }
+        prefetchRef.current = { kind: 'registration', displayName }
         if (!cancelled) setPrefetchReady(true)
       } catch (e) {
         if (!cancelled) {
@@ -96,7 +86,16 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         )
       }
 
-      const optionsJSON = pre.optionsJSON
+      const displayName = pre.displayName
+      const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
+        {
+          type: 'PASSKEY_REG_BEGIN',
+          payload: { displayName },
+        }
+      )
+      if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+      const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options)
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
       let reg: Awaited<ReturnType<typeof startRegistration>>
@@ -107,6 +106,8 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
       } catch (e) {
         throw new Error(formatWebauthnBrowserError(e))
       }
+
+      assertRegistrationCeremonyForFinish(reg)
 
       const res = await sendToBackground<
         { response: unknown },

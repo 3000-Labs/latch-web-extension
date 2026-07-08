@@ -97,6 +97,16 @@ describe('background/backend', () => {
   it('passkey finish routes send chromeExtensionId when chrome.runtime.id is set', async () => {
     vi.stubGlobal('chrome', { runtime: { id: 'extid-xyz' } })
 
+    const mockCredential = {
+      id: 'Y2g',
+      rawId: 'Y2g',
+      type: 'public-key',
+      response: {
+        clientDataJSON: 'Y2Q',
+        attestationObject: 'Y28',
+      },
+    }
+
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
       'fetch',
@@ -117,15 +127,24 @@ describe('background/backend', () => {
       })
     )
 
-    await passkeyRegistrationFinish({ response: { id: 'cred' } })
-    await passkeyAuthenticationFinish({ response: { id: 'cred' } })
+    await passkeyRegistrationFinish({ response: mockCredential })
+    await passkeyAuthenticationFinish({
+      response: {
+        ...mockCredential,
+        response: {
+          clientDataJSON: 'Y2Q',
+          authenticatorData: 'YQ',
+          signature: 'c2ln',
+        },
+      },
+    })
 
     expect(bodies[0]).toMatchObject({
-      response: { id: 'cred' },
+      response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
     })
     expect(bodies[1]).toMatchObject({
-      response: { id: 'cred' },
+      response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
     })
 
@@ -154,7 +173,7 @@ describe('background/backend', () => {
       authEntryXdr: 'y',
       sigDataXdr: 'z',
       keyDataHex: '00',
-      contextRuleId: 'ctx',
+      contextRuleId: 0,
     })
 
     expect(bodies[0]).toMatchObject({

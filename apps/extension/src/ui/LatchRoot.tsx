@@ -38,18 +38,14 @@ import type {
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
+  MultisigProposal,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
   SetActiveAccountRequest,
   StoredAccount,
   SmartAccountBalanceRow,
-  SignDelegatedGAuthEntryRequest,
-  SignDelegatedGAuthEntryResponse,
-  SubmitDelegatedTxRequest,
-  SubmitPhantomTxRequest,
   SubmitTxResponse,
-  SubmitWebauthnTxRequest,
   UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
@@ -58,11 +54,7 @@ import {
   isConnected,
   setAllowed,
   getAddress,
-  signAuthEntry,
 } from '@stellar/freighter-api'
-import { Networks } from '@stellar/stellar-sdk'
-
-import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
 import { ExternalLink } from 'lucide-react'
@@ -79,8 +71,19 @@ import { TransactionDetailScreen } from './screens/transaction-detail/Transactio
 import { MigrationScreen } from './screens/MigrationScreen'
 import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
-import { CreateMultisigScreen } from './screens/multisig/CreateMultisigScreen'
-import { AddMultisigOwnersScreen } from './screens/multisig/AddMultisigOwnersScreen'
+import {
+  MultisigRouteViews,
+  multisigPendingApprovalCount,
+  useMultisigJoinTokenOnMount,
+} from './multisig/MultisigRouteViews'
+import { MultisigProposalsHomeBanner } from './multisig/MultisigProposalsHomeBanner'
+import { parseMultisigJoinTokenFromLocation } from './lib/multisigDeepLink'
+import {
+  apiDismissMultisigProposalsBanner,
+  apiGetMultisigProposalsBannerDismissed,
+  apiSyncLocalMultisigAccounts,
+} from './lib/multisigFlow'
+import { createMultisigSendProposalWithSetup } from './lib/multisigProposal'
 import { ExploreScreen } from './screens/explore/ExploreScreen'
 import { SwapScreen, swapWalletLabel } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
@@ -88,6 +91,7 @@ import { SwapFailureScreen } from './screens/swap/SwapFailureScreen'
 import { SwapSuccessScreen } from './screens/swap/SwapSuccessScreen'
 import { SwapCatalogLoadingOverlay } from './screens/swap/components/SwapCatalogLoadingOverlay'
 import { SwapTransactionLoadingOverlay } from './screens/swap/components/SwapTransactionLoadingOverlay'
+import { openOnboardingTab } from './onboarding/openOnboardingTab'
 import { AccountMenu } from './components/AccountMenu'
 import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
 import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
@@ -101,11 +105,12 @@ import { extractTransactionHash, signAndSubmitBuiltTx } from './lib/signBuiltTx'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
-  buildPasskeySigDataXdrFromAssertion,
+  assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   nextPasskeyAccountDisplayName,
-  passkeyAuthenticationOptionsForAuthDigest,
+  prepareAuthenticationOptionsForGet,
+  prepareRegistrationOptionsForCreate,
 } from './webauthn/passkey'
 import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
@@ -130,11 +135,8 @@ import { saveToAddressBook } from './screens/send/useAddressBook'
 import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
-  contextRuleIdString,
-  isDelegatedSendBuild,
   isNoContextRuleError,
   isSwapRuleReconfigureError,
-  multiAuthSubmitFields,
   passkeySetupPrerequisiteError,
 } from './lib/sendTx'
 import {
@@ -157,6 +159,13 @@ type Route =
   | 'addAccountPasskey'
   | 'createMultisig'
   | 'addMultisigOwners'
+  | 'multisigThreshold'
+  | 'multisigReviewDeploy'
+  | 'multisigSuccess'
+  | 'joinMultisig'
+  | 'multisigProposals'
+  | 'multisigProposalDetail'
+  | 'multisigWallets'
   | 'importSeed'
   | 'importSeedEncrypt'
   | 'unlockMnemonic'
@@ -179,7 +188,15 @@ type SignerId = 'freighter' | 'phantom' | 'passkey'
  * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.
  */
 function routeKeepsUiMountedForWebauthn(route: Route): boolean {
-  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send' || route === 'swapConfirm'
+  return (
+    route === 'createPasskey' ||
+    route === 'addAccountPasskey' ||
+    route === 'send' ||
+    route === 'swapConfirm' ||
+    route === 'addMultisigOwners' ||
+    route === 'joinMultisig' ||
+    route === 'multisigProposalDetail'
+  )
 }
 
 const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
@@ -210,6 +227,19 @@ function needsMnemonicUnlockFromAccounts(
   if (!activeAccountId || !hasVault || signerLoaded !== false) return false
   const active = accounts.find((a) => a.id === activeAccountId)
   return active?.mode === 'mnemonic'
+}
+
+const ONBOARDING_ONLY_ROUTES: Route[] = [
+  'welcome',
+  'chooseSigner',
+  'createPasskey',
+  'passkeyCreated',
+  'importSeed',
+  'importSeedEncrypt',
+]
+
+function isOnboardingOnlyRoute(route: Route): boolean {
+  return ONBOARDING_ONLY_ROUTES.includes(route)
 }
 
 const STORAGE_KEYS = {
@@ -318,11 +348,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       }
       if (mode === 'registration') {
         return await startRegistration({
-          optionsJSON,
+          optionsJSON: prepareRegistrationOptionsForCreate(optionsJSON),
         } as unknown as Parameters<typeof startRegistration>[0])
       }
       return await startAuthentication({
-        optionsJSON,
+        optionsJSON: prepareAuthenticationOptionsForGet(optionsJSON),
       } as unknown as Parameters<typeof startAuthentication>[0])
     } catch (e) {
       throw new Error(formatWebauthnBrowserError(e))
@@ -335,7 +365,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
   const ENABLE_OTHER_SIGNERS = false
 
-  const [route, setRoute] = useState<Route>('welcome')
+  const [route, setRoute] = useState<Route>(() =>
+    parseMultisigJoinTokenFromLocation() ? 'joinMultisig' : 'home'
+  )
   /** True when `chooseSigner` was opened from "I Have a Wallet" (passkey should authenticate, not register). */
   const [chooseSignerForExistingWallet, setChooseSignerForExistingWallet] = useState(false)
   const [page, setPage] = useState<Page>('main')
@@ -345,6 +377,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [error, setError] = useState<string | null>(null)
 
   const [setupState, setSetupState] = useState<GetSetupStateResponse['setupState']>('new')
+  const [accountsHydrated, setAccountsHydrated] = useState(false)
+  const onboardingTabOpenedRef = useRef(false)
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | undefined>(undefined)
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([])
@@ -366,9 +400,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [renameAccountId, setRenameAccountId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
-  const [multisigDraft, setMultisigDraft] = useState<{ walletName: string; purpose: string } | null>(
-    null
+  const [multisigJoinToken, setMultisigJoinToken] = useState<string | null>(() =>
+    parseMultisigJoinTokenFromLocation()
   )
+  const [multisigDetailProposalId, setMultisigDetailProposalId] = useState<string | null>(null)
+  const [multisigProposals, setMultisigProposals] = useState<MultisigProposal[]>([])
+  const [multisigBannerDismissedIds, setMultisigBannerDismissedIds] = useState<string[]>([])
 
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
@@ -575,10 +612,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [swapTokenById]
   )
 
-  /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
+  /** Prefetch passkey setup metadata so Create / Continue does not await the network before credentials. */
   const passkeyPrefetchRef = useRef<
-    | { kind: 'registration'; optionsJSON: unknown; displayName: string }
-    | { kind: 'authentication'; optionsJSON: unknown }
+    | { kind: 'registration'; displayName: string }
+    | { kind: 'authentication' }
     | null
   >(null)
   const [passkeyPrefetchReady, setPasskeyPrefetchReady] = useState(false)
@@ -615,28 +652,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       try {
         if (route === 'createPasskey') {
           const displayName = nextPasskeyAccountDisplayName(accounts)
-          const begin = await sendToBackground<
-            { displayName?: string },
-            BackendWebauthnBeginResponse
-          >({
-            type: 'PASSKEY_REG_BEGIN',
-            payload: { displayName },
-          })
-          if (cancelled) return
-          if (!begin.ok) throw new Error(friendlyError(begin.error))
-          const optionsJSON = (begin.data as BackendWebauthnBeginResponse | undefined)?.options
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
-          passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
+          passkeyPrefetchRef.current = { kind: 'registration', displayName }
         } else {
-          const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-            type: 'PASSKEY_AUTH_BEGIN',
-            payload: undefined,
-          })
-          if (cancelled) return
-          if (!begin.ok) throw new Error(friendlyError(begin.error))
-          const optionsJSON = begin.data?.options
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
-          passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
+          passkeyPrefetchRef.current = { kind: 'authentication' }
         }
         if (!cancelled) setPasskeyPrefetchReady(true)
       } catch (e) {
@@ -679,12 +697,27 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             res.data.activeAccountHasMnemonicVault,
             res.data.activeAccountMnemonicSignerLoaded
           )
-          setRoute(resolveMainRoute({ needsMnemonicUnlock: locked }))
+          setRoute((prev) =>
+            prev === 'joinMultisig'
+              ? prev
+              : isOnboardingOnlyRoute(prev)
+                ? resolveMainRoute({ needsMnemonicUnlock: locked })
+                : resolveMainRoute({
+                    needsMnemonicUnlock: locked,
+                    preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : prev,
+                  })
+          )
         }
       })
       .catch(() => {})
+      .finally(() => {
+        setAccountsHydrated(true)
+      })
 
     void loadPendingDapp().catch(() => {})
+    void apiGetMultisigProposalsBannerDismissed()
+      .then(setMultisigBannerDismissedIds)
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -702,15 +735,27 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [])
 
   useEffect(() => {
-    if (setupState === 'has_account' && accounts.length > 0) {
-      setRoute((prev) =>
-        resolveMainRoute({
-          needsMnemonicUnlock,
-          preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : 'home',
-        })
-      )
+    if (!accountsHydrated) return
+
+    if (accounts.length > 0) {
+      onboardingTabOpenedRef.current = false
+      setRoute((prev) => {
+        if (prev === 'joinMultisig') return prev
+        if (isOnboardingOnlyRoute(prev)) {
+          return resolveMainRoute({ needsMnemonicUnlock })
+        }
+        return prev
+      })
+      return
     }
-  }, [setupState, accounts.length, needsMnemonicUnlock])
+
+    if (route === 'joinMultisig') return
+
+    if (!onboardingTabOpenedRef.current) {
+      onboardingTabOpenedRef.current = true
+      void openOnboardingTab().catch(() => {})
+    }
+  }, [accountsHydrated, accounts.length, needsMnemonicUnlock, route])
 
   async function persistSetupHasAccount(publicKey: string) {
     const req: SetSetupStateRequest = { setupState: 'has_account', accountPublicKey: publicKey }
@@ -738,6 +783,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     )
     return { accounts: res.data.accounts, needsMnemonicUnlock: locked }
   }
+
+  const syncMultisigAccounts = useCallback(async () => {
+    try {
+      const res = await apiSyncLocalMultisigAccounts()
+      if (res.created.length > 0 || res.updated) await refreshAccounts()
+    } catch {
+      // best-effort
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!accountsHydrated) return
+    void syncMultisigAccounts()
+  }, [accountsHydrated, route, syncMultisigAccounts])
 
   useEffect(() => {
     portfolioHydratedRef.current = false
@@ -860,6 +919,42 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     void loadHistory()
   }, [route, loadHistory])
 
+  const loadMultisigProposals = useCallback(async () => {
+    if (!activeAccount?.smartAccountAddress || activeAccount.mode !== 'multisig') {
+      setMultisigProposals([])
+      return
+    }
+    try {
+      const res = await sendToBackground<
+        { smartAccountAddress: string },
+        { proposals: MultisigProposal[] }
+      >({
+        type: 'MULTISIG_LIST_PROPOSALS',
+        payload: { smartAccountAddress: activeAccount.smartAccountAddress },
+      })
+      if (res.ok && res.data?.proposals) setMultisigProposals(res.data.proposals)
+      else setMultisigProposals([])
+    } catch {
+      // ignore — home banner is optional
+    }
+  }, [activeAccount])
+
+  useEffect(() => {
+    if (route !== 'home' || activeAccount?.mode !== 'multisig') return
+    void loadMultisigProposals()
+  }, [route, activeAccount?.id, activeAccount?.mode, loadMultisigProposals])
+
+  const multisigPendingCount = useMemo(
+    () => multisigPendingApprovalCount(multisigProposals, activeAccount?.multisigMemberId),
+    [multisigProposals, activeAccount?.multisigMemberId]
+  )
+
+  const showMultisigProposalsBanner = Boolean(
+    activeAccount?.mode === 'multisig' &&
+      activeAccount.id &&
+      !multisigBannerDismissedIds.includes(activeAccount.id)
+  )
+
   function resetSwapFlow() {
     setSwapDraft(null)
     setSwapQuote(null)
@@ -868,6 +963,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }
 
   function openSwapFromNav() {
+    if (activeAccount?.mode === 'multisig') return
     const payId = swapPayTokenCatalogWithIcons[0]?.id ?? 'native'
     const receiveId = pickDefaultReceiveTokenId(
       payId,
@@ -1035,11 +1131,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               : 'Still preparing passkey…')
         )
       }
-      const optionsJSON = pre.optionsJSON
+      const displayName = pre.displayName
+      const begin = await sendToBackground<
+        { displayName?: string },
+        BackendWebauthnBeginResponse
+      >({
+        type: 'PASSKEY_REG_BEGIN',
+        payload: { displayName },
+      })
+      if (!begin.ok) throw new Error(friendlyError(begin.error))
+      const optionsJSON = prepareRegistrationOptionsForCreate(
+        (begin.data as BackendWebauthnBeginResponse | undefined)?.options
+      )
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
       const reg = (await webauthnCredential('registration', optionsJSON)) as Awaited<
         ReturnType<typeof startRegistration>
       >
+      assertRegistrationCeremonyForFinish(reg)
       const res = await sendToBackground<
         { response: unknown },
         BackendWebauthnRegistrationFinishResponse & { account: StoredAccount }
@@ -1077,7 +1185,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               : 'Still preparing passkey…')
         )
       }
-      const optionsJSON = pre.optionsJSON
+      const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+        type: 'PASSKEY_AUTH_BEGIN',
+        payload: undefined,
+      })
+      if (!begin.ok) throw new Error(friendlyError(begin.error))
+      const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
       const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
         ReturnType<typeof startAuthentication>
@@ -1296,137 +1409,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   async function signAndSubmitBuilt(build: BuildSendTxResponse): Promise<SubmitTxResponse> {
     if (!activeAccount) throw new Error('No active account')
-
-    setSendProgressLabel('Signing…')
-
-    if (
-      (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
-      isDelegatedSendBuild(build)
-    ) {
-      if (activeAccount.mode === 'freighter') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
-        const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
-            ? Networks.PUBLIC
-            : Networks.TESTNET
-        if (!build.gAddressEntryTemplateXdr) {
-          throw new Error('Missing delegated auth entry template from build response.')
-        }
-        const signed = await signAuthEntry(build.gAddressEntryTemplateXdr, {
-          networkPassphrase,
-          address: activeAccount.gAddress,
-        })
-        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
-        const signerAddress = signed.signerAddress
-        const signedAuthEntryBase64 = signed.signedAuthEntry
-          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-          : undefined
-        if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
-        setSendProgressLabel('Submitting…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: build.txXdr,
-            smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        return submitRes.data ?? {}
-      }
-
-      const signRes = await sendToBackground<
-        SignDelegatedGAuthEntryRequest,
-        SignDelegatedGAuthEntryResponse
-      >({
-        type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
-        payload: {
-          accountId: activeAccount.id,
-          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-          networkPassphrase: Networks.TESTNET,
-        },
-      })
-      if (!signRes.ok) throw new Error(friendlyError(signRes.error))
-      setSendProgressLabel('Submitting…')
-      const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_DELEGATED',
-        payload: {
-          txXdr: build.txXdr,
-          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-          signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
-          signerAddress: signRes.data!.signerAddress,
-        },
-      })
-      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-      return submitRes.data ?? {}
-    }
-
-    if (activeAccount.mode === 'phantom') {
-      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
-        .phantom?.solana
-      if (!provider) throw new Error('Phantom not detected.')
-      const digest = build.authDigestHex.toLowerCase()
-      const prefixedMessage = `Stellar Smart Account Auth:\n${digest}`
-      const msgBytes = new TextEncoder().encode(prefixedMessage)
-      const signed = await provider.signMessage(msgBytes)
-      const sigBytes: Uint8Array =
-        signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
-      if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
-      setSendProgressLabel('Submitting…')
-      const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_PHANTOM',
-        payload: {
-          txXdr: build.txXdr,
-          authEntryXdr: build.authEntryXdr,
-          authSignatureHex: bytesToHex(sigBytes),
-          prefixedMessage,
-          publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
-          contextRuleId: contextRuleIdString(build),
-        },
-      })
-      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-      return submitRes.data ?? {}
-    }
-
-    if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
-      throw new Error('Missing passkey data for this account.')
-    }
-    if (!build.authDigestHex?.trim()) {
-      throw new Error('Missing auth digest from transaction build.')
-    }
-    const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
-      credentialId: activeAccount.passkeyCredentialId,
-      authDigestHex: build.authDigestHex,
+    return signAndSubmitBuiltTx({
+      build,
+      activeAccount,
+      surface,
+      onProgress: setSendProgressLabel,
     })
-    const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
-      ReturnType<typeof startAuthentication>
-    >
-    const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
-    setSendProgressLabel('Submitting…')
-    const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
-      type: 'SUBMIT_TX_WEBAUTHN',
-      payload: {
-        txXdr: build.txXdr,
-        authEntryXdr: build.authEntryXdr,
-        sigDataXdr,
-        keyDataHex: activeAccount.passkeyKeyDataHex,
-        contextRuleId: contextRuleIdString(build),
-        ...multiAuthSubmitFields(build),
-      },
-    })
-    if (!submitRes.ok) {
-      const errMsg = friendlyError(submitRes.error)
-      throw new Error(
-        await enrichWebauthnRpIdHashErrorMessage(errMsg, {
-          optionsJSON,
-          credentialResponse: assertion,
-        })
-      )
-    }
-    return submitRes.data ?? {}
   }
 
   async function executeSendWithSetupLoop(draft: SendDraft): Promise<SendResult> {
@@ -1475,7 +1463,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }
 
   async function fetchSendFeeEstimate(): Promise<BuildSendTxResponse | null> {
-    if (!activeAccount) return null
+    if (!activeAccount || activeAccount.mode === 'multisig') return null
     const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount, sendTokenPriceUsd)
     if (!buildBody) return null
     try {
@@ -1494,6 +1482,27 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setSendError(null)
     setSendProgressLabel('Building…')
     try {
+      if (activeAccount?.mode === 'multisig') {
+        const proposal = await createMultisigSendProposalWithSetup({
+          draft: sendDraft,
+          multisigAccount: activeAccount,
+          accounts,
+          priceUsd: sendTokenPriceUsd,
+          surface,
+          onProgress: setSendProgressLabel,
+        })
+        setSendResult({
+          status: 'success',
+          proposalId: proposal.id,
+          submittedAt: new Date().toISOString(),
+        })
+        setMultisigDetailProposalId(proposal.id)
+        setSendStep('success')
+        void loadPortfolio()
+        void loadMultisigProposals()
+        return
+      }
+
       const result = await executeSendWithSetupLoop(sendDraft)
       setSendResult(result)
       setSendStep('success')
@@ -1544,9 +1553,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setDappError(null)
     await loadPendingDapp()
     if (pendingDappRequests.length <= 1) {
-      setRoute(accounts.length > 0 ? 'home' : 'welcome')
+      setRoute(accounts.length > 0 ? 'home' : 'home')
+      if (accounts.length === 0) {
+        onboardingTabOpenedRef.current = false
+        void openOnboardingTab().catch(() => {})
+      }
     }
   }
+
+  const showOnboardingTabPrompt =
+    accountsHydrated && accounts.length === 0 && route !== 'joinMultisig' && !loading
 
   async function logout() {
     setError(null)
@@ -1557,10 +1573,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         payload: undefined,
       })
       if (!res.ok) throw new Error(friendlyError(res.error))
-      setSetupState('new')
+      const refreshed = await refreshAccounts()
       setPendingDappRequests([])
-      setRoute('welcome')
       setPage('main')
+      if ((refreshed?.accounts.length ?? 0) > 0) {
+        setRoute(resolveMainRoute({ needsMnemonicUnlock: refreshed?.needsMnemonicUnlock ?? false }))
+      } else {
+        onboardingTabOpenedRef.current = false
+        void openOnboardingTab().catch(() => {})
+      }
     } finally {
       setLoading(null)
     }
@@ -1584,6 +1605,24 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     swapPayTokenCatalogWithIcons.length === 0
   const showSwapLoadingOverlay = swapBusy && route === 'swapConfirm' && swapStep === 'confirm'
   const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
+
+  useMultisigJoinTokenOnMount((token) => {
+    setMultisigJoinToken(token)
+    setRoute('joinMultisig')
+  })
+
+  const multisigRoutes: Route[] = [
+    'createMultisig',
+    'addMultisigOwners',
+    'multisigThreshold',
+    'multisigReviewDeploy',
+    'multisigSuccess',
+    'joinMultisig',
+    'multisigProposals',
+    'multisigProposalDetail',
+    'multisigWallets',
+  ]
+  const isMultisigRoute = multisigRoutes.includes(route as Route)
 
   const mainTabRoutes = ['home', 'swap', 'history', 'explore'] as const
   const showMainBottomNav =
@@ -1751,79 +1790,35 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'welcome' ? (
+            {!loading && showOnboardingTabPrompt ? (
               <div
                 className={[
                   `${routeContentMarginClass} flex flex-col items-center justify-between h-full pb-6 animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center text-center">
                   <img src={logoUrl} alt="Latch" className="mt-4 h-10 w-10 object-contain" />
-                  <h1 className="mt-8 text-center text-3xl font-extrabold tracking-tight">
-                    Welcome to Latch
-                  </h1>
-                  <p className="mt-4 max-w-[280px] text-center text-sm text-muted">
-                    Securely manage your digital assets with confidence and ease.
+                  <h1 className="mt-8 text-2xl font-extrabold tracking-tight">Set up Latch</h1>
+                  <p className="mt-4 max-w-[280px] text-sm text-muted">
+                    Wallet setup runs in a full browser tab. If it didn&apos;t open, use the button
+                    below.
                   </p>
                 </div>
-
-                <div className="mt-auto w-full space-y-3">
-                  {accounts.length > 0 ? (
-                    <button
-                      onClick={() => setRoute('home')}
-                      className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                    >
-                      Continue
-                    </button>
-                  ) : null}
-                  <button
-                    onClick={() => {
-                      setChooseSignerForExistingWallet(false)
-                      setRoute('chooseSigner')
-                    }}
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Create a New Wallet
-                  </button>
-                  <button
-                    onClick={() => {
-                      setChooseSignerForExistingWallet(true)
-                      setRoute('chooseSigner')
-                    }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    I Have a Wallet
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoute('importSeed')}
-                    className="h-11 w-full rounded-full text-sm font-extrabold text-primary hover:underline"
-                  >
-                    Import with recovery phrase
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {!loading && route === 'createMultisig' ? (
-              <div
-                className={[
-                  routeContentMarginClass,
-                  'flex min-h-0 flex-1 flex-col animate-screenIn',
-                  flowHeightClass,
-                ].join(' ')}
-              >
-                <CreateMultisigScreen
-                  onContinue={(walletName, purpose) => {
-                    setMultisigDraft({ walletName, purpose })
-                    setRoute('addMultisigOwners')
+                <button
+                  type="button"
+                  onClick={() => {
+                    onboardingTabOpenedRef.current = true
+                    void openOnboardingTab().catch(() => {})
                   }}
-                />
+                  className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                >
+                  Open setup tab
+                </button>
               </div>
             ) : null}
 
-            {!loading && route === 'addMultisigOwners' && activeAccount ? (
+            {!loading && !showOnboardingTabPrompt && isMultisigRoute ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -1831,17 +1826,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <AddMultisigOwnersScreen
-                  creatorSignerAddresses={[
-                    activeAccount.smartAccountAddress,
-                    ...(activeAccount.gAddress ? [activeAccount.gAddress] : []),
-                  ]}
+                <MultisigRouteViews
+                  route={route}
+                  surface={surface}
+                  activeAccount={activeAccount}
                   accounts={accounts}
-                  onContinue={(owners) => {
-                    if (!multisigDraft) return
-                    void owners
-                    void multisigDraft.walletName
-                    // Next multisig step — wired when that screen exists.
+                  externalJoinToken={multisigJoinToken}
+                  externalProposalId={multisigDetailProposalId}
+                  onRefreshAccounts={async () => {
+                    await refreshAccounts()
+                  }}
+                  onSetRoute={(r) => setRoute(r as Route)}
+                  onSetActiveAccountId={(id) => {
+                    setActiveAccountId(id)
+                    void sendToBackground<SetActiveAccountRequest, undefined>({
+                      type: 'SET_ACTIVE_ACCOUNT',
+                      payload: { accountId: id },
+                    }).catch(() => {})
                   }}
                 />
               </div>
@@ -1950,7 +1951,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'chooseSigner' ? (
+            {!loading && route === 'chooseSigner' && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -2049,7 +2050,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     <button
                       onClick={() => {
                         setChooseSignerForExistingWallet(false)
-                        setRoute('welcome')
+                        if (accounts.length > 0) {
+                          setRoute('home')
+                        } else {
+                          void openOnboardingTab()
+                        }
                       }}
                       className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                     >
@@ -2060,7 +2065,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {route === 'createPasskey' ? (
+            {route === 'createPasskey' && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -2155,7 +2160,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
+            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
@@ -2173,8 +2178,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     if (route === 'importSeedEncrypt') {
                       setRoute('importSeed')
                       setImportSeedStep('phrase')
+                    } else if (accounts.length > 0) {
+                      setRoute('home')
                     } else {
-                      setRoute('welcome')
+                      void openOnboardingTab()
                     }
                   }}
                   onProceedToEncrypt={() => {
@@ -2223,13 +2230,32 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'home' && !needsMnemonicUnlock ? (
+            {!loading && !accountsHydrated ? (
+              <div className={`${flowHeightClass} flex items-center justify-center text-sm text-muted`}>
+                Loading…
+              </div>
+            ) : null}
+
+            {!loading && route === 'home' && !needsMnemonicUnlock && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
                   'relative flex min-h-0 flex-1 flex-col animate-screenIn',
                 ].join(' ')}
               >
+                {showMultisigProposalsBanner ? (
+                  <MultisigProposalsHomeBanner
+                    pendingCount={multisigPendingCount}
+                    onOpenProposals={() => setRoute('multisigProposals')}
+                    onDismiss={() => {
+                      if (!activeAccount?.id) return
+                      void apiDismissMultisigProposalsBanner(activeAccount.id)
+                        .then(() => apiGetMultisigProposalsBannerDismissed())
+                        .then(setMultisigBannerDismissedIds)
+                        .catch(() => {})
+                    }}
+                  />
+                ) : null}
                 <HomeScreen
                   accountName={activeAccountLabel}
                   onOpenSettings={() => setPage('settings')}
@@ -2238,7 +2264,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   recentActivity={recentActivityItems}
                   totalBalanceUsd={totalBalanceUsd}
                   balanceChangePercent="0.00%"
-                  onOpenSwap={openSwapFromNav}
+                  onOpenSwap={
+                    activeAccount?.mode === 'multisig' ? () => {} : openSwapFromNav
+                  }
+                  swapDisabled={activeAccount?.mode === 'multisig'}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
                   onSelectActivity={(it) => {
@@ -2271,6 +2300,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           id: account.id,
                           name: storedAccountLabel(account, index),
                           address: account.smartAccountAddress,
+                          mode: account.mode,
                         }))}
                         activeAccountId={activeAccountId}
                         biometricsEnabled={false}
@@ -2310,6 +2340,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           setPage('main')
                           setRoute('createMultisig')
                         }}
+                        onOpenMultisigWallets={() => {
+                          setPage('main')
+                          setRoute('multisigWallets')
+                        }}
+                        onOpenMultisigProposals={
+                          activeAccount?.mode === 'multisig'
+                            ? () => {
+                                setPage('main')
+                                setRoute('multisigProposals')
+                              }
+                            : undefined
+                        }
                         networkLabel={networkLabel}
                         onClose={() => setPage('main')}
                         onLogout={() =>
@@ -2552,6 +2594,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   networkLabel={networkLabel}
                   sendProgressLabel={sendProgressLabel}
                   sendError={sendError}
+                  createProposalMode={activeAccount?.mode === 'multisig'}
                   onDraftChange={(patch) => setSendDraft((d) => ({ ...d, ...patch }))}
                   onStepChange={setSendStep}
                   onBackFromSend={() => {
@@ -2561,6 +2604,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   onFetchFeeEstimate={fetchSendFeeEstimate}
                   onSubmitSend={() => void handleSubmitSend()}
                   onContinueHome={() => {
+                    if (sendResult?.proposalId && activeAccount?.mode === 'multisig') {
+                      setMultisigDetailProposalId(sendResult.proposalId)
+                      resetSendFlow()
+                      setRoute('multisigProposalDetail')
+                      return
+                    }
                     resetSendFlow()
                     setRoute('home')
                   }}

@@ -40,8 +40,10 @@ function MultisigField({
 }
 
 export function CreateMultisigScreen({
+  error,
   onContinue,
 }: {
+  error?: string | null
   onContinue: (walletName: string, purpose: string) => void
 }) {
   const [walletName, setWalletName] = useState('')
@@ -79,6 +81,8 @@ export function CreateMultisigScreen({
             onChange={setPurpose}
           />
         </div>
+
+        {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
         <OnboardingPrimaryButton
           disabled={!canContinue}

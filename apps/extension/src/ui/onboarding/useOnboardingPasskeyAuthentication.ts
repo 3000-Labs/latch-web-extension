@@ -17,6 +17,7 @@ import {
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   narrowAuthenticationOptionsToCredential,
+  prepareAuthenticationOptionsForGet,
   webauthnBeginOptionsToObject,
 } from '../webauthn/passkey'
 
@@ -27,7 +28,6 @@ export type OnboardingPasskeyOption = {
 
 type PrefetchState = {
   kind: 'authentication'
-  optionsJSON: unknown
 }
 
 function mergePasskeyOptions(
@@ -112,18 +112,9 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
             })),
         ]
 
-        const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-          type: 'PASSKEY_AUTH_BEGIN',
-          payload: undefined,
-        })
-        if (cancelled) return
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
+        prefetchRef.current = { kind: 'authentication' }
 
-        const optionsJSON = begin.data?.options
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
-        prefetchRef.current = { kind: 'authentication', optionsJSON }
-
-        const listed = mergePasskeyOptions(mergedAccounts, optionsJSON)
+        const listed = mergePasskeyOptions(mergedAccounts, null)
         setPasskeys(listed)
         setSelectedCredentialId(listed.length === 1 ? listed[0]!.credentialId : null)
 
@@ -154,9 +145,16 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
               : 'Still preparing passkey…')
         )
       }
-      const optionsJSON = selectedCredentialId
-        ? narrowAuthenticationOptionsToCredential(pre.optionsJSON, selectedCredentialId)
-        : pre.optionsJSON
+      const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+        type: 'PASSKEY_AUTH_BEGIN',
+        payload: undefined,
+      })
+      if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+      const narrowed = selectedCredentialId
+        ? narrowAuthenticationOptionsToCredential(begin.data?.options, selectedCredentialId)
+        : begin.data?.options
+      const optionsJSON = prepareAuthenticationOptionsForGet(narrowed)
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
       let assertion: Awaited<ReturnType<typeof startAuthentication>>

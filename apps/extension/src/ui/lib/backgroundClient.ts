@@ -13,5 +13,12 @@ export function friendlyError(e?: SerializableError): string {
   if (e.code === 'mnemonic_locked') {
     return 'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.'
   }
+  if (
+    e.code === 'internal_error' &&
+    typeof e.message === 'string' &&
+    /^internal error$/i.test(e.message.trim())
+  ) {
+    return 'The Latch API accepted your passkey but failed while deploying the smart account. This is usually a backend configuration issue (factory contract, Soroban RPC, or deploy funding on Render).'
+  }
   return e.message
 }

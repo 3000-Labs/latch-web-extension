@@ -18,6 +18,7 @@ export function HomeScreen({
   onOpenSend,
   onOpenReceive,
   onOpenSwap,
+  swapDisabled,
   onOpenFund,
   onSelectActivity,
   recentActivity,
@@ -31,6 +32,7 @@ export function HomeScreen({
   onOpenSend?: () => void
   onOpenReceive?: () => void
   onOpenSwap: () => void
+  swapDisabled?: boolean
   onOpenFund?: () => void
   onSelectActivity?: (item: HistoryItemVm) => void
   recentActivity: HistoryItemVm[]
@@ -73,6 +75,7 @@ export function HomeScreen({
           onSend={onOpenSend}
           onReceive={onOpenReceive}
           onSwap={onOpenSwap}
+          swapDisabled={swapDisabled}
         />
 
         <NewsCarousel className="w-full self-stretch" />

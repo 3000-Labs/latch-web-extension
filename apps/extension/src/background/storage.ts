@@ -2,6 +2,8 @@ import type {
   AccountMode,
   DappPermission,
   GetAccountsResponse,
+  MultisigDraftMeta,
+  MultisigPendingInvite,
   PendingDappRequest,
   StoredAccount,
 } from '@latch/types'
@@ -15,6 +17,9 @@ const STORAGE_KEYS = {
   activeAccountId: 'latch.activeAccountId',
   dappPermissions: 'latch.dappPermissions',
   pendingDappRequests: 'latch.pendingDappRequests',
+  multisigPendingInvites: 'latch.multisigPendingInvites',
+  multisigDraftMeta: 'latch.multisigDraftMeta',
+  multisigProposalsBannerDismissed: 'latch.multisigProposalsBannerDismissed',
 } as const
 
 type DappPermissionsStore = Record<string, DappPermission[] | undefined>
@@ -68,6 +73,16 @@ export async function createAccount(params: {
   passkeyCredentialId?: string
   passkeyKeyDataHex?: string
   label?: string
+  multisigThreshold?: number
+  multisigMemberId?: string
+  multisigBackendAccountId?: string
+  cosignWckRefId?: string
+  cosignBlindSignerId?: string
+  cosignLinkedAccountId?: string
+  multisigAccountSaltHex?: string
+  multisigMembersSnapshot?:
+    | import('@latch/types').MultisigDraftMember[]
+    | import('@latch/types').CosignMemberInit[]
 }) {
   const { accounts } = await getAccounts()
 
@@ -98,6 +113,13 @@ export async function createAccount(params: {
         return true
       return false
     })
+  } else if (params.mode === 'multisig') {
+    existing = accounts.find(
+      (a) =>
+        a.mode === 'multisig' &&
+        params.smartAccountAddress &&
+        a.smartAccountAddress === params.smartAccountAddress
+    )
   }
 
   return await upsertAccount({
@@ -110,7 +132,98 @@ export async function createAccount(params: {
     passkeyCredentialId: params.passkeyCredentialId,
     passkeyKeyDataHex: params.passkeyKeyDataHex ?? existing?.passkeyKeyDataHex,
     label: params.label ?? existing?.label,
+    multisigThreshold: params.multisigThreshold ?? existing?.multisigThreshold,
+    multisigMemberId: params.multisigMemberId ?? existing?.multisigMemberId,
+    multisigBackendAccountId:
+      params.multisigBackendAccountId ?? existing?.multisigBackendAccountId,
+    cosignWckRefId: params.cosignWckRefId ?? existing?.cosignWckRefId,
+    cosignBlindSignerId: params.cosignBlindSignerId ?? existing?.cosignBlindSignerId,
+    cosignLinkedAccountId: params.cosignLinkedAccountId ?? existing?.cosignLinkedAccountId,
+    multisigAccountSaltHex: params.multisigAccountSaltHex ?? existing?.multisigAccountSaltHex,
+    multisigMembersSnapshot:
+      params.multisigMembersSnapshot ?? existing?.multisigMembersSnapshot,
   })
+}
+
+export async function createMultisigAccount(params: {
+  smartAccountAddress: string
+  label?: string
+  multisigThreshold?: number
+  multisigMemberId?: string
+  multisigBackendAccountId?: string
+  cosignWckRefId?: string
+  cosignBlindSignerId?: string
+  cosignLinkedAccountId?: string
+  multisigAccountSaltHex?: string
+  multisigMembersSnapshot?:
+    | import('@latch/types').MultisigDraftMember[]
+    | import('@latch/types').CosignMemberInit[]
+}) {
+  return await createAccount({
+    mode: 'multisig',
+    ...params,
+  })
+}
+
+export async function getMultisigPendingInvites(): Promise<MultisigPendingInvite[]> {
+  const res = await chrome.storage.local.get([STORAGE_KEYS.multisigPendingInvites])
+  return (res[STORAGE_KEYS.multisigPendingInvites] as MultisigPendingInvite[] | undefined) ?? []
+}
+
+export async function addMultisigPendingInvite(invite: MultisigPendingInvite): Promise<MultisigPendingInvite[]> {
+  const current = await getMultisigPendingInvites()
+  const filtered = current.filter((i) => i.token !== invite.token)
+  const next = [...filtered, invite]
+  await chrome.storage.local.set({ [STORAGE_KEYS.multisigPendingInvites]: next })
+  return next
+}
+
+export async function upsertMultisigPendingInvite(
+  token: string,
+  patch: Partial<MultisigPendingInvite>
+): Promise<MultisigPendingInvite[]> {
+  const current = await getMultisigPendingInvites()
+  const existing = current.find((i) => i.token === token)
+  const invite: MultisigPendingInvite = {
+    token,
+    joinedAt: existing?.joinedAt ?? Date.now(),
+    ...existing,
+    ...patch,
+  }
+  return addMultisigPendingInvite(invite)
+}
+
+export async function removeMultisigPendingInvite(token: string): Promise<MultisigPendingInvite[]> {
+  const current = await getMultisigPendingInvites()
+  const next = current.filter((i) => i.token !== token)
+  await chrome.storage.local.set({ [STORAGE_KEYS.multisigPendingInvites]: next })
+  return next
+}
+
+export async function getMultisigDraftMeta(): Promise<MultisigDraftMeta | null> {
+  const res = await chrome.storage.local.get([STORAGE_KEYS.multisigDraftMeta])
+  return (res[STORAGE_KEYS.multisigDraftMeta] as MultisigDraftMeta | undefined) ?? null
+}
+
+export async function setMultisigDraftMeta(meta: MultisigDraftMeta): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.multisigDraftMeta]: meta })
+}
+
+export async function clearMultisigDraftMeta(): Promise<void> {
+  await chrome.storage.local.remove([STORAGE_KEYS.multisigDraftMeta])
+}
+
+export async function getMultisigProposalsBannerDismissed(): Promise<string[]> {
+  const res = await chrome.storage.local.get([STORAGE_KEYS.multisigProposalsBannerDismissed])
+  return (res[STORAGE_KEYS.multisigProposalsBannerDismissed] as string[] | undefined) ?? []
+}
+
+export async function dismissMultisigProposalsBanner(accountId: string): Promise<string[]> {
+  const current = await getMultisigProposalsBannerDismissed()
+  if (current.includes(accountId)) return current
+  const next = [...current, accountId]
+  await chrome.storage.local.set({ [STORAGE_KEYS.multisigProposalsBannerDismissed]: next })
+  return next
 }
 
 export async function renameAccount(args: { accountId: string; label?: string }) {

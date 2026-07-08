@@ -3,12 +3,28 @@ import { p256 } from '@noble/curves/nist.js'
 import { decodeMultiple } from 'cbor-x'
 import { xdr } from '@stellar/stellar-sdk'
 
-import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from './utils'
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  bytesToHex,
+  concatBytes,
+  hexToBytes,
+} from './utils'
 
 /** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
 export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
   const passkeyCount = accounts.reduce((n, a) => n + (a.mode === 'passkey' ? 1 : 0), 0)
   return `Latch account ${passkeyCount + 1}`
+}
+
+/** Unique WebAuthn display name for a new passkey in a specific flow (e.g. multisig). */
+export function nextPasskeyRegistrationDisplayName(
+  accounts: StoredAccount[],
+  context?: string
+): string {
+  const base = nextPasskeyAccountDisplayName(accounts)
+  const ctx = context?.trim()
+  return ctx ? `${base} · ${ctx}` : base
 }
 
 export type PasskeyRegistrationResult = {
@@ -190,6 +206,23 @@ export function createLocalRegistrationOptions(rpId: string) {
   } as const
 }
 
+/** Prefer this device's platform passkey over cross-device / QR (hybrid) flows. */
+const PLATFORM_PASSKEY_HINTS = ['client-device'] as const
+const PLATFORM_PASSKEY_TRANSPORTS = ['internal'] as const
+
+function normalizeAllowCredentialsForPlatform(allow: unknown): unknown[] {
+  if (!Array.isArray(allow) || allow.length === 0) return []
+  return allow.map((cred) => {
+    if (!cred || typeof cred !== 'object') return cred
+    const c = cred as Record<string, unknown>
+    return {
+      ...c,
+      type: c.type ?? 'public-key',
+      transports: PLATFORM_PASSKEY_TRANSPORTS,
+    }
+  })
+}
+
 export function createLocalAuthenticationOptions(args: {
   rpId: string
   credentialId: string
@@ -199,9 +232,16 @@ export function createLocalAuthenticationOptions(args: {
   return {
     rpId: args.rpId,
     challenge: bytesToBase64Url(challenge),
-    allowCredentials: [{ id: args.credentialId, type: 'public-key' }],
+    allowCredentials: [
+      {
+        id: args.credentialId,
+        type: 'public-key',
+        transports: PLATFORM_PASSKEY_TRANSPORTS,
+      },
+    ],
     timeout: 60_000,
     userVerification: 'required',
+    hints: PLATFORM_PASSKEY_HINTS,
   } as const
 }
 
@@ -223,20 +263,106 @@ export function extensionWebauthnRpId(): string {
  * WebAuthn options for signing a smart-account auth entry.
  * Challenge must be the build response `authDigestHex` (not PASSKEY_AUTH_BEGIN session challenge).
  */
+export function normalizeAuthDigestHex(authDigestHex: string): string {
+  const hex = authDigestHex.trim().replace(/^0x/i, '')
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
+    throw new Error('Invalid auth digest from transaction build.')
+  }
+  return hex
+}
+
+export function authDigestChallengeBase64Url(authDigestHex: string): string {
+  return bytesToBase64Url(hexToBytes(normalizeAuthDigestHex(authDigestHex)))
+}
+
+export function challengeBase64UrlFromWebauthnAssertion(assertion: unknown): string | undefined {
+  const resp = (assertion as { response?: { clientDataJSON?: unknown } } | null)?.response
+  if (!resp || typeof resp !== 'object') return undefined
+  const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
+  if (typeof clientDataJSON !== 'string' || !clientDataJSON) return undefined
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
+    ) as { challenge?: unknown }
+    return typeof parsed.challenge === 'string' ? parsed.challenge : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Ensures the passkey signed this transaction's auth digest (not a login/session challenge).
+ */
+export function assertPasskeyAssertionMatchesAuthDigest(
+  assertion: unknown,
+  authDigestHex: string
+): void {
+  const expected = authDigestChallengeBase64Url(authDigestHex)
+  const signed = challengeBase64UrlFromWebauthnAssertion(assertion)
+  if (!signed) {
+    throw new Error('Passkey response did not include a WebAuthn challenge.')
+  }
+  if (signed !== expected) {
+    throw new Error(
+      'Passkey signed the wrong challenge for this transaction. ' +
+        'Complete only the passkey prompt opened from Send or Swap, then try again.'
+    )
+  }
+  const ceremony = getWebauthnCeremonyTypeFromCredential(assertion)
+  if (ceremony === 'webauthn.create') {
+    throw new Error('Passkey registration was used instead of signing this transaction.')
+  }
+}
+
 export function passkeyAuthenticationOptionsForAuthDigest(args: {
   credentialId: string
   authDigestHex: string
   rpId?: string
 }) {
-  const hex = args.authDigestHex.trim().replace(/^0x/i, '')
-  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
-    throw new Error('Invalid auth digest from transaction build.')
-  }
+  const hex = normalizeAuthDigestHex(args.authDigestHex)
   return createLocalAuthenticationOptions({
     rpId: args.rpId ?? extensionWebauthnRpId(),
     credentialId: args.credentialId,
     authDigestHex: hex,
   })
+}
+
+/** WebAuthn options for `/v1/auth/challenge` wallet sign-in (nonce is already base64url). */
+export function passkeyAuthenticationOptionsForV1Challenge(args: {
+  credentialId: string
+  challengeBase64Url: string
+  rpId?: string
+}) {
+  const challenge = args.challengeBase64Url.trim()
+  if (!challenge) throw new Error('V1 auth challenge missing nonce')
+  return {
+    rpId: args.rpId ?? extensionWebauthnRpId(),
+    challenge,
+    allowCredentials: [
+      {
+        id: args.credentialId,
+        type: 'public-key',
+        transports: PLATFORM_PASSKEY_TRANSPORTS,
+      },
+    ],
+    timeout: 60_000,
+    userVerification: 'required',
+    hints: PLATFORM_PASSKEY_HINTS,
+  } as const
+}
+
+export function assertPasskeyAssertionMatchesV1Challenge(
+  assertion: unknown,
+  challengeBase64Url: string
+): void {
+  const expected = challengeBase64Url.trim()
+  const signed = challengeBase64UrlFromWebauthnAssertion(assertion)
+  if (!signed) {
+    throw new Error('Passkey response did not include a WebAuthn challenge.')
+  }
+  if (signed !== expected) {
+    throw new Error('Passkey signed the wrong V1 auth challenge. Try again.')
+  }
 }
 
 export function buildPasskeySigDataXdrFromAssertion(assertion: unknown): string {
@@ -322,7 +448,7 @@ export function narrowAuthenticationOptionsToCredential(
   if (!Array.isArray(allow) || allow.length === 0) {
     return {
       ...o,
-      allowCredentials: [{ id: credentialId, type: 'public-key' }],
+      allowCredentials: [{ id: credentialId, type: 'public-key', transports: PLATFORM_PASSKEY_TRANSPORTS }],
     }
   }
 
@@ -335,7 +461,9 @@ export function narrowAuthenticationOptionsToCredential(
   return {
     ...o,
     allowCredentials:
-      narrowed.length > 0 ? narrowed : [{ id: credentialId, type: 'public-key' }],
+      narrowed.length > 0
+        ? normalizeAllowCredentialsForPlatform(narrowed)
+        : [{ id: credentialId, type: 'public-key', transports: PLATFORM_PASSKEY_TRANSPORTS }],
   }
 }
 
@@ -470,4 +598,89 @@ export async function enrichWebauthnRpIdHashErrorMessage(
   }
 
   return parts.join(' ')
+}
+
+export type WebauthnCeremonyType = 'webauthn.create' | 'webauthn.get' | 'unknown'
+
+/** Reads `type` from credential `clientDataJSON` (create vs get). */
+export function getWebauthnCeremonyTypeFromCredential(credential: unknown): WebauthnCeremonyType {
+  const resp = (credential as { response?: unknown } | null)?.response
+  if (!resp || typeof resp !== 'object') return 'unknown'
+  const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
+  if (typeof clientDataJSON !== 'string' || !clientDataJSON) return 'unknown'
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
+    ) as { type?: unknown }
+    if (parsed.type === 'webauthn.create' || parsed.type === 'webauthn.get') {
+      return parsed.type
+    }
+  } catch {
+    // ignore
+  }
+  return 'unknown'
+}
+
+export function isRegistrationBeginOptions(options: unknown): boolean {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return false
+  return Array.isArray(o.pubKeyCredParams) && o.user != null && typeof o.user === 'object'
+}
+
+/** Validate server begin options for `startRegistration` (do not mutate RP/user/challenge). */
+export function prepareRegistrationOptionsForCreate(options: unknown): unknown {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return options
+  if (!isRegistrationBeginOptions(o)) {
+    throw new Error(
+      'Server returned authentication options instead of registration options. Try again or use “I have a wallet” → Existing passkey.'
+    )
+  }
+  const authSel =
+    o.authenticatorSelection != null && typeof o.authenticatorSelection === 'object'
+      ? (o.authenticatorSelection as Record<string, unknown>)
+      : {}
+  return {
+    ...o,
+    authenticatorSelection: {
+      ...authSel,
+      authenticatorAttachment: 'platform',
+      residentKey: 'required',
+      requireResidentKey: true,
+      userVerification: authSel.userVerification ?? 'required',
+    },
+    hints: PLATFORM_PASSKEY_HINTS,
+  }
+}
+
+export function assertRegistrationCeremonyForFinish(credential: unknown): void {
+  const ceremony = getWebauthnCeremonyTypeFromCredential(credential)
+  if (ceremony === 'webauthn.get') {
+    throw new Error(
+      'You signed in with an existing passkey instead of creating a new one. Use “I have a wallet” → Existing passkey.'
+    )
+  }
+  const inner = (credential as { response?: Record<string, unknown> } | null)?.response
+  if (!inner || typeof inner.attestationObject !== 'string' || !inner.attestationObject) {
+    throw new Error(
+      'Passkey creation did not return a registration attestation. Try again or use “I have a wallet” → Existing passkey.'
+    )
+  }
+}
+
+/** Normalize server begin options for `startAuthentication`. */
+export function prepareAuthenticationOptionsForGet(options: unknown): unknown {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return options
+  const rpId = getWebauthnRpIdFromBeginOptions(o)
+  const out: Record<string, unknown> = {
+    ...o,
+    userVerification: o.userVerification ?? 'required',
+    hints: PLATFORM_PASSKEY_HINTS,
+  }
+  if (rpId) out.rpId = rpId
+  if (Array.isArray(o.allowCredentials) && o.allowCredentials.length > 0) {
+    out.allowCredentials = normalizeAllowCredentialsForPlatform(o.allowCredentials)
+  }
+  return out
 }
