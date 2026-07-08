@@ -9,6 +9,7 @@ import type {
 
 import { latchFetch } from './client'
 import { latchExtensionJsonBody } from './webauthn'
+import { normalizeMultisigProposalDetail } from './multisigNormalize'
 
 export async function listMultisigProposals(
   smartAccountAddress: string
@@ -30,10 +31,11 @@ export async function createMultisigProposal(
 }
 
 export async function getMultisigProposal(proposalId: string): Promise<MultisigProposalDetail> {
-  return await latchFetch<MultisigProposalDetail>(
+  const raw = await latchFetch<unknown>(
     `/api/multisig/proposals/${encodeURIComponent(proposalId)}`,
     { method: 'GET' }
   )
+  return normalizeMultisigProposalDetail(raw)
 }
 
 export async function multisigProposalApproveDelegatedBegin(args: {
@@ -52,7 +54,7 @@ export async function multisigProposalApproveDelegatedBegin(args: {
 export async function multisigProposalApproveDelegatedFinish(
   req: MultisigApproveDelegatedFinishRequest
 ): Promise<MultisigProposalDetail> {
-  return await latchFetch<MultisigProposalDetail>(
+  const raw = await latchFetch<unknown>(
     `/api/multisig/proposals/${encodeURIComponent(req.proposalId)}/approve/delegated/finish`,
     {
       method: 'POST',
@@ -63,6 +65,7 @@ export async function multisigProposalApproveDelegatedFinish(
       }),
     }
   )
+  return normalizeMultisigProposalDetail(raw)
 }
 
 export async function multisigProposalApproveWebauthn(args: {
@@ -70,7 +73,7 @@ export async function multisigProposalApproveWebauthn(args: {
   memberId: string
   sigDataXdrHex: string
 }): Promise<MultisigProposalDetail> {
-  return await latchFetch<MultisigProposalDetail>(
+  const raw = await latchFetch<unknown>(
     `/api/multisig/proposals/${encodeURIComponent(args.proposalId)}/approve/webauthn`,
     {
       method: 'POST',
@@ -80,6 +83,7 @@ export async function multisigProposalApproveWebauthn(args: {
       }),
     }
   )
+  return normalizeMultisigProposalDetail(raw)
 }
 
 export async function executeMultisigProposal(
@@ -92,8 +96,9 @@ export async function executeMultisigProposal(
 }
 
 export async function refreshMultisigProposal(proposalId: string): Promise<MultisigProposalDetail> {
-  return await latchFetch<MultisigProposalDetail>(
+  const raw = await latchFetch<unknown>(
     `/api/multisig/proposals/${encodeURIComponent(proposalId)}/refresh`,
     { method: 'POST' }
   )
+  return normalizeMultisigProposalDetail(raw)
 }

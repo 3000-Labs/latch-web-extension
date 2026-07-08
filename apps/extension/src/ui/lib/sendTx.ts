@@ -81,10 +81,11 @@ export function buildSetupRequestFromDraft(
   if (signerType === 'passkey') {
     const keyDataHex = passkeySource?.passkeyKeyDataHex?.trim()
     if (!keyDataHex) return null
-    const verifierAddress = webauthnVerifierAddressFromEnv()
-    if (!verifierAddress) return null
     req.keyDataHex = keyDataHex
-    req.verifierAddress = verifierAddress
+    // Backend no longer requires verifierAddress to set up rules (Swagger omits it),
+    // but keep sending it when configured for backwards compatibility.
+    const verifierAddress = webauthnVerifierAddressFromEnv()
+    if (verifierAddress) req.verifierAddress = verifierAddress
     const credentialId = passkeySource?.passkeyCredentialId?.trim()
     if (credentialId) {
       req.credentialId = credentialId
@@ -243,9 +244,6 @@ export function passkeySetupPrerequisiteError(account: StoredAccount): string | 
   if (accountToSignerType(account.mode) !== 'passkey') return null
   if (!account.passkeyKeyDataHex?.trim()) {
     return 'Missing passkey key data for this account. Log out and sign in with your passkey again.'
-  }
-  if (!webauthnVerifierAddressFromEnv()) {
-    return 'Passkey send setup requires PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS in apps/extension/.env (same value as the Latch API). Restart pnpm dev after changing it.'
   }
   return null
 }

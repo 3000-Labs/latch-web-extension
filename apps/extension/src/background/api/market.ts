@@ -1,4 +1,4 @@
-import { BackendError, latchFetchAbsolute } from './client'
+import { BackendError } from './client'
 import { latchMarketApiBaseUrl } from './config'
 import { parseApiError } from './errors'
 

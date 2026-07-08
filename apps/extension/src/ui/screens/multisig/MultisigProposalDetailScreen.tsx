@@ -12,6 +12,8 @@ export function MultisigProposalDetailScreen({
   error,
   busy,
   needsMyApproval,
+  approveLabel,
+  approveBusyLabel,
   onBack,
   onApprove,
   onExecute,
@@ -22,6 +24,8 @@ export function MultisigProposalDetailScreen({
   error: string | null
   busy: boolean
   needsMyApproval: boolean
+  approveLabel?: string
+  approveBusyLabel?: string
   onBack: () => void
   onApprove: () => void
   onExecute: () => void
@@ -55,7 +59,7 @@ export function MultisigProposalDetailScreen({
           <div className="mt-auto flex flex-col gap-3">
             {needsMyApproval ? (
               <OnboardingPrimaryButton disabled={busy} onClick={onApprove}>
-                {busy ? 'Signing…' : 'Approve with passkey'}
+                {busy ? (approveBusyLabel ?? 'Signing…') : (approveLabel ?? 'Approve')}
               </OnboardingPrimaryButton>
             ) : null}
             {ready ? (

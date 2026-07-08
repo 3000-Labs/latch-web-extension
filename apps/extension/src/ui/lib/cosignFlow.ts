@@ -26,7 +26,7 @@ export function buildGAddressSigner(label: string, gAddress: string): CosignMemb
 export function buildPasskeySigner(
   label: string,
   keyDataHex: string,
-  credentialId?: string
+  _credentialId?: string
 ): CosignMemberInit {
   return {
     type: 'passkey',

@@ -4,12 +4,7 @@ import { friendlyError, sendToBackground } from './backgroundClient'
 import { apiProposeCosign } from './cosignFlow'
 import { findReusablePasskeyAccount } from './multisigPasskey'
 import { signAndSubmitBuiltTx } from './signBuiltTx'
-import {
-  buildSetupRequestFromDraft,
-  isNoContextRuleError,
-  passkeySetupPrerequisiteError,
-  sendCryptoAmountFromDraft,
-} from './sendTx'
+import { buildSetupRequestFromDraft, passkeySetupPrerequisiteError } from './sendTx'
 import type { SendDraft } from '../types/send'
 import { buildCreateSendProposalRequest } from './multisigProposal'
 

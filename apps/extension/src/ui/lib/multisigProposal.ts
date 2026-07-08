@@ -1,19 +1,12 @@
 import type {
   CreateMultisigProposalRequest,
   CreateMultisigProposalResponse,
-  SetupSendRulesRequest,
-  SetupSendRulesResponse,
   SmartAccountBalanceRow,
   StoredAccount,
 } from '@latch/types'
 
 import { friendlyError, sendToBackground } from './backgroundClient'
-import { findReusablePasskeyAccount } from './multisigPasskey'
-import { signAndSubmitBuiltTx } from './signBuiltTx'
 import {
-  buildSetupRequestFromDraft,
-  isNoContextRuleError,
-  passkeySetupPrerequisiteError,
   sendCryptoAmountFromDraft,
 } from './sendTx'
 import type { SendDraft } from '../types/send'
@@ -47,11 +40,13 @@ export function buildCreateSendProposalRequest(
     amount,
     assetId,
     tokenContractId,
-    requireMatchedContextRule: true,
+    // Backend currently does not support installing token-scoped context rules
+    // for m-of-n multisig accounts. Use the default rule (id 0) instead.
+    requireMatchedContextRule: false,
   }
 }
 
-/** First-send setup for multisig: configure SAC context rules, then create the proposal. */
+/** Create a multisig send proposal via `/api/multisig/proposals`. */
 export async function createMultisigSendProposalWithSetup(args: {
   draft: SendDraft
   multisigAccount: StoredAccount
@@ -60,68 +55,22 @@ export async function createMultisigSendProposalWithSetup(args: {
   surface: 'popup' | 'sidepanel'
   onProgress: (label: string | null) => void
 }): Promise<CreateMultisigProposalResponse> {
-  const signingPasskey = findReusablePasskeyAccount(args.accounts)
-  if (!signingPasskey) {
-    throw new Error(
-      'No passkey account is available to set up sending for this multisig wallet. Sign in with a passkey first.'
-    )
-  }
-
   const proposalBody = buildCreateSendProposalRequest(
     args.draft,
     args.multisigAccount,
     args.priceUsd
   )
-  const setupBody = buildSetupRequestFromDraft(
-    args.draft,
-    args.multisigAccount,
-    signingPasskey
-  )
   if (!proposalBody) throw new Error('Invalid send details')
-  if (!setupBody) {
-    throw new Error(
-      passkeySetupPrerequisiteError(signingPasskey) ??
-        'Cannot build send setup for this multisig wallet.'
-    )
-  }
 
-  for (let attempt = 0; attempt < 5; attempt++) {
-    args.onProgress('Creating proposal…')
-    const createRes = await sendToBackground<
-      CreateMultisigProposalRequest,
-      CreateMultisigProposalResponse
-    >({
+  args.onProgress('Creating proposal…')
+  const createRes = await sendToBackground<CreateMultisigProposalRequest, CreateMultisigProposalResponse>(
+    {
       type: 'MULTISIG_CREATE_PROPOSAL',
       payload: proposalBody,
-    })
-
-    if (createRes.ok && createRes.data) return createRes.data
-
-    if (isNoContextRuleError(createRes.error)) {
-      args.onProgress('Setting up send rules…')
-      const setupRes = await sendToBackground<SetupSendRulesRequest, SetupSendRulesResponse>({
-        type: 'SETUP_SEND_RULES',
-        payload: setupBody,
-      })
-      if (!setupRes.ok) throw new Error(friendlyError(setupRes.error))
-      const setup = setupRes.data!
-      if (!setup.alreadyConfigured) {
-        await signAndSubmitBuiltTx({
-          build: setup,
-          activeAccount: args.multisigAccount,
-          signingAccount: signingPasskey,
-          surface: args.surface,
-          onProgress: (label) => args.onProgress(label),
-        })
-      }
-      if ((setup.remainingSetupCount ?? 0) > 0) continue
-      continue
     }
-
-    throw new Error(friendlyError(createRes.error))
-  }
-
-  throw new Error('Send setup did not complete for this multisig wallet.')
+  )
+  if (!createRes.ok) throw new Error(friendlyError(createRes.error))
+  return createRes.data!
 }
 
 export function proposalSummaryFromRow(row: {

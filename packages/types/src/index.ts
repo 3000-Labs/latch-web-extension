@@ -182,6 +182,8 @@ export interface SetupSendRulesRequest {
   /** WebAuthn verifier C-address (must match Latch API `NEXT_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS`). */
   verifierAddress?: string
   keyDataHex?: string
+  /** Optional WebAuthn credential id (base64url). */
+  credentialId?: string
   gAddress?: string
 }
 
@@ -393,7 +395,7 @@ export interface SubmitWebauthnTxRequest {
   authEntryXdr: string
   sigDataXdr: string
   keyDataHex: string
-  contextRuleId: number
+  contextRuleId?: number
   authEntriesXdr?: string[]
   smartAccountAuthEntryIndex?: number
   delegatedGAuthEntrySynthesized?: boolean

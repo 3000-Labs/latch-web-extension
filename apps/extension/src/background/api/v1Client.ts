@@ -9,7 +9,7 @@ export { base64UrlToStandardB64, buildWalletSignInBodyFromAssertion } from './v1
 
 type V1Envelope<T> = { data?: T; error?: { code?: string; message?: string } }
 
-function unwrapV1<T>(data: unknown, path: string): T {
+function unwrapV1<T>(data: unknown, _path: string): T {
   if (data && typeof data === 'object' && 'data' in data) {
     return (data as V1Envelope<T>).data as T
   }

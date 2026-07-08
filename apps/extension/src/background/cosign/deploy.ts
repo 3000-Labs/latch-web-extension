@@ -1,7 +1,6 @@
 import type { StoredAccount } from '@latch/types'
 
 import { deployMultisigAccount } from '../api/multisigAccounts'
-import { predictMultisigAccountFromSigners } from '../api/multisigAccounts'
 import { generateWCK } from './crypto'
 import { announceMemberForWallet } from './membership'
 import { ensureDeviceTransportKeyPair } from './keyStorage'

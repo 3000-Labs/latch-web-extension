@@ -18,7 +18,8 @@ import {
 } from '../lib/multisigDeepLink'
 import { formatMultisigProposalError } from '../lib/multisigErrors'
 import {
-  approveMultisigProposalWithPasskey,
+  approveMultisigProposal,
+  peekMultisigApprovalSigner,
   proposalNeedsMyApproval,
 } from '../lib/multisigApprove'
 import {
@@ -40,20 +41,16 @@ import {
   memberCountFromDraft,
 } from '../lib/multisigFlow'
 import {
-  addStoredPasskeyToDraft,
   enrollExistingPasskeyForDraft,
   enrollNewPasskeyForDraft,
   listReusablePasskeyAccounts,
 } from '../lib/multisigPasskey'
 import {
-  draftHasMemberForStoredAccount,
   findDraftMemberForStoredAccount,
-  isDuplicateMultisigMemberError,
 } from '../lib/multisigJoinHelpers'
 import { MultisigJoinFlow } from './MultisigJoinFlow'
 import { multisigDraftMembersEqual } from '../lib/multisigMembers'
 import { storedAccountLabel } from '../lib/storedAccountLabel'
-import { nextPasskeyRegistrationDisplayName } from '../webauthn/passkey'
 import { toMultisigPasskeyOptions } from './MultisigPasskeyPicker'
 import { AddMultisigOwnersScreen } from '../screens/multisig/AddMultisigOwnersScreen'
 import { CreateMultisigScreen } from '../screens/multisig/CreateMultisigScreen'
@@ -353,6 +350,15 @@ export function MultisigRouteViews({
     ).length
   }, [proposals, activeAccount?.multisigMemberId])
 
+  const proposalApprovalUi = useMemo(() => {
+    if (!activeProposal || !activeAccount) return null
+    return peekMultisigApprovalSigner({
+      proposal: activeProposal,
+      activeAccount,
+      accounts,
+    })
+  }, [activeProposal, activeAccount, accounts])
+
   const loadMultisigHub = useCallback(async () => {
     try {
       await apiSyncLocalMultisigAccounts()
@@ -431,7 +437,6 @@ export function MultisigRouteViews({
       const result = await apiDeployDraft(wizard.draftId)
       const smartAccountAddress = result.smartAccountAddress
       const threshold = wizard.threshold
-      const memberCount = memberCountFromDraft({ members: draftMembers })
       let memberId = wizard.creatorPasskeyMemberId ?? activeAccount?.multisigMemberId
       try {
         const listed = await apiListMultisigAccounts()
@@ -651,12 +656,14 @@ export function MultisigRouteViews({
             ? proposalNeedsMyApproval(activeProposal, activeAccount.multisigMemberId)
             : false
         }
+        approveLabel={proposalApprovalUi?.approveLabel}
+        approveBusyLabel={proposalApprovalUi?.busyLabel}
         onBack={() => onSetRoute('multisigProposals')}
         onApprove={() => {
           if (!activeProposal || !activeAccount) return
           setProposalBusy(true)
           setProposalActionError(null)
-          void approveMultisigProposalWithPasskey({
+          void approveMultisigProposal({
             proposal: activeProposal,
             activeAccount,
             accounts,

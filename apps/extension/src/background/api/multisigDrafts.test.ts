@@ -14,7 +14,7 @@ describe('api/multisigDrafts', () => {
   })
 
   it('POST /api/multisig/drafts', async () => {
-    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => ({
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
       ok: true,
       status: 200,
       headers: new Headers(),

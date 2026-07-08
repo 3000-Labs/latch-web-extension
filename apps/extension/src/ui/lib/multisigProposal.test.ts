@@ -34,7 +34,7 @@ describe('buildCreateSendProposalRequest', () => {
       amount: '5',
       assetId: 'native',
       tokenContractId: xlmDraft.token!.sacContractId,
-      requireMatchedContextRule: true,
+      requireMatchedContextRule: false,
     })
   })
 

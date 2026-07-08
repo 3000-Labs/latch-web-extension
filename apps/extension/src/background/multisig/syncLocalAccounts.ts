@@ -18,7 +18,6 @@ import {
   registerMultisigAccount,
 } from '../backend'
 import {
-  findDraftMemberForUser,
   findMemberIdForUser,
   passkeyCredentialIdsFromAccounts,
   resolveDraftMembership,
@@ -204,8 +203,11 @@ async function ensureLocalMultisigAccount(
   const addr = args.smartAccountAddress.trim()
   if (!addr) return
 
-  const label = args.label.trim() || 'Multisig wallet'
   const existing = ctx.localAccounts.find((a) => a.mode === 'multisig' && a.smartAccountAddress === addr)
+  // Remote list responses may omit `label` (or older deployments might not have one),
+  // but we still want to preserve any local user-assigned label.
+  const desiredLabel = args.label.trim()
+  const label = desiredLabel || existing?.label?.trim() || 'Multisig wallet'
   if (existing) {
     if (
       !multisigLocalAccountNeedsUpdate(existing, {
@@ -556,11 +558,9 @@ async function importListedRemoteAccounts(ctx: SyncContext): Promise<void> {
       ctx.localAccounts,
       matchedInvite?.multisigMemberId
     )
-    const label =
-      remote.label?.trim() ??
-      matchedInvite?.walletName?.trim() ??
-      ctx.pendingInvites.find((i) => i.walletName?.trim())?.walletName?.trim() ??
-      'Multisig wallet'
+    // Only trust labels that are tied to this specific remote account (remote.label or matched invite).
+    // If neither is present, preserve any existing local label (handled in `ensureLocalMultisigAccount`).
+    const label = remote.label?.trim() ?? matchedInvite?.walletName?.trim() ?? ''
 
     await ensureLocalMultisigAccount(ctx, {
       smartAccountAddress: addr,
@@ -587,7 +587,7 @@ export async function syncLocalMultisigAccountsFromBackend(opts?: {
   created: StoredAccount[]
   updated: boolean
 }> {
-  let { accounts: localAccounts, activeAccountId } = await getAccounts()
+  const { accounts: localAccounts, activeAccountId } = await getAccounts()
   const passkeyCredentialIds = passkeyCredentialIdsFromAccounts(localAccounts)
   const pendingInvites = await getMultisigPendingInvites()
   const draftMeta = await getMultisigDraftMeta()
@@ -627,7 +627,7 @@ export async function syncLocalMultisigAccountsFromBackend(opts?: {
 
   if (opts?.activateFirstCreated && ctx.created[0]?.id) {
     await setActiveAccount(ctx.created[0].id)
-    activeAccountId = ctx.created[0].id
+    // `activeAccountId` is taken from storage on return; no need to mutate local const.
   }
 
   const latest = await getAccounts()
