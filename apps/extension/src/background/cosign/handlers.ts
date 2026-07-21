@@ -11,7 +11,6 @@ import {
   postJoinRelay,
 } from '../api/cosign/cosignQueue'
 import { completeWalletSignInFromAssertion, requestWalletChallenge, resolveAccessToken } from '../api/v1Client'
-import { passkeyAuthenticationBeginForWallet } from '../api/webauthn'
 import { assembleAndSubmitCosignRequest } from './assembleAndSubmit'
 import { deployCosignMultisigWallet } from './deploy'
 import { ensureDeviceTransportKeyPair } from './keyStorage'
@@ -213,19 +212,10 @@ export async function tryHandleCosignMessage(
       const linked = accounts.find((a) => a.id === req.linkedAccountId)
       if (!linked) throw new Error('Linked account not found')
       const { wallet, keyType } = v1AuthWalletForLinkedAccount(linked)
-      const [challenge, begin] = await Promise.all([
-        requestWalletChallenge(wallet, keyType),
-        passkeyAuthenticationBeginForWallet(wallet, keyType),
-      ])
+      const challenge = await requestWalletChallenge(wallet, keyType)
       const nonce = String(challenge.nonce ?? challenge.challenge ?? '').trim()
       if (!nonce) throw new Error('V1 auth challenge missing nonce')
-      const rawOptions = begin.options
-      const optionsObj =
-        typeof rawOptions === 'string'
-          ? (JSON.parse(rawOptions) as Record<string, unknown>)
-          : { ...(rawOptions as Record<string, unknown>) }
-      const optionsJSON = { ...optionsObj, challenge: nonce }
-      sendResponse(ok({ wallet, nonce, keyType, optionsJSON }))
+      sendResponse(ok({ wallet, nonce, keyType }))
       return true
     }
     case 'COSIGN_V1_AUTH_SIGN_IN': {

@@ -2,7 +2,7 @@ import type { V1TokenPair } from '@latch/types'
 
 import { latchApiBaseUrl } from './config'
 import { BackendError } from './client'
-import { getV1TokenPair, isTokenFresh, setV1TokenPair } from './v1TokenStorage'
+import { clearV1TokenPair, getV1TokenPair, isTokenFresh, setV1TokenPair } from './v1TokenStorage'
 import { buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
 
 export { base64UrlToStandardB64, buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
@@ -77,13 +77,55 @@ export async function v1Fetch<T>(
   return v1FetchAbsolute<T>(`${baseUrl}${path}`, init)
 }
 
+async function refreshV1TokensForWallet(wallet: string, refreshToken: string): Promise<string> {
+  const refreshed = await refreshV1Tokens(refreshToken)
+  const next: V1TokenPair = {
+    ...refreshed,
+    wallet,
+  }
+  await setV1TokenPair(wallet, next)
+  return next.accessToken
+}
+
+async function retryV1FetchAfter401<T>(
+  wallet: string,
+  path: string,
+  init?: RequestInit & { timeoutMs?: number }
+): Promise<T> {
+  const pair = await getV1TokenPair(wallet)
+  if (!pair?.refreshToken) {
+    await clearV1TokenPair(wallet)
+    throw new BackendError('V1 auth required', { code: 'V1_AUTH_REQUIRED', status: 401 })
+  }
+
+  try {
+    const accessToken = await refreshV1TokensForWallet(wallet, pair.refreshToken)
+    return await v1Fetch<T>(path, { ...init, accessToken })
+  } catch (err) {
+    await clearV1TokenPair(wallet)
+    if (err instanceof BackendError && err.status === 401) {
+      throw new BackendError('V1 auth required', { code: 'V1_AUTH_REQUIRED', status: 401 })
+    }
+    throw err
+  }
+}
+
 export async function v1FetchForWallet<T>(
   wallet: string,
   path: string,
   init?: RequestInit & { timeoutMs?: number }
 ): Promise<T> {
-  const token = await resolveAccessToken(wallet)
-  return v1Fetch<T>(path, { ...init, accessToken: token })
+  const normalizedWallet = wallet.trim()
+  const accessToken = await resolveAccessToken(normalizedWallet)
+
+  try {
+    return await v1Fetch<T>(path, { ...init, accessToken })
+  } catch (err) {
+    if (err instanceof BackendError && err.status === 401) {
+      return retryV1FetchAfter401<T>(normalizedWallet, path, init)
+    }
+    throw err
+  }
 }
 
 export async function resolveAccessToken(wallet: string): Promise<string> {
@@ -92,13 +134,7 @@ export async function resolveAccessToken(wallet: string): Promise<string> {
     throw new BackendError('V1 auth required', { code: 'V1_AUTH_REQUIRED' })
   }
   if (isTokenFresh(pair)) return pair.accessToken
-  const refreshed = await refreshV1Tokens(pair.refreshToken)
-  const next: V1TokenPair = {
-    ...refreshed,
-    wallet: wallet.trim(),
-  }
-  await setV1TokenPair(wallet, next)
-  return next.accessToken
+  return refreshV1TokensForWallet(wallet.trim(), pair.refreshToken)
 }
 
 export async function refreshV1Tokens(refreshToken: string): Promise<V1TokenPair> {
@@ -129,14 +165,9 @@ export async function requestWalletChallenge(wallet: string, keyType: string): P
 }
 
 export async function completeWalletSignIn(body: Record<string, unknown>): Promise<V1TokenPair> {
-  // Passkey wallet sign-in verifies against on-chain key_data_hex; chromeExtensionId makes the
-  // server apply bare extension-id rpId checks that fail for chrome-extension:// origins.
-  const isPasskeySignIn = typeof body.passkey_signature === 'string'
-  if (
-    !isPasskeySignIn &&
-    typeof chrome !== 'undefined' &&
-    chrome.runtime?.id
-  ) {
+  // Always send chromeExtensionId for extension clients so the API can expand the
+  // V1 wallet-auth origin allowlist to chrome-extension://<id> (see wallet auth wiring).
+  if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id
   }
   const data = await v1Fetch<{

@@ -351,6 +351,7 @@ export function CosignRouteViews({
     return (
       <CreateMultisigScreen
         error={createError}
+        onBack={() => onSetRoute('home')}
         onContinue={(walletName, purpose) => void handleCreateContinue(walletName, purpose)}
       />
     )
@@ -359,6 +360,7 @@ export function CosignRouteViews({
   if (route === 'addMultisigOwners' && wizard) {
     return (
       <AddMultisigOwnersScreen
+        walletName={wizard.walletName}
         members={wizard.members.map((m, i) => ({
           id: String(i),
           label: m.label,

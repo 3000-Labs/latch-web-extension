@@ -7,6 +7,7 @@ import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSma
 import { draftMemberCount } from '../../lib/multisigMembers'
 
 import { MultisigMembersSection } from './MultisigMembersSection'
+import { MultisigBackHeader } from './MultisigBackHeader'
 import {
   MultisigPasskeyPicker,
   type MultisigPasskeyOption,
@@ -55,11 +56,7 @@ export function JoinMultisigScreen({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-6">
-      {!hideBack ? (
-        <button type="button" onClick={onBack} className="self-start text-sm text-[#b3b3b3]">
-          Back
-        </button>
-      ) : null}
+      {!hideBack ? <MultisigBackHeader onBack={onBack} /> : null}
 
       <div className="flex w-full shrink-0 flex-col items-center gap-2">
         <OnboardingSmallEmblem />

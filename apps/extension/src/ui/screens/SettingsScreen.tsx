@@ -24,6 +24,7 @@ import { SettingItem } from './settings/SettingItem'
 import { SettingsSection } from './settings/SettingsSection'
 import { SettingsToggle } from './settings/SettingsToggle'
 import { ViewAccountsScreen, type ViewAccountItem } from './settings/ViewAccountsScreen'
+import { PulsingDot } from '../components/PulsingDot'
 
 const rowIconClass = 'h-5 w-5 object-contain'
 
@@ -45,6 +46,7 @@ export function SettingsScreen({
   onCreateMultisig,
   onOpenMultisigWallets,
   onOpenMultisigProposals,
+  pendingMultisigProposalCount,
   networkLabel,
   onClose,
   onLogout,
@@ -64,6 +66,7 @@ export function SettingsScreen({
   onCreateMultisig?: () => void
   onOpenMultisigWallets?: () => void
   onOpenMultisigProposals?: () => void
+  pendingMultisigProposalCount?: number
   networkLabel: string
   onClose: () => void
   onLogout: () => void
@@ -174,6 +177,11 @@ export function SettingsScreen({
                 icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
                 label="Multisig Proposals"
                 onClick={() => onOpenMultisigProposals()}
+                rightElement={
+                  pendingMultisigProposalCount && pendingMultisigProposalCount > 0 ? (
+                    <PulsingDot pulsing className="ml-2" />
+                  ) : undefined
+                }
               />
             ) : null}
             <SettingItem

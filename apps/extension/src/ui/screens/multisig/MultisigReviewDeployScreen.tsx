@@ -5,6 +5,8 @@ import type { MultisigPredictResponse } from '@latch/types'
 import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingCardButtons'
 import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSmallEmblem'
 
+import { MultisigBackHeader } from './MultisigBackHeader'
+
 function truncateAddress(address: string) {
   if (address.length <= 16) return address
   return `${address.slice(0, 6)}…${address.slice(-6)}`
@@ -44,9 +46,7 @@ export function MultisigReviewDeployScreen({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-6">
-      <button type="button" onClick={onBack} className="self-start text-sm text-[#b3b3b3]">
-        Back
-      </button>
+      <MultisigBackHeader onBack={onBack} />
       <div className="flex w-full shrink-0 flex-col items-center gap-2">
         <OnboardingSmallEmblem />
         <div className="flex w-full flex-col gap-2 text-center">

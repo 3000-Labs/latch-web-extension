@@ -76,10 +76,8 @@ import {
   multisigPendingApprovalCount,
   useMultisigJoinTokenOnMount,
 } from './multisig/MultisigRouteViews'
-import { MultisigProposalsHomeBanner } from './multisig/MultisigProposalsHomeBanner'
 import { parseMultisigJoinTokenFromLocation } from './lib/multisigDeepLink'
 import {
-  apiDismissMultisigProposalsBanner,
   apiGetMultisigProposalsBannerDismissed,
   apiSyncLocalMultisigAccounts,
 } from './lib/multisigFlow'
@@ -96,6 +94,7 @@ import { AccountMenu } from './components/AccountMenu'
 import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
 import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
 import { storedAccountLabel } from './lib/storedAccountLabel'
+import { FullScreenLoaderOverlay } from './components/FullScreenLoaderOverlay'
 import {
   markMigrationHomePromoCompleted,
 } from './lib/migrationHomePrefs'
@@ -131,6 +130,7 @@ import type { TransactionDetailVm } from './types/transaction-detail'
 import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from './types/send'
 import { SendFlow } from './screens/send/SendFlow'
 import { ReceiveFlow } from './screens/receive/ReceiveFlow'
+import { FundScreen } from './screens/fund/FundScreen'
 import { saveToAddressBook } from './screens/send/useAddressBook'
 import {
   buildSendRequestFromDraft,
@@ -177,6 +177,7 @@ type Route =
   | 'swapConfirm'
   | 'send'
   | 'receive'
+  | 'fund'
   | 'dappApproval'
   | 'migration'
   | 'migrationSuccess'
@@ -195,7 +196,8 @@ function routeKeepsUiMountedForWebauthn(route: Route): boolean {
     route === 'swapConfirm' ||
     route === 'addMultisigOwners' ||
     route === 'joinMultisig' ||
-    route === 'multisigProposalDetail'
+    route === 'multisigProposalDetail' ||
+    route === 'fund'
   )
 }
 
@@ -208,6 +210,7 @@ const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
   'swapConfirm',
   'send',
   'receive',
+  'fund',
   'migration',
   'migrationSuccess',
   'dappApproval',
@@ -405,7 +408,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   )
   const [multisigDetailProposalId, setMultisigDetailProposalId] = useState<string | null>(null)
   const [multisigProposals, setMultisigProposals] = useState<MultisigProposal[]>([])
-  const [multisigBannerDismissedIds, setMultisigBannerDismissedIds] = useState<string[]>([])
+  const [, setMultisigBannerDismissedIds] = useState<string[]>([])
 
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
@@ -949,11 +952,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [multisigProposals, activeAccount?.multisigMemberId]
   )
 
-  const showMultisigProposalsBanner = Boolean(
-    activeAccount?.mode === 'multisig' &&
-      activeAccount.id &&
-      !multisigBannerDismissedIds.includes(activeAccount.id)
-  )
+  const hasPendingMultisigProposals = multisigPendingCount > 0
 
   function resetSwapFlow() {
     setSwapDraft(null)
@@ -1683,24 +1682,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         {page === 'main' || page === 'settings' ? (
           <>
             {loading && !routeKeepsUiMountedForWebauthn(route) ? (
-              <div
-                className={[
-                  `${routeContentMarginClass} flex flex-col items-center justify-center animate-screenIn`,
-                  flowHeightClass,
-                ].join(' ')}
-              >
-                <img src={logoUrl} alt="Latch" className="h-10 w-10 object-contain" />
-                <div className="mt-6 text-center text-lg font-extrabold">{loading}</div>
-                <div className="mt-2 text-center text-xs text-muted">
-                  Approve the request in your wallet when prompted.
-                </div>
-                <button
-                  className="mt-8 rounded-full border border-border px-4 py-2 text-sm font-bold hover:bg-surface/70"
-                  onClick={() => setLoading(null)}
-                >
-                  Cancel
-                </button>
-              </div>
+              <FullScreenLoaderOverlay
+                label={loading}
+                description="Approve the request in your wallet when prompted."
+                onCancel={() => setLoading(null)}
+              />
             ) : null}
 
             {error && (!loading || routeKeepsUiMountedForWebauthn(route)) ? (
@@ -2243,19 +2229,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   'relative flex min-h-0 flex-1 flex-col animate-screenIn',
                 ].join(' ')}
               >
-                {showMultisigProposalsBanner ? (
-                  <MultisigProposalsHomeBanner
-                    pendingCount={multisigPendingCount}
-                    onOpenProposals={() => setRoute('multisigProposals')}
-                    onDismiss={() => {
-                      if (!activeAccount?.id) return
-                      void apiDismissMultisigProposalsBanner(activeAccount.id)
-                        .then(() => apiGetMultisigProposalsBannerDismissed())
-                        .then(setMultisigBannerDismissedIds)
-                        .catch(() => {})
-                    }}
-                  />
-                ) : null}
                 <HomeScreen
                   accountName={activeAccountLabel}
                   onOpenSettings={() => setPage('settings')}
@@ -2264,12 +2237,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   recentActivity={recentActivityItems}
                   totalBalanceUsd={totalBalanceUsd}
                   balanceChangePercent="0.00%"
+                  showPendingMultisigDot={hasPendingMultisigProposals}
                   onOpenSwap={
                     activeAccount?.mode === 'multisig' ? () => {} : openSwapFromNav
                   }
                   swapDisabled={activeAccount?.mode === 'multisig'}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
+                  onOpenFund={() => setRoute('fund')}
                   onSelectActivity={(it) => {
                     const c = activeAccount?.smartAccountAddress ?? ''
                     setTransactionDetailReturnRoute('home')
@@ -2351,6 +2326,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                                 setRoute('multisigProposals')
                               }
                             : undefined
+                        }
+                        pendingMultisigProposalCount={
+                          activeAccount?.mode === 'multisig' ? multisigPendingCount : 0
                         }
                         networkLabel={networkLabel}
                         onClose={() => setPage('main')}
@@ -2634,6 +2612,24 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   portfolioLoading={portfolioLoading}
                   portfolioError={portfolioError}
                   onBackToHome={() => setRoute('home')}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'fund' ? (
+              <div
+                className={[
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <FundScreen
+                  accountId={activeAccount?.id || ''}
+                  accountMode={activeAccount?.mode || ''}
+                  passkeyCredentialId={activeAccount?.passkeyCredentialId}
+                  surface={surface}
+                  onBack={() => setRoute('home')}
+                  onOpenReceive={() => setRoute('receive')}
                 />
               </div>
             ) : null}

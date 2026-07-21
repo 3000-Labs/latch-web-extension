@@ -74,3 +74,7 @@ export {
   executeMultisigProposal,
   refreshMultisigProposal,
 } from './multisigProposals'
+export {
+  createDepositIntent,
+  fetchDepositIntentStatus,
+} from './deposit'

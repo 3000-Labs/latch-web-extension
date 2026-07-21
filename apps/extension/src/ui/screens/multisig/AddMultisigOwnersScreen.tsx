@@ -9,14 +9,17 @@ import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingC
 import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSmallEmblem'
 
 import { AddOwnerFlowModals, type AddOwnerModalStep } from './AddOwnerFlowModals'
+import { ConfirmRemoveOwnerModal } from './ConfirmRemoveOwnerModal'
 import { MultisigInviteShareCard } from './MultisigWalletsScreen'
 import { MultisigMembersSection } from './MultisigMembersSection'
+import { MultisigBackHeader } from './MultisigBackHeader'
 import {
   MultisigPasskeyPicker,
   type MultisigPasskeyOption,
 } from '../../multisig/MultisigPasskeyPicker'
 
 export function AddMultisigOwnersScreen({
+  walletName,
   members,
   inviteUrl,
   inviteToken,
@@ -40,6 +43,7 @@ export function AddMultisigOwnersScreen({
   onRefreshMembers,
   onContinue,
 }: {
+  walletName: string
   members: MultisigDraftMember[]
   inviteUrl: string
   inviteToken: string
@@ -64,15 +68,28 @@ export function AddMultisigOwnersScreen({
   onContinue: () => void
 }) {
   const [modalStep, setModalStep] = useState<AddOwnerModalStep>('none')
+  const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null)
   const hasYourPasskey = Boolean(youMemberId)
   const canContinue = members.length >= 2 && !passkeyAdding && !addBusy
+
+  const handleRequestRemoveMember = (memberId: string) => {
+    setPendingRemoveMemberId(memberId)
+  }
+
+  const handleCancelRemoveMember = () => {
+    setPendingRemoveMemberId(null)
+  }
+
+  const handleConfirmRemoveMember = () => {
+    if (!pendingRemoveMemberId) return
+    onRemoveMember(pendingRemoveMemberId)
+    setPendingRemoveMemberId(null)
+  }
 
   return (
     <>
       <div className="flex h-full min-h-0 w-full flex-col gap-6">
-        <button type="button" onClick={onBack} className="self-start text-sm text-[#b3b3b3]">
-          Back
-        </button>
+        <MultisigBackHeader onBack={onBack} />
         <div className="flex w-full shrink-0 flex-col items-center gap-2">
           <OnboardingSmallEmblem />
           <div className="flex w-full flex-col gap-2 text-center">
@@ -97,7 +114,7 @@ export function AddMultisigOwnersScreen({
               members={members}
               youMemberId={youMemberId}
               emptyLabel="No owners added yet."
-              onRemoveMember={onRemoveMember}
+              onRemoveMember={handleRequestRemoveMember}
             />
 
             {ownersLiveUpdating ? (
@@ -196,6 +213,13 @@ export function AddMultisigOwnersScreen({
           onAddOwnerByAddress(ownerName, address)
           setModalStep('none')
         }}
+      />
+
+      <ConfirmRemoveOwnerModal
+        isOpen={pendingRemoveMemberId != null}
+        walletName={walletName}
+        onCancel={handleCancelRemoveMember}
+        onConfirm={handleConfirmRemoveMember}
       />
     </>
   )

@@ -4,6 +4,8 @@ import type { MultisigProposal } from '@latch/types'
 
 import { proposalSummaryFromRow } from '../../lib/multisigProposal'
 
+import { MultisigBackHeader } from './MultisigBackHeader'
+
 export function MultisigProposalsScreen({
   proposals,
   loading,
@@ -21,9 +23,7 @@ export function MultisigProposalsScreen({
 }) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4">
-      <button type="button" onClick={onBack} className="self-start text-sm text-[#b3b3b3]">
-        Back
-      </button>
+      <MultisigBackHeader onBack={onBack} />
       <div>
         <h1 className="text-[22px] font-semibold text-[#fcfcfc]">Proposals</h1>
         {pendingCount > 0 ? (
@@ -35,7 +35,6 @@ export function MultisigProposalsScreen({
         )}
       </div>
 
-      {loading ? <p className="text-sm text-[#b3b3b3]">Loading…</p> : null}
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">

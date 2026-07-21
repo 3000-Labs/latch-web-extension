@@ -113,6 +113,8 @@ import { runGetSmartAccountTransactions } from './smartAccountTransactions'
 import { deriveStellarKeypairFromMnemonic } from './stellarMnemonic'
 import { getMarketPrices } from './marketPrices'
 import { tryHandleMultisigMessage } from './multisig/handlers'
+import { tryHandleDepositMessage } from './deposit/handlers'
+import { tryHandleV1AuthMessage } from './v1Auth/handlers'
 
 import {
   createAccount,
@@ -442,6 +444,12 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
   ;(async () => {
     if (await tryHandleMultisigMessage(message, sendResponse, ok)) {
+      return
+    }
+    if (await tryHandleV1AuthMessage(message, sendResponse, ok)) {
+      return
+    }
+    if (await tryHandleDepositMessage(message, sendResponse, ok)) {
       return
     }
 
@@ -1012,8 +1020,15 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       }
 
       default: {
-        console.log('[latch:background] message received', message)
-        sendResponse(ok())
+        const type = message?.type ?? 'unknown'
+        console.warn('[latch:background] unhandled message', type)
+        sendResponse({
+          ok: false,
+          error: {
+            message: `Unhandled background message: ${String(type)}`,
+            code: 'unhandled_message',
+          },
+        } satisfies BackgroundResponse)
         return
       }
     }

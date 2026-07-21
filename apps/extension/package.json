@@ -50,11 +50,8 @@
   "manifest": {
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
-    "version": "0.0.6",
+    "version": "0.0.8",
     "permissions": [
-      "alarms",
-      "notifications",
-      "cookies",
       "storage",
       "scripting",
       "sidePanel",

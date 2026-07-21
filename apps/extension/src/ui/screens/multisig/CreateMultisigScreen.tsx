@@ -3,6 +3,8 @@ import React, { useState } from 'react'
 import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingCardButtons'
 import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSmallEmblem'
 
+import { MultisigBackHeader } from './MultisigBackHeader'
+
 function MultisigField({
   id,
   label,
@@ -41,9 +43,11 @@ function MultisigField({
 
 export function CreateMultisigScreen({
   error,
+  onBack,
   onContinue,
 }: {
   error?: string | null
+  onBack: () => void
   onContinue: (walletName: string, purpose: string) => void
 }) {
   const [walletName, setWalletName] = useState('')
@@ -52,6 +56,7 @@ export function CreateMultisigScreen({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-6">
+      <MultisigBackHeader onBack={onBack} />
       <div className="flex w-full shrink-0 flex-col items-center gap-2">
         <OnboardingSmallEmblem />
         <div className="flex w-full flex-col gap-2 text-center">

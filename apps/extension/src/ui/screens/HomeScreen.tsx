@@ -24,6 +24,7 @@ export function HomeScreen({
   recentActivity,
   totalBalanceUsd,
   balanceChangePercent,
+  showPendingMultisigDot,
 }: {
   accountName: string
   onOpenSettings: () => void
@@ -38,6 +39,7 @@ export function HomeScreen({
   recentActivity: HistoryItemVm[]
   totalBalanceUsd?: string | null
   balanceChangePercent?: string | null
+  showPendingMultisigDot?: boolean
 }) {
   const [hidden, setHidden] = useState(false)
 
@@ -49,7 +51,11 @@ export function HomeScreen({
       style={{ paddingBottom: MAIN_BOTTOM_NAV_CLEARANCE_PX }}
     >
       <div className="flex items-center justify-between">
-        <HomeProfileButton accountName={accountName} onClick={onOpenSettings} />
+        <HomeProfileButton
+          accountName={accountName}
+          onClick={onOpenSettings}
+          showPendingDot={showPendingMultisigDot}
+        />
         <button
           type="button"
           onClick={onOpenExplore}
@@ -71,7 +77,7 @@ export function HomeScreen({
         </div>
 
         <HomeActionButtons
-          onFund={onOpenFund ?? onOpenReceive}
+          onFund={onOpenFund}
           onSend={onOpenSend}
           onReceive={onOpenReceive}
           onSwap={onOpenSwap}

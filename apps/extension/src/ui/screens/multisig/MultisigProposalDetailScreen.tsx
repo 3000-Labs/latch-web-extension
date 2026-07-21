@@ -6,9 +6,11 @@ import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingC
 import { proposalSummaryFromRow } from '../../lib/multisigProposal'
 import { proposalReadyToExecute } from '../../lib/multisigApprove'
 
+import { MultisigBackHeader } from './MultisigBackHeader'
+
 export function MultisigProposalDetailScreen({
   proposal,
-  loading,
+  loading: _loading,
   error,
   busy,
   needsMyApproval,
@@ -35,11 +37,8 @@ export function MultisigProposalDetailScreen({
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-4">
-      <button type="button" onClick={onBack} className="self-start text-sm text-[#b3b3b3]">
-        Back
-      </button>
+      <MultisigBackHeader onBack={onBack} />
 
-      {loading ? <p className="text-sm text-[#b3b3b3]">Loading…</p> : null}
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
 
       {proposal ? (

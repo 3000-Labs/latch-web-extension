@@ -9,6 +9,13 @@ export async function sendToBackground<TPayload, TData>(
 export function friendlyError(e?: SerializableError): string {
   if (!e) return 'Unknown error'
   if (e.code === 'timeout') return 'Request timed out. Please try again.'
+  if (e.code === 'unhandled_message') {
+    return 'Extension background is out of date. Reload Latch on chrome://extensions and try again.'
+  }
+  if (e.code === 'V1_AUTH_REQUIRED') return 'Sign in required to continue.'
+  if (e.code === 'fund_unsupported_mode') {
+    return 'Fund via on-ramp is not available for this account type yet.'
+  }
   if (e.status === 403) return 'Not authorized.'
   if (e.code === 'mnemonic_locked') {
     return 'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.'

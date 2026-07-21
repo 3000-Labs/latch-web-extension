@@ -576,6 +576,44 @@ export interface GetMarketPricesResponse {
   pricesByCodeUpper: Record<string, MarketTokenPrice>
 }
 
+/** Per-funding-session latch-relayer deposit intent (`POST /v1/accounts/deposit-intent`). */
+export interface DepositIntent {
+  intent_id: string
+  memo_id: string
+  pool_address: string
+  expires_at: string
+}
+
+export interface DepositForward {
+  tx_hash: string
+  amount: string
+  asset: string
+  status: string
+  forward_tx?: string
+  created_at: string
+}
+
+export interface DepositStatus {
+  intent_id: string
+  memo_id: string
+  c_address: string
+  pool_address: string
+  status: 'pending' | 'completed' | 'expired' | 'failed' | string
+  expires_at: string
+  forwards: DepositForward[]
+}
+
+export interface CreateDepositIntentRequest {
+  accountId: string
+  /** When true, background opens the MoonPay buy tab after minting the intent. */
+  openMoonPay?: boolean
+}
+
+export interface GetDepositIntentStatusRequest {
+  accountId: string
+  memoId: string
+}
+
 // Message types for popup/content ↔ background communication
 export type MessageType =
   | 'SIGN_TRANSACTION'
@@ -617,6 +655,8 @@ export type MessageType =
   | 'GET_SMART_ACCOUNT_BALANCES'
   | 'GET_SMART_ACCOUNT_TRANSACTIONS'
   | 'GET_MARKET_PRICES'
+  | 'CREATE_DEPOSIT_INTENT'
+  | 'GET_DEPOSIT_INTENT_STATUS'
   | 'GET_ASSET_ICON_DATA_URLS'
   | 'BUILD_SEND_TX'
   | 'SETUP_SEND_RULES'
@@ -751,6 +791,8 @@ export type BackgroundRequestPayloadByType = {
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesRequest
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsRequest
   GET_MARKET_PRICES: GetMarketPricesRequest
+  CREATE_DEPOSIT_INTENT: CreateDepositIntentRequest
+  GET_DEPOSIT_INTENT_STATUS: GetDepositIntentStatusRequest
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
   BUILD_SEND_TX: BuildSendTxRequest
   SETUP_SEND_RULES: SetupSendRulesRequest
@@ -896,6 +938,8 @@ export type BackgroundResponseDataByType = {
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesResponse
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsResponse
   GET_MARKET_PRICES: GetMarketPricesResponse
+  CREATE_DEPOSIT_INTENT: DepositIntent
+  GET_DEPOSIT_INTENT_STATUS: DepositStatus
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
   BUILD_SEND_TX: BuildSendTxResponse
   SETUP_SEND_RULES: SetupSendRulesResponse
@@ -966,7 +1010,7 @@ export type BackgroundResponseDataByType = {
   COSIGN_CANCEL_REQUEST: { message: string }
   COSIGN_GET_WCK_RECORD: import('./cosign').CosignWalletRecord | null
   COSIGN_ENSURE_V1_AUTH: { ok: true }
-  COSIGN_V1_AUTH_CHALLENGE: { wallet: string; nonce: string; keyType: string; optionsJSON: unknown }
+  COSIGN_V1_AUTH_CHALLENGE: { wallet: string; nonce: string; keyType: string }
   COSIGN_V1_AUTH_SIGN_IN: { ok: true }
   COSIGN_CREATE_LOCAL_ACCOUNT: { account: StoredAccount; activeAccountId?: string }
   COSIGN_GET_PROPOSALS_BANNER_DISMISSED: { accountIds: string[] }

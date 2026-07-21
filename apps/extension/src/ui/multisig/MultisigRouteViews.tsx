@@ -57,9 +57,11 @@ import { CreateMultisigScreen } from '../screens/multisig/CreateMultisigScreen'
 import { MultisigProposalDetailScreen } from '../screens/multisig/MultisigProposalDetailScreen'
 import { MultisigProposalsScreen } from '../screens/multisig/MultisigProposalsScreen'
 import { MultisigReviewDeployScreen } from '../screens/multisig/MultisigReviewDeployScreen'
-import { MultisigSuccessScreen } from '../screens/multisig/MultisigSuccessScreen'
+import { MultisigDeployFailureScreen } from '../screens/multisig/MultisigDeployFailureScreen'
+import { MultisigDeploySuccessScreen } from '../screens/multisig/MultisigDeploySuccessScreen'
 import { MultisigThresholdScreen } from '../screens/multisig/MultisigThresholdScreen'
 import { MultisigWalletsScreen } from '../screens/multisig/MultisigWalletsScreen'
+import { LatchLoadingOverlay } from '../components/LatchLoadingOverlay'
 
 export type MultisigRoute =
   | 'createMultisig'
@@ -67,6 +69,7 @@ export type MultisigRoute =
   | 'multisigThreshold'
   | 'multisigReviewDeploy'
   | 'multisigSuccess'
+  | 'multisigDeployFailure'
   | 'joinMultisig'
   | 'multisigProposals'
   | 'multisigProposalDetail'
@@ -460,6 +463,7 @@ export function MultisigRouteViews({
       onSetRoute('multisigSuccess')
     } catch (e) {
       setDeployError(e instanceof Error ? e.message : String(e))
+      onSetRoute('multisigDeployFailure')
     } finally {
       setDeployBusy(false)
     }
@@ -480,6 +484,7 @@ export function MultisigRouteViews({
     return (
       <CreateMultisigScreen
         error={createDraftError}
+        onBack={() => onSetRoute('home')}
         onContinue={(walletName, purpose) => void handleCreateMultisigContinue(walletName, purpose)}
       />
     )
@@ -488,6 +493,7 @@ export function MultisigRouteViews({
   if (route === 'addMultisigOwners' && wizard) {
     return (
       <AddMultisigOwnersScreen
+        walletName={wizard.walletName}
         members={draftMembers}
         inviteUrl={inviteUrl}
         inviteToken={wizard.inviteToken}
@@ -548,15 +554,44 @@ export function MultisigRouteViews({
 
   if (route === 'multisigSuccess' && wizard) {
     return (
-      <MultisigSuccessScreen
-        walletName={wizard.walletName}
+      <MultisigDeploySuccessScreen
         smartAccountAddress={wizard.smartAccountAddress}
-        threshold={wizard.threshold}
-        memberCount={memberCountFromDraft({ members: draftMembers })}
-        inviteUrl={inviteUrl}
-        onGoHome={() => {
+        onCopyAddress={() => {
+          const addr = wizard.smartAccountAddress?.trim()
+          if (!addr) return
+          void navigator.clipboard.writeText(addr)
+        }}
+        onShareAddress={() => {
+          const addr = wizard.smartAccountAddress?.trim()
+          if (!addr) return
+          const share = (navigator as unknown as { share?: (data: { text: string }) => Promise<void> })
+            .share
+          if (share) {
+            void share({ text: addr }).catch(() => {
+              void navigator.clipboard.writeText(addr)
+            })
+          } else {
+            void navigator.clipboard.writeText(addr)
+          }
+        }}
+        onOpenReceiveQr={() => {
+          // Reuse the existing Receive QR flow; it uses the active account address.
+          setWizard(null)
+          onSetRoute('receive')
+        }}
+        onGoToWallet={() => {
           setWizard(null)
           onSetRoute('home')
+        }}
+      />
+    )
+  }
+
+  if (route === 'multisigDeployFailure' && wizard) {
+    return (
+      <MultisigDeployFailureScreen
+        onTryAgain={() => {
+          onSetRoute('multisigReviewDeploy')
         }}
       />
     )
@@ -630,104 +665,110 @@ export function MultisigRouteViews({
 
   if (route === 'multisigProposals') {
     return (
-      <MultisigProposalsScreen
-        proposals={proposals}
-        loading={proposalsLoading}
-        error={proposalsError}
-        pendingCount={pendingApprovalCount}
-        onBack={() => onSetRoute('home')}
-        onOpenProposal={(id) => {
-          void loadProposalDetail(id)
-          onSetRoute('multisigProposalDetail')
-        }}
-      />
+      <div className="relative flex h-full min-h-0 w-full flex-col">
+        <MultisigProposalsScreen
+          proposals={proposals}
+          loading={proposalsLoading}
+          error={proposalsError}
+          pendingCount={pendingApprovalCount}
+          onBack={() => onSetRoute('home')}
+          onOpenProposal={(id) => {
+            void loadProposalDetail(id)
+            onSetRoute('multisigProposalDetail')
+          }}
+        />
+        {proposalsLoading ? <LatchLoadingOverlay label="Loading..." /> : null}
+      </div>
     )
   }
 
   if (route === 'multisigProposalDetail') {
     return (
-      <MultisigProposalDetailScreen
-        proposal={activeProposal}
-        loading={proposalBusy && !activeProposal}
-        error={proposalActionError}
-        busy={proposalBusy}
-        needsMyApproval={
-          activeProposal && activeAccount
-            ? proposalNeedsMyApproval(activeProposal, activeAccount.multisigMemberId)
-            : false
-        }
-        approveLabel={proposalApprovalUi?.approveLabel}
-        approveBusyLabel={proposalApprovalUi?.busyLabel}
-        onBack={() => onSetRoute('multisigProposals')}
-        onApprove={() => {
-          if (!activeProposal || !activeAccount) return
-          setProposalBusy(true)
-          setProposalActionError(null)
-          void approveMultisigProposal({
-            proposal: activeProposal,
-            activeAccount,
-            accounts,
-            surface,
-          })
-            .then(setActiveProposal)
-            .catch((e) => {
-              const raw = e instanceof Error ? e.message : String(e)
-              setProposalActionError(formatMultisigProposalError(raw))
+      <div className="relative flex h-full min-h-0 w-full flex-col">
+        <MultisigProposalDetailScreen
+          proposal={activeProposal}
+          loading={proposalBusy && !activeProposal}
+          error={proposalActionError}
+          busy={proposalBusy}
+          needsMyApproval={
+            activeProposal && activeAccount
+              ? proposalNeedsMyApproval(activeProposal, activeAccount.multisigMemberId)
+              : false
+          }
+          approveLabel={proposalApprovalUi?.approveLabel}
+          approveBusyLabel={proposalApprovalUi?.busyLabel}
+          onBack={() => onSetRoute('multisigProposals')}
+          onApprove={() => {
+            if (!activeProposal || !activeAccount) return
+            setProposalBusy(true)
+            setProposalActionError(null)
+            void approveMultisigProposal({
+              proposal: activeProposal,
+              activeAccount,
+              accounts,
+              surface,
             })
-            .finally(() => {
-              setProposalBusy(false)
-              void loadProposals()
+              .then(setActiveProposal)
+              .catch((e) => {
+                const raw = e instanceof Error ? e.message : String(e)
+                setProposalActionError(formatMultisigProposalError(raw))
+              })
+              .finally(() => {
+                setProposalBusy(false)
+                void loadProposals()
+              })
+          }}
+          onExecute={() => {
+            if (!activeProposalId) return
+            setProposalBusy(true)
+            setProposalActionError(null)
+            void sendToBackground({
+              type: 'MULTISIG_EXECUTE_PROPOSAL',
+              payload: { proposalId: activeProposalId },
             })
-        }}
-        onExecute={() => {
-          if (!activeProposalId) return
-          setProposalBusy(true)
-          setProposalActionError(null)
-          void sendToBackground({
-            type: 'MULTISIG_EXECUTE_PROPOSAL',
-            payload: { proposalId: activeProposalId },
-          })
-            .then((res) => {
-              if (!res.ok) {
-                setProposalActionError(formatMultisigProposalError(friendlyError(res.error)))
-                return
-              }
-              return loadProposalDetail(activeProposalId)
+              .then((res) => {
+                if (!res.ok) {
+                  setProposalActionError(formatMultisigProposalError(friendlyError(res.error)))
+                  return
+                }
+                return loadProposalDetail(activeProposalId)
+              })
+              .catch((e) => {
+                const raw = e instanceof Error ? e.message : String(e)
+                setProposalActionError(formatMultisigProposalError(raw))
+              })
+              .finally(() => {
+                setProposalBusy(false)
+                void loadProposals()
+              })
+          }}
+          onRefresh={() => {
+            if (!activeProposalId) return
+            setProposalBusy(true)
+            setProposalActionError(null)
+            void sendToBackground<
+              { proposalId: string },
+              MultisigProposalDetail
+            >({
+              type: 'MULTISIG_REFRESH_PROPOSAL',
+              payload: { proposalId: activeProposalId },
             })
-            .catch((e) => {
-              const raw = e instanceof Error ? e.message : String(e)
-              setProposalActionError(formatMultisigProposalError(raw))
-            })
-            .finally(() => {
-              setProposalBusy(false)
-              void loadProposals()
-            })
-        }}
-        onRefresh={() => {
-          if (!activeProposalId) return
-          setProposalBusy(true)
-          setProposalActionError(null)
-          void sendToBackground<
-            { proposalId: string },
-            MultisigProposalDetail
-          >({
-            type: 'MULTISIG_REFRESH_PROPOSAL',
-            payload: { proposalId: activeProposalId },
-          })
-            .then((res) => {
-              if (!res.ok) {
-                setProposalActionError(formatMultisigProposalError(friendlyError(res.error)))
-                return
-              }
-              if (res.data) setActiveProposal(res.data)
-            })
-            .catch((e) => {
-              const raw = e instanceof Error ? e.message : String(e)
-              setProposalActionError(formatMultisigProposalError(raw))
-            })
-            .finally(() => setProposalBusy(false))
-        }}
-      />
+              .then((res) => {
+                if (!res.ok) {
+                  setProposalActionError(formatMultisigProposalError(friendlyError(res.error)))
+                  return
+                }
+                if (res.data) setActiveProposal(res.data)
+              })
+              .catch((e) => {
+                const raw = e instanceof Error ? e.message : String(e)
+                setProposalActionError(formatMultisigProposalError(raw))
+              })
+              .finally(() => setProposalBusy(false))
+          }}
+        />
+        {proposalBusy && !activeProposal ? <LatchLoadingOverlay label="Loading..." /> : null}
+      </div>
     )
   }
 
