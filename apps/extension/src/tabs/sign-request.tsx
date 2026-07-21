@@ -13,7 +13,11 @@ import type {
 import { parseSignRequestFromSearchParams } from '../background/externalSign/parseSignRequest'
 import { externalResultToCallback } from '../background/externalSign/callbackUrl'
 import { ExternalSignReviewScreen } from '../ui/screens/dapp/ExternalSignReviewScreen'
-import { extractTransactionHash, signAndSubmitBuiltTx } from '../ui/lib/signBuiltTx'
+import {
+  extractTransactionHash,
+  signAndSubmitBuiltTx,
+  signWithoutSubmitBuiltTx,
+} from '../ui/lib/signBuiltTx'
 import { friendlyError, sendToBackground } from '../ui/lib/backgroundClient'
 
 type Phase = 'loading' | 'review' | 'redirecting' | 'error'
@@ -107,14 +111,27 @@ export default function SignRequestTab() {
         return
       }
 
+      const { signedTxXdr, signedAuthEntry } = await signWithoutSubmitBuiltTx({
+        build: session.prepared as PrepareSignResponse,
+        activeAccount,
+        surface: 'popup',
+        onProgress: setProgressLabel,
+      })
       await sendToBackground({
         type: 'RESOLVE_PENDING_DAPP_REQUEST',
-        payload: { requestId: session.requestId, approved: true },
+        payload: {
+          requestId: session.requestId,
+          approved: true,
+          signedTxXdr,
+          signedAuthEntry,
+        },
       })
       redirectWithResult(
         session.signRequest.callback,
         {
           status: 'signed',
+          signedTxXdr,
+          signedAuthEntry,
           requestId: session.signRequest.requestId,
           network: session.signRequest.network,
         },

@@ -10,6 +10,12 @@ export interface SignTransactionRequest {
   xdr: string
   network: Network
   accountToSign: string
+  /**
+   * When false, the wallet signs but does not broadcast. The response returns
+   * `signedTxXdr` (and `signedAuthEntry`) so the dApp can submit itself.
+   * Defaults to true (wallet signs and submits, returning `txHash`).
+   */
+  submit?: boolean
 }
 
 export interface SignTransactionResponse {
@@ -373,6 +379,8 @@ export interface SubmitPhantomTxRequest {
   prefixedMessage: string
   publicKeyHex: string
   contextRuleId: number
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
 }
 
 export interface SubmitDelegatedTxRequest {
@@ -388,6 +396,8 @@ export interface SubmitDelegatedTxRequest {
   authEntriesXdr?: string[]
   smartAccountAuthEntryIndex?: number
   delegatedGAuthEntrySynthesized?: boolean
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
 }
 
 export interface SubmitWebauthnTxRequest {
@@ -399,12 +409,18 @@ export interface SubmitWebauthnTxRequest {
   authEntriesXdr?: string[]
   smartAccountAuthEntryIndex?: number
   delegatedGAuthEntrySynthesized?: boolean
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
 }
 
 export interface SubmitTxResponse {
   transactionHash?: string
   hash?: string
   status?: string
+  /** Present when the request used `submit: false`; a submit-ready signed tx envelope. */
+  signedTxXdr?: string
+  /** False when the backend signed but did not broadcast. */
+  submitted?: boolean
   // backend response is not specified; accept opaque
   [k: string]: unknown
 }

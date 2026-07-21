@@ -25,7 +25,7 @@ export function assertAllowedCallbackUrl(url: string): void {
 export function buildCallbackUrl(
   callback: string,
   result: SignCallbackResult,
-  opts?: { signedAuthEntry?: string; submit?: boolean }
+  opts?: { signedAuthEntry?: string; signedTxXdr?: string; submit?: boolean }
 ): string {
   assertAllowedCallbackUrl(callback)
   const url = new URL(callback)
@@ -37,9 +37,19 @@ export function buildCallbackUrl(
   if (result.message) url.searchParams.set('message', result.message)
 
   let out = url.toString()
-  if (opts?.submit === false && opts.signedAuthEntry) {
-    const fragment = `signedAuthEntry=${encodeURIComponent(opts.signedAuthEntry)}`
-    out = `${out}#${fragment}`
+  if (opts?.submit === false) {
+    // Return signature-only material in the URL fragment so it never hits
+    // server logs / referrers; the dApp reads it client-side and submits.
+    const parts: string[] = []
+    if (opts.signedAuthEntry) {
+      parts.push(`signedAuthEntry=${encodeURIComponent(opts.signedAuthEntry)}`)
+    }
+    if (opts.signedTxXdr) {
+      parts.push(`signedTxXdr=${encodeURIComponent(opts.signedTxXdr)}`)
+    }
+    if (parts.length > 0) {
+      out = `${out}#${parts.join('&')}`
+    }
   }
   return out
 }
@@ -59,7 +69,7 @@ export function externalResultToCallback(
       code: result.code,
       message: result.message,
     },
-    { signedAuthEntry: result.signedAuthEntry, submit }
+    { signedAuthEntry: result.signedAuthEntry, signedTxXdr: result.signedTxXdr, submit }
   )
 }
 

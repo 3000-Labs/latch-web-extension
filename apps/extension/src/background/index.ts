@@ -968,7 +968,12 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       case 'DAPP_SIGN_TRANSACTION': {
         const req = message.payload as {
           origin?: string
-          request: { xdr: string; network: 'testnet' | 'mainnet'; accountToSign: string }
+          request: {
+            xdr: string
+            network: 'testnet' | 'mainnet'
+            accountToSign: string
+            submit?: boolean
+          }
         }
         const origin = req.origin ?? 'unknown'
         const allowed = await getDappPermissions(origin)
@@ -986,7 +991,7 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
             smartAccountAddress: req.request.accountToSign,
             unsignedTxXdr: req.request.xdr,
             origin,
-            submit: true,
+            submit: req.request.submit !== false,
           },
           senderUrl: undefined,
           waitForDecision: waitForExternalSignDecision,

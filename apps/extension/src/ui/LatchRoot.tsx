@@ -100,7 +100,11 @@ import {
 } from './lib/migrationHomePrefs'
 import { GrantAccessScreen } from './screens/dapp/GrantAccessScreen'
 import { ExternalSignReviewScreen } from './screens/dapp/ExternalSignReviewScreen'
-import { extractTransactionHash, signAndSubmitBuiltTx } from './lib/signBuiltTx'
+import {
+  extractTransactionHash,
+  signAndSubmitBuiltTx,
+  signWithoutSubmitBuiltTx,
+} from './lib/signBuiltTx'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
@@ -1727,6 +1731,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                         setDappBusy(true)
                         setDappError(null)
                         try {
+                          if (req.signRequest?.submit === false) {
+                            const { signedTxXdr, signedAuthEntry } =
+                              await signWithoutSubmitBuiltTx({
+                                build: req.prepared!,
+                                activeAccount,
+                                surface,
+                                onProgress: setDappProgressLabel,
+                              })
+                            await resolvePendingDapp(req, true, {
+                              signedTxXdr,
+                              signedAuthEntry,
+                            })
+                            return
+                          }
                           const submitData = await signAndSubmitBuiltTx({
                             build: req.prepared!,
                             activeAccount,

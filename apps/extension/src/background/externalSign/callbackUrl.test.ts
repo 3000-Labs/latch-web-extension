@@ -36,6 +36,38 @@ describe('callbackUrl', () => {
     expect(url).toContain(encodeURIComponent('authB64'))
   })
 
+  it('appends both signedAuthEntry and signedTxXdr fragments when submit=false', () => {
+    const url = externalResultToCallback(
+      'https://example.com/cb',
+      {
+        status: 'signed',
+        signedAuthEntry: 'authB64',
+        signedTxXdr: 'AAAA/tx==',
+        network: 'testnet',
+      },
+      false
+    )
+    const [, fragment] = url.split('#')
+    expect(fragment).toContain(`signedAuthEntry=${encodeURIComponent('authB64')}`)
+    expect(fragment).toContain(`signedTxXdr=${encodeURIComponent('AAAA/tx==')}`)
+    expect(fragment).toContain('&')
+  })
+
+  it('omits fragment for submit=true even with signedTxXdr present', () => {
+    const url = externalResultToCallback(
+      'https://example.com/cb',
+      {
+        status: 'signed',
+        signedTxXdr: 'AAAA/tx==',
+        txHash: 'hash123',
+        network: 'testnet',
+      },
+      true
+    )
+    expect(url).not.toContain('#')
+    expect(url).toContain('txHash=hash123')
+  })
+
   it('builds rejected callback', () => {
     const url = buildCallbackUrl('http://localhost:3000/cb', {
       status: 'rejected',

@@ -44,6 +44,12 @@ export function extractTransactionHash(data: SubmitTxResponse | null | undefined
   return undefined
 }
 
+export function extractSignedTxXdr(data: SubmitTxResponse | null | undefined): string | undefined {
+  if (!data) return undefined
+  if (typeof data.signedTxXdr === 'string') return data.signedTxXdr
+  return undefined
+}
+
 async function runPasskeyAuth(
   surface: 'popup' | 'sidepanel',
   optionsJSON: unknown
@@ -66,11 +72,18 @@ export async function signAndSubmitBuiltTx(args: {
   signingAccount?: StoredAccount
   surface?: 'popup' | 'sidepanel'
   onProgress?: (label: string) => void
+  /**
+   * When false, the backend signs + assembles but does not broadcast; the
+   * response carries `signedTxXdr` so the caller can submit via RPC itself.
+   * Defaults to true.
+   */
+  submit?: boolean
 }): Promise<SubmitTxResponse> {
   const { build: rawBuild, activeAccount } = args
   const build = normalizeDelegatedBuildFields(rawBuild)
   const surface = args.surface ?? 'popup'
   const progress = args.onProgress ?? (() => {})
+  const submit = args.submit
   const passkeySource =
     activeAccount.mode === 'multisig' ? (args.signingAccount ?? activeAccount) : activeAccount
 
@@ -103,7 +116,7 @@ export async function signAndSubmitBuiltTx(args: {
         ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
         : undefined
       if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
-      progress('Submitting…')
+      progress(submit === false ? 'Preparing…' : 'Submitting…')
       const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
         type: 'SUBMIT_TX_DELEGATED',
         payload: {
@@ -113,6 +126,7 @@ export async function signAndSubmitBuiltTx(args: {
           signedAuthEntryBase64,
           signerAddress,
           contextRuleId: contextRuleIdForSubmit(build),
+          submit,
           ...delegatedSubmitFields(build, delegated.entryIndex),
         },
       })
@@ -142,7 +156,7 @@ export async function signAndSubmitBuiltTx(args: {
       },
     })
     if (!signRes.ok) throw new Error(friendlyError(signRes.error))
-    progress('Submitting…')
+    progress(submit === false ? 'Preparing…' : 'Submitting…')
     const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
       type: 'SUBMIT_TX_DELEGATED',
       payload: {
@@ -152,6 +166,7 @@ export async function signAndSubmitBuiltTx(args: {
         signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
         signerAddress: signRes.data!.signerAddress,
         contextRuleId: contextRuleIdForSubmit(build),
+        submit,
         ...delegatedSubmitFields(build, delegated.entryIndex),
       },
     })
@@ -170,7 +185,7 @@ export async function signAndSubmitBuiltTx(args: {
     const sigBytes: Uint8Array =
       signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
     if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
-    progress('Submitting…')
+    progress(submit === false ? 'Preparing…' : 'Submitting…')
     const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
       type: 'SUBMIT_TX_PHANTOM',
       payload: {
@@ -180,6 +195,7 @@ export async function signAndSubmitBuiltTx(args: {
         prefixedMessage,
         publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
         contextRuleId: contextRuleIdForSubmit(build),
+        submit,
       },
     })
     if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
@@ -213,7 +229,7 @@ export async function signAndSubmitBuiltTx(args: {
   const assertion = await runPasskeyAuth(surface, optionsJSON)
   assertPasskeyAssertionMatchesAuthDigest(assertion, build.authDigestHex)
   const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
-  progress('Submitting…')
+  progress(submit === false ? 'Preparing…' : 'Submitting…')
   const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
     type: 'SUBMIT_TX_WEBAUTHN',
     payload: {
@@ -222,6 +238,7 @@ export async function signAndSubmitBuiltTx(args: {
       sigDataXdr,
       keyDataHex: passkeySource.passkeyKeyDataHex,
       contextRuleId: contextRuleIdForSubmit(build),
+      submit,
       ...multiAuthSubmitFields(build),
     },
   })
@@ -235,4 +252,19 @@ export async function signAndSubmitBuiltTx(args: {
     )
   }
   return submitRes.data ?? {}
+}
+
+/**
+ * Sign a built transaction without broadcasting it. Runs the same signer flow
+ * as {@link signAndSubmitBuiltTx} but asks the backend for a submit-ready
+ * `signedTxXdr` (submit=false), so the caller (e.g. a dApp) can submit via RPC.
+ */
+export async function signWithoutSubmitBuiltTx(
+  args: Omit<Parameters<typeof signAndSubmitBuiltTx>[0], 'submit'>
+): Promise<{ signedTxXdr?: string; signedAuthEntry?: string }> {
+  const res = await signAndSubmitBuiltTx({ ...args, submit: false })
+  const signedTxXdr = extractSignedTxXdr(res)
+  const signedAuthEntry =
+    typeof res.signedAuthEntry === 'string' ? res.signedAuthEntry : undefined
+  return { signedTxXdr, signedAuthEntry }
 }
