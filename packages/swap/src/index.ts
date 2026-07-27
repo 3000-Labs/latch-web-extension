@@ -16,3 +16,7 @@ export {
 } from './providers/aquariusRegistry'
 export { mockSwapProvider } from './providers/mock'
 export { soroswapProvider } from './providers/soroswap'
+export {
+  normalizePoolHashForBuild,
+  normalizeSoroswapQuoteForBuild,
+} from './providers/soroswapQuote'

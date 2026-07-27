@@ -22,11 +22,7 @@ import {
 } from '@latch/swap'
 
 import { BackendError, buildSwapTx, prepareSign } from '../backend'
-import {
-  getStellarNetworkFromEnv,
-  networkPassphraseFromEnv,
-  sorobanRpcUrlFromEnv,
-} from '../migration/env'
+import { getActiveNetwork, networkPassphraseFor, sorobanRpcUrlFor } from '../network/config'
 import { getAccounts } from '../storage'
 import {
   findSwapToken,
@@ -42,7 +38,10 @@ function accountModeToSignerType(account: StoredAccount): SendSignerType {
   return 'freighter'
 }
 
-function aquariusBuildParams(payload: SwapQuotePayload): BuildSwapTxRequest | null {
+function aquariusBuildParams(
+  payload: SwapQuotePayload,
+  network: 'testnet' | 'mainnet'
+): BuildSwapTxRequest | null {
   const bp = payload.buildPayload as {
     kind?: string
     swapChainXdr?: string
@@ -53,7 +52,7 @@ function aquariusBuildParams(payload: SwapQuotePayload): BuildSwapTxRequest | nu
     return null
   }
   return {
-    network: getStellarNetworkFromEnv(),
+    network,
     smartAccountAddress: '',
     signerType: 'passkey',
     routerContractId: bp.routerContractId,
@@ -110,7 +109,7 @@ async function getActiveAccount(accountId: string): Promise<StoredAccount> {
 export async function runGetSwapTokenCatalog(
   req: GetSwapTokenCatalogRequest
 ): Promise<GetSwapTokenCatalogResponse> {
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
   const [payTokens, receiveTokens] = await Promise.all([
     loadPayTokens(req.accountId),
     loadReceiveTokens(req.accountId),
@@ -124,7 +123,7 @@ export async function runGetSwapTokenCatalog(
 
 export async function runGetSwapQuote(req: GetSwapQuoteRequest): Promise<GetSwapQuoteResponse> {
   const account = await getActiveAccount(req.accountId)
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
   const [payTokens, receiveTokens] = await Promise.all([
     loadPayTokens(req.accountId),
     loadReceiveTokens(req.accountId),
@@ -174,11 +173,11 @@ export async function runPrepareSwapTx(
   req: PrepareSwapTxRequest
 ): Promise<PrepareSwapTxResponse> {
   const account = await getActiveAccount(req.accountId)
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
   const { quote: payload } = req
   const signerType = accountModeToSignerType(account)
 
-  const buildBody = aquariusBuildParams(payload)
+  const buildBody = aquariusBuildParams(payload, network)
   if (buildBody) {
     return await buildSwapTx({
       ...buildBody,
@@ -212,15 +211,27 @@ export async function runPrepareSwapTx(
     recipient: account.smartAccountAddress!,
   }
 
-  const transactionSourceG = resolveSwapTransactionSourceG({ gAddress: account.gAddress })
+  // Soroswap /quote/build sources the transaction; do not require a local fee-payer G
+  // before calling build (passkey mainnet accounts often have no linked G).
+  const buildPayloadKind = (payload.buildPayload as { kind?: string } | undefined)?.kind
+  const linkedG = account.gAddress?.trim()
+  const transactionSourceG =
+    buildPayloadKind === 'soroswap' || provider.id === 'soroswap'
+      ? linkedG?.startsWith('G')
+        ? linkedG
+        : ''
+      : resolveSwapTransactionSourceG({
+          gAddress: account.gAddress,
+          network,
+        })
 
   const unsignedTxXdr = await provider.buildUnsignedTx(
     quoteRequest,
     swapQuote,
     account.smartAccountAddress!,
     transactionSourceG,
-    sorobanRpcUrlFromEnv(),
-    networkPassphraseFromEnv()
+    sorobanRpcUrlFor(network),
+    networkPassphraseFor(network)
   )
 
   const prepared = await prepareSign({

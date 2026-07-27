@@ -109,3 +109,18 @@ export enum LATCH_EXTERNAL_SERVICE_TYPES {
   REQUEST_NETWORK = 'REQUEST_NETWORK',
   SUBMIT_TRANSACTION = 'SUBMIT_TRANSACTION',
 }
+
+/** Payload for window.latch on('accountChanged' | 'networkChanged'). */
+export type LatchProviderEventName = 'accountChanged' | 'networkChanged'
+
+export interface LatchAccountChangedPayload {
+  publicKey: string
+  network: Network
+}
+
+/** Background → content-script → page event bridge message. */
+export interface LatchProviderEventMessage {
+  type: 'LATCH_PROVIDER_EVENT'
+  event: LatchProviderEventName
+  data: LatchAccountChangedPayload
+}

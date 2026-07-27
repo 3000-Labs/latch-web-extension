@@ -141,6 +141,8 @@ export interface BuildSendTxRequest {
   assetId?: string
   contractId?: string
   signerG?: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildSendAssetInfo {
@@ -191,6 +193,8 @@ export interface SetupSendRulesRequest {
   /** Optional WebAuthn credential id (base64url). */
   credentialId?: string
   gAddress?: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SetupSendRulesResponse extends BuildSendTxResponse {
@@ -260,6 +264,8 @@ export interface SetActiveAccountRequest {
 
 export interface CreateOrConnectFreighterRequest {
   gAddress: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface CreateOrConnectFreighterResponse {
@@ -307,6 +313,8 @@ export interface SignDelegatedGAuthEntryResponse {
 
 export interface CreateOrConnectPhantomRequest {
   publicKeyHex: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface CreateOrConnectPhantomResponse {
@@ -318,6 +326,13 @@ export interface CreateOrConnectPhantomResponse {
 export interface CreateOrConnectPasskeyRequest {
   keyDataHex: string
   credentialId: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
+  /**
+   * Extension-only hint: when set, skip deploy POST if this C-address already has a
+   * contract instance on the active network. Never forwarded to the Latch API body.
+   */
+  smartAccountAddress?: string
 }
 
 export interface CreateOrConnectPasskeyResponse {
@@ -340,6 +355,8 @@ export interface BuildTxRequest {
   smartAccountAddress: string
   signerG?: string
   transfer?: BuildTransferIntent
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildTxResponse {
@@ -359,6 +376,8 @@ export interface BuildDelegatedTxRequest {
   smartAccountAddress: string
   gAddress: string
   transfer?: BuildTransferIntent
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildDelegatedTxResponse {
@@ -381,6 +400,8 @@ export interface SubmitPhantomTxRequest {
   contextRuleId: number
   /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
   submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitDelegatedTxRequest {
@@ -398,6 +419,8 @@ export interface SubmitDelegatedTxRequest {
   delegatedGAuthEntrySynthesized?: boolean
   /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
   submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitWebauthnTxRequest {
@@ -411,6 +434,8 @@ export interface SubmitWebauthnTxRequest {
   delegatedGAuthEntrySynthesized?: boolean
   /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
   submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitTxResponse {
@@ -431,6 +456,8 @@ export interface BackendWebauthnBeginResponse {
 
 export interface BackendWebauthnRegistrationFinishRequest {
   response: unknown
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BackendWebauthnRegistrationFinishResponse {
@@ -444,6 +471,8 @@ export interface BackendWebauthnRegistrationFinishResponse {
 
 export interface BackendWebauthnAuthenticationFinishRequest {
   response: unknown
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BackendSessionAccount {
@@ -490,6 +519,9 @@ export interface ListPendingDappRequestsResponse {
 export interface ResolvePendingDappRequest {
   requestId: string
   approved: boolean
+  /** When approved is false and set, dapp receives status "error" instead of "rejected". */
+  errorMessage?: string
+  errorCode?: string
   signedXdr?: string
   txHash?: string
   signedAuthEntry?: string
@@ -681,6 +713,7 @@ export type MessageType =
   | 'PREPARE_EXTERNAL_SIGN'
   | 'RUN_EXTERNAL_SIGN_FLOW'
   | 'GET_ACTIVE_NETWORK'
+  | 'SET_ACTIVE_NETWORK'
   | 'PING_EXTENSION'
   | 'GET_SWAP_TOKEN_CATALOG'
   | 'GET_SWAP_QUOTE'
@@ -817,6 +850,7 @@ export type BackgroundRequestPayloadByType = {
   PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowRequest
   RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').RunExternalSignFlowRequest
   GET_ACTIVE_NETWORK: undefined
+  SET_ACTIVE_NETWORK: { network: Network }
   PING_EXTENSION: undefined
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogRequest
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteRequest
@@ -963,7 +997,8 @@ export type BackgroundResponseDataByType = {
   OPEN_ONBOARDING_TAB: undefined
   PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowPreparedResponse
   RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').ExternalSignResult
-  GET_ACTIVE_NETWORK: { network: Network }
+  GET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
+  SET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
   PING_EXTENSION: { connected: true }
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogResponse
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteResponse

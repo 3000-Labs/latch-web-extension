@@ -16,6 +16,9 @@ import { assertAllowedCallbackUrl } from './callbackUrl'
 
 export type ExternalSignDecision = {
   approved: boolean
+  /** When approved is false and set, maps to ExternalSignResult status "error". */
+  errorMessage?: string
+  errorCode?: string
   txHash?: string
   signedAuthEntry?: string
   signedTxXdr?: string
@@ -159,6 +162,15 @@ export function decisionToExternalSignResult(
   decision: ExternalSignDecision
 ): ExternalSignResult {
   if (!decision.approved) {
+    if (decision.errorMessage) {
+      return {
+        status: 'error',
+        code: decision.errorCode ?? 'error',
+        message: decision.errorMessage,
+        requestId: signRequest.requestId,
+        network: signRequest.network,
+      }
+    }
     return {
       status: 'rejected',
       code: 'user_rejected',
@@ -242,6 +254,8 @@ export async function runExternalSignFlow(args: {
       source: args.source,
     })
 
+    // Register waiter before durable enqueue so LIST cannot treat this as an orphan.
+    const decisionPromise = args.waitForDecision(pending.id)
     await args.enqueueReview(pending)
 
     if (args.source === 'sign-request-tab') {
@@ -257,7 +271,7 @@ export async function runExternalSignFlow(args: {
       await args.openPopup()
     }
 
-    const decision = await args.waitForDecision(pending.id)
+    const decision = await decisionPromise
     return decisionToExternalSignResult(session.signRequest, decision)
   } catch (err) {
     return backendErrorToExternalSignResult(err, signRequest)

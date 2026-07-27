@@ -34,6 +34,7 @@ export function ExternalSignReviewScreen({
 }) {
   const [expandedOp, setExpandedOp] = useState<number | null>(null)
   const hostname = hostnameFromOrigin(origin)
+  const operations = prepared.operations ?? []
   const feeLine = [prepared.feeLabel ?? 'Fee', prepared.estimatedFeeXlm ? `${prepared.estimatedFeeXlm} XLM` : null]
     .filter(Boolean)
     .join(' · ')
@@ -77,29 +78,33 @@ export function ExternalSignReviewScreen({
 
         <div className="rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
           <div className="text-xs font-bold text-muted">Operations</div>
-          <ul className="mt-2 space-y-2">
-            {prepared.operations.map((op, idx) => (
-              <li key={`${op.type}-${idx}`} className="rounded-xl border border-border/60 p-3">
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => setExpandedOp(expandedOp === idx ? null : idx)}
-                >
-                  <div className="text-sm font-bold">{op.summary}</div>
-                  {op.details && expandedOp === idx ? (
-                    <dl className="mt-2 space-y-1 text-xs text-muted">
-                      {Object.entries(op.details).map(([k, v]) => (
-                        <div key={k} className="flex justify-between gap-2">
-                          <dt className="font-semibold">{k}</dt>
-                          <dd className="break-all text-right font-mono">{v}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                </button>
-              </li>
-            ))}
-          </ul>
+          {operations.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">No operation details were provided for this request.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {operations.map((op, idx) => (
+                <li key={`${op.type}-${idx}`} className="rounded-xl border border-border/60 p-3">
+                  <button
+                    type="button"
+                    className="w-full text-left"
+                    onClick={() => setExpandedOp(expandedOp === idx ? null : idx)}
+                  >
+                    <div className="text-sm font-bold">{op.summary}</div>
+                    {op.details && expandedOp === idx ? (
+                      <dl className="mt-2 space-y-1 text-xs text-muted">
+                        {Object.entries(op.details).map(([k, v]) => (
+                          <div key={k} className="flex justify-between gap-2">
+                            <dt className="font-semibold">{k}</dt>
+                            <dd className="break-all text-right font-mono">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 

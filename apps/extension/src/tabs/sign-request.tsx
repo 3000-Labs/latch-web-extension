@@ -19,6 +19,7 @@ import {
   signWithoutSubmitBuiltTx,
 } from '../ui/lib/signBuiltTx'
 import { friendlyError, sendToBackground } from '../ui/lib/backgroundClient'
+import { debugAgentLog } from '../ui/lib/debugAgentLog'
 
 type Phase = 'loading' | 'review' | 'redirecting' | 'error'
 
@@ -70,6 +71,19 @@ export default function SignRequestTab() {
     })()
   }, [])
 
+  useEffect(() => {
+    function dismissPendingOnClose() {
+      const requestId = session?.requestId
+      if (!requestId || phase !== 'review') return
+      void chrome.runtime.sendMessage({
+        type: 'RESOLVE_PENDING_DAPP_REQUEST',
+        payload: { requestId, approved: false },
+      })
+    }
+    window.addEventListener('pagehide', dismissPendingOnClose)
+    return () => window.removeEventListener('pagehide', dismissPendingOnClose)
+  }, [session?.requestId, phase])
+
   function redirectWithResult(
     callback: string,
     result: ExternalSignResult,
@@ -85,6 +99,21 @@ export default function SignRequestTab() {
     setBusy(true)
     setError(null)
     try {
+      // #region agent log
+      debugAgentLog({
+        hypothesisId: 'H3',
+        location: 'sign-request.tsx:handleConfirm',
+        message: 'sign-request tab confirm',
+        data: {
+          accountId: activeAccount.id,
+          accountMode: activeAccount.mode,
+          activeSmartSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
+          reqSmartSuffix: (session.signRequest.smartAccountAddress ?? '').slice(-8),
+          passkeyCredSuffix: (activeAccount.passkeyCredentialId ?? '').slice(-12),
+          hasPasskeyCred: Boolean(activeAccount.passkeyCredentialId?.trim()),
+        },
+      })
+      // #endregion
       const submit = session.signRequest.submit !== false
       if (submit) {
         const submitData = await signAndSubmitBuiltTx({
@@ -138,9 +167,37 @@ export default function SignRequestTab() {
         submit
       )
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const message = e instanceof Error ? e.message : String(e)
       setBusy(false)
       setProgressLabel(null)
+      try {
+        await sendToBackground({
+          type: 'RESOLVE_PENDING_DAPP_REQUEST',
+          payload: {
+            requestId: session.requestId,
+            approved: false,
+            errorMessage: message,
+            errorCode: 'sign_failed',
+          },
+        })
+      } catch {
+        // Best-effort clear; still surface the original failure.
+      }
+      if (session.signRequest.callback) {
+        redirectWithResult(
+          session.signRequest.callback,
+          {
+            status: 'error',
+            code: 'sign_failed',
+            message,
+            requestId: session.signRequest.requestId,
+            network: session.signRequest.network,
+          },
+          session.signRequest.submit
+        )
+        return
+      }
+      setError(message)
     }
   }
 

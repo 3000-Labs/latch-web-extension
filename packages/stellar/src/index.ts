@@ -40,6 +40,7 @@ export type { CuratedAsset, StellarNetwork } from './curatedAssets'
 export { mergePortfolioProbes, MAX_PORTFOLIO_PROBES } from './portfolioProbes'
 export { humanAmountStringToRawUnits } from './amountRaw'
 export { fetchSacBalanceRaw, formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
+export { isContractInstanceDeployed } from './contractDeployed'
 export {
   buildSmartAccountPortfolioProbes,
   fetchHorizonAccountJson,

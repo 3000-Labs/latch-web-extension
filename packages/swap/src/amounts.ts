@@ -1,6 +1,6 @@
 /** Convert human-readable decimal amount to smallest-unit integer string. */
 export function humanToRaw(amount: string, decimals: number): string {
-  const cleaned = amount.replace(/,/g, '').trim()
+  const cleaned = String(amount).replace(/,/g, '').trim()
   if (!/^\d*\.?\d+$/.test(cleaned) || cleaned === '' || cleaned === '.') {
     throw new Error('Invalid amount')
   }
@@ -13,7 +13,7 @@ export function humanToRaw(amount: string, decimals: number): string {
 
 /** Convert smallest-unit integer string to human-readable decimal (no trailing zeros). */
 export function rawToHuman(raw: string, decimals: number): string {
-  const n = raw.replace(/^0+/, '') || '0'
+  const n = String(raw).replace(/^0+/, '') || '0'
   if (decimals === 0) return n
   const padded = n.padStart(decimals + 1, '0')
   const whole = padded.slice(0, -decimals) || '0'
@@ -27,7 +27,7 @@ export function rawToNumber(raw: string, decimals: number): number {
 
 /** Apply slippage tolerance: floor(amountOut * (1 - slippageBps/10000)). */
 export function applySlippageMin(amountOutRaw: string, slippageBps: number): string {
-  const amount = BigInt(amountOutRaw)
+  const amount = BigInt(String(amountOutRaw))
   const numerator = BigInt(10_000 - Math.min(Math.max(slippageBps, 0), 9_999))
   const min = (amount * numerator) / 10_000n
   return min.toString()

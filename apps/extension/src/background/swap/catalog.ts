@@ -14,9 +14,10 @@ import {
   type TokenListItem,
 } from '../assetTokenLists'
 import {
+  getActiveNetwork,
   getStellarNetworkFromEnv,
-  networkPassphraseFromEnv,
-} from '../migration/env'
+  networkPassphraseFor,
+} from '../network/config'
 import { runGetSmartAccountBalances } from '../smartAccountBalances'
 import { loadSwapProviderRegistry } from './providerRegistry'
 
@@ -414,8 +415,8 @@ export async function loadPayTokens(accountId: string): Promise<SwapTokenRow[]> 
 }
 
 export async function loadReceiveTokens(accountId: string): Promise<SwapTokenRow[]> {
-  const network = getStellarNetworkFromEnv()
-  const passphrase = networkPassphraseFromEnv()
+  const network = await getActiveNetwork()
+  const passphrase = networkPassphraseFor(network)
   const [balances, listItems, registry] = await Promise.all([
     runGetSmartAccountBalances(accountId),
     fetchCombinedTokenLists(network),

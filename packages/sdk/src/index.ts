@@ -11,6 +11,13 @@
 
 import type { Network, SignTransactionRequest, SignTransactionResponse } from '@latch/types'
 
+export type LatchAccountChangedPayload = {
+  publicKey: string
+  network: Network
+}
+
+export type LatchProviderEventName = 'accountChanged' | 'networkChanged'
+
 export interface LatchSDK {
   /** Returns true if the Latch extension is installed and accessible */
   isConnected(): Promise<boolean>
@@ -23,6 +30,17 @@ export interface LatchSDK {
 
   /** Returns the active network */
   getNetwork(): Promise<Network>
+
+  /** Subscribe to active account / network changes */
+  on?(
+    event: LatchProviderEventName,
+    handler: (payload: LatchAccountChangedPayload) => void
+  ): void
+
+  off?(
+    event: LatchProviderEventName,
+    handler: (payload: LatchAccountChangedPayload) => void
+  ): void
 }
 
 declare global {
@@ -32,6 +50,14 @@ declare global {
       getPublicKey(): Promise<string>
       signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
       getNetwork(): Promise<Network>
+      on?(
+        event: LatchProviderEventName,
+        handler: (payload: LatchAccountChangedPayload) => void
+      ): void
+      off?(
+        event: LatchProviderEventName,
+        handler: (payload: LatchAccountChangedPayload) => void
+      ): void
     }
   }
 }
@@ -56,6 +82,12 @@ export function getLatchSDK(): LatchSDK {
     },
     async getNetwork() {
       return await requireLatch().getNetwork()
+    },
+    on(event, handler) {
+      requireLatch().on?.(event, handler)
+    },
+    off(event, handler) {
+      requireLatch().off?.(event, handler)
     },
   }
 }

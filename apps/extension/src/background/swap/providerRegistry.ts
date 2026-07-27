@@ -7,7 +7,7 @@ import {
 } from '@latch/swap'
 
 import { fetchCombinedTokenLists, type TokenListItem } from '../assetTokenLists'
-import { getStellarNetworkFromEnv, networkPassphraseFromEnv } from '../migration/env'
+import { getActiveNetwork, networkPassphraseFor } from '../network/config'
 
 const REGISTRY_TTL_MS = 5 * 60_000
 
@@ -16,7 +16,8 @@ let memoryCache: { network: SwapNetwork; at: number; registry: SwapProviderToken
 let inflight: Promise<SwapProviderTokenRegistry> | null = null
 
 function buildMainnetRegistry(items: TokenListItem[]): SwapProviderTokenRegistry {
-  const passphrase = networkPassphraseFromEnv()
+  // Mainnet passphrase is fixed; network switch only changes which registry we load.
+  const passphrase = networkPassphraseFor('mainnet')
   const withContract = items.filter(
     (item) => item.contract?.trim() || (item.issuer && item.code.toUpperCase() !== 'XLM')
   )
@@ -26,7 +27,7 @@ function buildMainnetRegistry(items: TokenListItem[]): SwapProviderTokenRegistry
 export async function loadSwapProviderRegistry(options?: {
   forceRefresh?: boolean
 }): Promise<SwapProviderTokenRegistry> {
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
 
   if (
     !options?.forceRefresh &&

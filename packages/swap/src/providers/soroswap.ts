@@ -1,10 +1,11 @@
-import { SOROSWAP_API_BASE } from '../constants'
+import { SOROSWAP_API_BASE, SOROSWAP_CONFIG } from '../constants'
 import { applySlippageMin, QUOTE_TTL_MS } from '../amounts'
 import type { SoroswapBuildPayload, SwapProvider, SwapQuote, SwapQuoteRequest } from '../types'
+import { normalizeSoroswapQuoteForBuild } from './soroswapQuote'
 
 type SoroswapQuoteResponse = {
-  amountIn?: string
-  amountOut?: string
+  amountIn?: string | number
+  amountOut?: string | number
   assetIn?: string
   assetOut?: string
   tradeType?: string
@@ -48,13 +49,17 @@ async function soroswapPost<T>(
 }
 
 function parseSoroswapQuote(data: SoroswapQuoteResponse, req: SwapQuoteRequest): SwapQuote {
-  const amountOutRaw = data.amountOut
-  if (!amountOutRaw) throw new Error('No swap route found for this pair')
+  // API may JSON-encode amounts as numbers; keep raw units as strings for UI helpers.
+  const amountOutRaw = data.amountOut != null ? String(data.amountOut) : ''
+  if (!amountOutRaw) {
+    throw new Error('No swap route found for this pair')
+  }
 
   const amountOutMinRaw = applySlippageMin(amountOutRaw, req.slippageBps)
   const buildPayload: SoroswapBuildPayload = {
     kind: 'soroswap',
     quote: data as Record<string, unknown>,
+    routerContractId: SOROSWAP_CONFIG[req.network].routerContractId,
   }
 
   return {
@@ -79,6 +84,8 @@ export const soroswapProvider: SwapProvider = {
       amount: req.amountInRaw,
       tradeType: 'EXACT_IN',
       protocols: ['soroswap', 'phoenix', 'aqua'],
+      // API default is 50; send explicitly so otherAmountThreshold matches UI slippage.
+      slippageBps: req.slippageBps,
     })
     return parseSoroswapQuote(data, req)
   },
@@ -86,8 +93,10 @@ export const soroswapProvider: SwapProvider = {
     if (quote.buildPayload.kind !== 'soroswap') {
       throw new Error('Invalid build payload for Soroswap provider')
     }
+    // Quote returns aqua indexes as hex; build expects Base64 BytesN<32>.
+    const buildQuote = normalizeSoroswapQuoteForBuild(quote.buildPayload.quote)
     const data = await soroswapPost<SoroswapBuildResponse>('/quote/build', req.network, {
-      quote: quote.buildPayload.quote,
+      quote: buildQuote,
       from: smartAccountAddress,
       to: smartAccountAddress,
     })

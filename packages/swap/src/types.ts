@@ -30,6 +30,8 @@ export type AquariusBuildPayload = {
 export type SoroswapBuildPayload = {
   kind: 'soroswap'
   quote: Record<string, unknown>
+  /** Aggregator C-address — used for setup-swap-rules context targeting. */
+  routerContractId: string
 }
 
 export type SwapBuildPayload = AquariusBuildPayload | SoroswapBuildPayload

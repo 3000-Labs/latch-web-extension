@@ -24,6 +24,8 @@ import { predictMultisigAccountFromSigners } from '../api/multisigAccounts'
 import { prepareSign, submitTxWebauthn } from '../api/transactions'
 import { latchFetch } from '../api/client'
 import { latchExtensionJsonBody } from '../api/webauthn'
+import { withActiveNetwork } from '../api/withActiveNetwork'
+import { getActiveNetwork } from '../network/config'
 import { deriveQueueIndex } from './crypto'
 import { v1AuthWalletForLinkedAccount } from './v1AuthWallet'
 
@@ -301,8 +303,7 @@ export async function tryHandleCosignMessage(
       const signerType =
         linked.mode === 'passkey' ? 'passkey' : linked.mode === 'phantom' ? 'phantom' : 'freighter'
       const data = await prepareSign({
-        network:
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet',
+        network: await getActiveNetwork(),
         smartAccountAddress: req.smartAccountAddress,
         unsignedTxXdr: req.unsignedTxXdr,
         signerType,
@@ -324,13 +325,15 @@ export async function tryHandleCosignMessage(
           '/api/transaction/attach-auth-webauthn',
           {
             method: 'POST',
-            body: latchExtensionJsonBody({
-              unsignedTxXdr: req.unsignedTxXdr,
-              authEntryXdr: req.authEntryXdr,
-              sigDataXdrHex: req.sigDataXdrHex,
-              keyDataHex: req.keyDataHex,
-              contextRuleId: req.contextRuleId,
-            }),
+            body: latchExtensionJsonBody(
+              await withActiveNetwork({
+                unsignedTxXdr: req.unsignedTxXdr,
+                authEntryXdr: req.authEntryXdr,
+                sigDataXdrHex: req.sigDataXdrHex,
+                keyDataHex: req.keyDataHex,
+                contextRuleId: req.contextRuleId,
+              })
+            ),
           }
         )
         const signed =

@@ -20,11 +20,19 @@ describe('rawToHuman', () => {
     expect(rawToHuman('10000000', 7)).toBe('1')
     expect(rawToHuman('1500000', 7)).toBe('0.15')
   })
+
+  it('coerces numeric raw amounts from JSON APIs', () => {
+    expect(rawToHuman(10000000 as unknown as string, 7)).toBe('1')
+  })
 })
 
 describe('rawToNumber', () => {
   it('parses raw to float', () => {
     expect(rawToNumber('10000000', 7)).toBe(1)
+  })
+
+  it('coerces numeric raw amounts', () => {
+    expect(rawToNumber(5000000 as unknown as string, 7)).toBe(0.5)
   })
 })
 

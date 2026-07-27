@@ -1,4 +1,4 @@
-import type { ExternalSignResult, Network, SignCallbackResult } from '@latch/types'
+import type { ExternalSignResult, SignCallbackResult } from '@latch/types'
 
 const LOCALHOST_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i
 
@@ -73,6 +73,4 @@ export function externalResultToCallback(
   )
 }
 
-export function getActiveNetworkFromEnv(): Network {
-  return process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
-}
+export { getActiveNetworkFromEnv } from '../network/config'

@@ -1,4 +1,4 @@
-import { Asset } from '@stellar/stellar-sdk'
+import { Asset, StrKey } from '@stellar/stellar-sdk'
 
 export type SwapProviderTokenEntry = {
   contractId: string
@@ -6,6 +6,24 @@ export type SwapProviderTokenEntry = {
   issuer?: string
   assetId: string
   label: string
+}
+
+const HEX_CONTRACT_ID_RE = /^[0-9a-fA-F]{64}$/
+
+/**
+ * Token lists (e.g. Lobstr curated) sometimes ship SAC ids as raw 32-byte hex.
+ * Soroswap and Soroban APIs expect StrKey contract addresses (C...).
+ */
+export function normalizeStellarContractId(contractId: string): string | null {
+  const trimmed = contractId.trim()
+  if (!trimmed) return null
+  if (StrKey.isValidContract(trimmed)) return trimmed
+  if (!HEX_CONTRACT_ID_RE.test(trimmed)) return null
+  try {
+    return StrKey.encodeContract(Buffer.from(trimmed, 'hex'))
+  } catch {
+    return null
+  }
 }
 
 export type SwapProviderTokenRegistry = {
@@ -136,15 +154,18 @@ export function resolveTokenListContractId(
   if (item.code.toUpperCase() === 'XLM' && !item.issuer) {
     return Asset.native().contractId(networkPassphrase)
   }
-  if (item.contract?.trim()) return item.contract.trim()
+  // Prefer canonical SAC from classic asset identity. List `contract` fields are
+  // often hex (Lobstr) or can be wrong-network; issuer derivation is reliable.
   if (item.issuer) {
     try {
       return new Asset(item.code, item.issuer).contractId(networkPassphrase)
     } catch {
-      return null
+      // fall through to contract field
     }
   }
-  return null
+  const raw = item.contract?.trim()
+  if (!raw) return null
+  return normalizeStellarContractId(raw)
 }
 
 export function applyRegistryContractId<T extends { id: string; contractId: string }>(
