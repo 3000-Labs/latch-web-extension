@@ -103,10 +103,10 @@ describe('webauthn/passkey', () => {
     expect(opts.rpId).toBe('ghpalnblflhpeggnlilhhmohbdinlfne')
     expect(opts.challenge).toBe(bytesToBase64Url(hexToBytes(digest)))
     expect(base64UrlToBytes(opts.challenge)).toEqual(hexToBytes(digest))
-    expect(opts.allowCredentials).toEqual([
-      { id: 'cred-id', type: 'public-key', transports: ['internal'] },
-    ])
-    expect(opts.hints).toEqual(['client-device'])
+    // No transports filter so synced/hybrid (Google Password Manager) passkeys
+    // are not hidden from the signing prompt.
+    expect(opts.allowCredentials).toEqual([{ id: 'cred-id', type: 'public-key' }])
+    expect(opts).not.toHaveProperty('hints')
   })
 
   it('passkeyAuthenticationOptionsForV1Challenge uses server nonce as WebAuthn challenge', () => {
@@ -317,35 +317,49 @@ describe('webauthn/passkey', () => {
     expect(nextPasskeyRegistrationDisplayName([], 'Team vault')).toBe('Latch account 1 · Team vault')
   })
 
-  it('prepareRegistrationOptionsForCreate requires registration options, residentKey, and platform', () => {
+  it('prepareRegistrationOptionsForCreate requires registration options and preserves server authenticatorSelection', () => {
     const prepared = prepareRegistrationOptionsForCreate({
       challenge: 'c',
       rp: { id: 'ext', name: 'Latch' },
       user: { id: 'u', name: 'n', displayName: 'n' },
       pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+      excludeCredentials: [{ id: 'already-there', type: 'public-key' }],
     }) as Record<string, unknown>
     expect(prepared.rp).toEqual({ id: 'ext', name: 'Latch' })
     const authSel = prepared.authenticatorSelection as {
       residentKey?: string
       authenticatorAttachment?: string
+      userVerification?: string
     }
-    expect(authSel.residentKey).toBe('required')
-    expect(authSel.authenticatorAttachment).toBe('platform')
-    expect(prepared.hints).toEqual(['client-device'])
+    expect(authSel.residentKey).toBe('preferred')
+    expect(authSel.userVerification).toBe('preferred')
+    expect(authSel.authenticatorAttachment).toBeUndefined()
+    expect(prepared).not.toHaveProperty('excludeCredentials')
+    expect(prepared).not.toHaveProperty('hints')
     expect(() => prepareRegistrationOptionsForCreate({ challenge: 'c', rpId: 'ext' })).toThrow(
       /authentication options/
     )
   })
 
-  it('prepareAuthenticationOptionsForGet prefers local platform passkeys over hybrid QR', () => {
+  it('prepareAuthenticationOptionsForGet preserves server transports and does not restrict to internal', () => {
     const prepared = prepareAuthenticationOptionsForGet({
       challenge: 'c',
       rpId: 'ext',
       allowCredentials: [{ id: 'cred-1', type: 'public-key', transports: ['hybrid', 'internal'] }],
     }) as Record<string, unknown>
-    expect(prepared.hints).toEqual(['client-device'])
+    expect(prepared).not.toHaveProperty('hints')
     expect(prepared.allowCredentials).toEqual([
-      { id: 'cred-1', type: 'public-key', transports: ['internal'] },
+      { id: 'cred-1', type: 'public-key', transports: ['hybrid', 'internal'] },
     ])
+  })
+
+  it('prepareAuthenticationOptionsForGet omits transports when the server provides none', () => {
+    const prepared = prepareAuthenticationOptionsForGet({
+      challenge: 'c',
+      rpId: 'ext',
+      allowCredentials: [{ id: 'cred-1', type: 'public-key' }],
+    }) as Record<string, unknown>
+    expect(prepared.allowCredentials).toEqual([{ id: 'cred-1', type: 'public-key' }])
   })
 })

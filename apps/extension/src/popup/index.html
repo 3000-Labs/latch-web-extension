@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>__plasmo_static_index_title__</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Chrome sizes the action popup once on open and does not grow it when
+      deferred JS later mounts the 360×600 React tree. Without an intrinsic
+      size here, an empty #__plasmo shell is measured as a tiny rectangle
+      while the large popup bundle parses — then it stays that size.
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 360px;
+        height: 600px;
+        background: #1c1c1c;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+
+  <body></body>
+</html>

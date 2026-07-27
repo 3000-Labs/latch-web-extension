@@ -74,7 +74,11 @@ export function AddAccountFlow({
   const [passkeyActionError, setPasskeyActionError] = useState<string | null>(null)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
   const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
-  const passkeyDisplayNameRef = useRef<string | null>(null)
+  const passkeyPrefetchRef = useRef<
+    | { kind: 'registration'; optionsJSON: unknown; displayName: string }
+    | { kind: 'authentication'; optionsJSON: unknown }
+    | null
+  >(null)
 
   const pendingPasskeyRef = useRef<PendingPasskey | null>(null)
   const pendingRecoveryRef = useRef<PendingRecovery | null>(null)
@@ -87,14 +91,7 @@ export function AddAccountFlow({
       setPasskeyPrefetchError(null)
       setPasskeyActionError(null)
       setPasskeyBusy(false)
-      passkeyDisplayNameRef.current = null
-      return
-    }
-
-    if (step === 'passkey') {
-      setPasskeyPrefetchReady(true)
-      setPasskeyPrefetchError(null)
-      setPasskeyActionError(null)
+      passkeyPrefetchRef.current = null
       return
     }
 
@@ -102,25 +99,49 @@ export function AddAccountFlow({
     setPasskeyPrefetchReady(false)
     setPasskeyPrefetchError(null)
     setPasskeyActionError(null)
-    passkeyDisplayNameRef.current = null
+    passkeyPrefetchRef.current = null
 
     void (async () => {
       try {
-        const accountsRes = await sendToBackground<undefined, GetAccountsResponse>({
-          type: 'GET_ACCOUNTS',
-          payload: undefined,
-        })
-        if (cancelled) return
-        if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
+        if (step === 'createPasskey') {
+          const accountsRes = await sendToBackground<undefined, GetAccountsResponse>({
+            type: 'GET_ACCOUNTS',
+            payload: undefined,
+          })
+          if (cancelled) return
+          if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
 
-        passkeyDisplayNameRef.current = nextPasskeyAccountDisplayName(
-          accountsRes.data?.accounts ?? []
-        )
+          const displayName = nextPasskeyAccountDisplayName(accountsRes.data?.accounts ?? [])
+          const begin = await sendToBackground<
+            { displayName?: string },
+            BackendWebauthnBeginResponse
+          >({
+            type: 'PASSKEY_REG_BEGIN',
+            payload: { displayName },
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+          const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
+        } else {
+          const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_AUTH_BEGIN',
+            payload: undefined,
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+          const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
+        }
         if (!cancelled) setPasskeyPrefetchReady(true)
       } catch (e) {
         if (!cancelled) {
           setPasskeyPrefetchError(e instanceof Error ? e.message : String(e))
-          passkeyDisplayNameRef.current = null
+          passkeyPrefetchRef.current = null
         }
       }
     })()
@@ -167,13 +188,17 @@ export function AddAccountFlow({
     setPasskeyBusy(true)
     void (async () => {
       try {
-        const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-          type: 'PASSKEY_AUTH_BEGIN',
-          payload: undefined,
-        })
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
+        const pre = passkeyPrefetchRef.current
+        if (!pre || pre.kind !== 'authentication') {
+          throw new Error(
+            passkeyPrefetchError ??
+              (passkeyPrefetchReady
+                ? 'Passkey session is stale. Go back and try again.'
+                : 'Still preparing passkey…')
+          )
+        }
 
-        const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
+        const optionsJSON = pre.optionsJSON
         const assertion = await runPasskeyAuthentication(optionsJSON)
         pendingPasskeyRef.current = { kind: 'authentication', optionsJSON, assertion }
         pendingRecoveryRef.current = null
@@ -185,15 +210,15 @@ export function AddAccountFlow({
         setPasskeyBusy(false)
       }
     })()
-  }, [runPasskeyAuthentication])
+  }, [passkeyPrefetchError, passkeyPrefetchReady, runPasskeyAuthentication])
 
   const handleCreatePasskey = useCallback(() => {
     setPasskeyActionError(null)
     setPasskeyBusy(true)
     void (async () => {
       try {
-        const displayName = passkeyDisplayNameRef.current
-        if (!displayName) {
+        const pre = passkeyPrefetchRef.current
+        if (!pre || pre.kind !== 'registration') {
           throw new Error(
             passkeyPrefetchError ??
               (passkeyPrefetchReady
@@ -202,15 +227,7 @@ export function AddAccountFlow({
           )
         }
 
-        const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
-          {
-            type: 'PASSKEY_REG_BEGIN',
-            payload: { displayName },
-          }
-        )
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
-
-        const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options)
+        const optionsJSON = pre.optionsJSON
         const registration = await runPasskeyRegistration(optionsJSON)
         assertRegistrationCeremonyForFinish(registration)
 

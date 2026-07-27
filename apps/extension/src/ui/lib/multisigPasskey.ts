@@ -61,7 +61,7 @@ export async function enrollNewPasskeyForCosignWizard(args: {
     payload: { displayName },
   })
   if (!begin.ok || !begin.data) throw new Error(friendlyError(begin.error))
-  const optionsJSON = prepareRegistrationOptionsForCreate(begin.data.options)
+  const optionsJSON = prepareRegistrationOptionsForCreate(begin.data.options, displayName)
   assertBeginOptionsRpIdMatchesExtension(optionsJSON)
   let registration: unknown
   try {

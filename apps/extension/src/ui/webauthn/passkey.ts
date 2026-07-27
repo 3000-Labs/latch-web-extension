@@ -185,41 +185,28 @@ export function buildWebauthnSigDataXdrHex(args: {
   return bytesToHex(raw instanceof Uint8Array ? raw : new Uint8Array(raw as any))
 }
 
-export function createLocalRegistrationOptions(rpId: string) {
-  const challenge = crypto.getRandomValues(new Uint8Array(32))
-  const userId = crypto.getRandomValues(new Uint8Array(32))
-  return {
-    challenge: bytesToBase64Url(challenge),
-    rp: { name: 'Latch', id: rpId },
-    user: {
-      id: bytesToBase64Url(userId),
-      name: `user@${rpId}`,
-      displayName: 'Latch user',
-    },
-    pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-    authenticatorSelection: {
-      residentKey: 'required',
-      userVerification: 'required',
-    },
-    timeout: 60_000,
-    attestation: 'none',
-  } as const
-}
-
-/** Prefer this device's platform passkey over cross-device / QR (hybrid) flows. */
-const PLATFORM_PASSKEY_HINTS = ['client-device'] as const
-const PLATFORM_PASSKEY_TRANSPORTS = ['internal'] as const
-
-function normalizeAllowCredentialsForPlatform(allow: unknown): unknown[] {
+/**
+ * Normalize an `allowCredentials` list without restricting which transports the
+ * browser may use.
+ *
+ * We intentionally do NOT force `transports: ['internal']` here. Latch passkeys
+ * are frequently stored in Google Password Manager and sync across devices, so
+ * they advertise `hybrid` (and other) transports. Forcing `internal` made Chrome
+ * filter those out and report "no passkey available" even though the user has
+ * Latch passkeys. Server-provided transports are preserved as-is; when none are
+ * provided we omit the field so the browser can surface every matching credential
+ * for this RP (platform AND synced/hybrid).
+ */
+function normalizeAllowCredentials(allow: unknown): unknown[] {
   if (!Array.isArray(allow) || allow.length === 0) return []
   return allow.map((cred) => {
     if (!cred || typeof cred !== 'object') return cred
     const c = cred as Record<string, unknown>
-    return {
-      ...c,
-      type: c.type ?? 'public-key',
-      transports: PLATFORM_PASSKEY_TRANSPORTS,
+    const out: Record<string, unknown> = { ...c, type: c.type ?? 'public-key' }
+    if (!Array.isArray(c.transports) || (c.transports as unknown[]).length === 0) {
+      delete out.transports
     }
+    return out
   })
 }
 
@@ -232,16 +219,16 @@ export function createLocalAuthenticationOptions(args: {
   return {
     rpId: args.rpId,
     challenge: bytesToBase64Url(challenge),
+    // No `transports` filter: allow platform + synced/hybrid (Google Password
+    // Manager) credentials so signing finds the passkey wherever it is stored.
     allowCredentials: [
       {
         id: args.credentialId,
         type: 'public-key',
-        transports: PLATFORM_PASSKEY_TRANSPORTS,
       },
     ],
     timeout: 60_000,
     userVerification: 'required',
-    hints: PLATFORM_PASSKEY_HINTS,
   } as const
 }
 
@@ -342,12 +329,10 @@ export function passkeyAuthenticationOptionsForV1Challenge(args: {
       {
         id: args.credentialId,
         type: 'public-key',
-        transports: PLATFORM_PASSKEY_TRANSPORTS,
       },
     ],
     timeout: 60_000,
     userVerification: 'required',
-    hints: PLATFORM_PASSKEY_HINTS,
   } as const
 }
 
@@ -427,8 +412,8 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
   const o = webauthnBeginOptionsToObject(options)
   if (!o) return undefined
   const rp = o.rp as { id?: unknown } | undefined
-  if (rp && typeof rp.id === 'string') return rp.id
-  if (typeof o.rpId === 'string') return o.rpId
+  if (rp && typeof rp.id === 'string' && rp.id.trim() !== '') return rp.id
+  if (typeof o.rpId === 'string' && o.rpId.trim() !== '') return o.rpId
   return undefined
 }
 
@@ -448,7 +433,7 @@ export function narrowAuthenticationOptionsToCredential(
   if (!Array.isArray(allow) || allow.length === 0) {
     return {
       ...o,
-      allowCredentials: [{ id: credentialId, type: 'public-key', transports: PLATFORM_PASSKEY_TRANSPORTS }],
+      allowCredentials: [{ id: credentialId, type: 'public-key' }],
     }
   }
 
@@ -462,8 +447,8 @@ export function narrowAuthenticationOptionsToCredential(
     ...o,
     allowCredentials:
       narrowed.length > 0
-        ? normalizeAllowCredentialsForPlatform(narrowed)
-        : [{ id: credentialId, type: 'public-key', transports: PLATFORM_PASSKEY_TRANSPORTS }],
+        ? normalizeAllowCredentials(narrowed)
+        : [{ id: credentialId, type: 'public-key' }],
   }
 }
 
@@ -514,6 +499,18 @@ export function formatWebauthnBrowserError(err: unknown): string {
       `The server must receive chromeExtensionId and set WebAuthn rp.id to "${extId}" (same as chrome.runtime.id).`,
     ].filter(Boolean)
     return parts.join(' ')
+  }
+
+  const combined = `${err.message} ${causeMsg ?? ''}`.toLowerCase()
+  if (
+    code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED' ||
+    combined.includes('previously registered') ||
+    combined.includes('excludecredentials')
+  ) {
+    return (
+      'This device already has a Latch passkey registered. ' +
+      'Try again to create another account passkey, or use “Existing passkey” to sign in with one you already have.'
+    )
   }
 
   if (causeMsg) return `${err.message} (${causeMsg})`
@@ -627,8 +624,58 @@ export function isRegistrationBeginOptions(options: unknown): boolean {
   return Array.isArray(o.pubKeyCredParams) && o.user != null && typeof o.user === 'object'
 }
 
-/** Validate server begin options for `startRegistration` (do not mutate RP/user/challenge). */
-export function prepareRegistrationOptionsForCreate(options: unknown): unknown {
+/**
+ * Surface (non-fatally) when server-issued registration options ignore the
+ * unique display name we requested.
+ *
+ * Google Password Manager and other authenticators label a passkey using
+ * `user.displayName` / `user.name`. If the Latch API ignores the `displayName`
+ * we send on begin and hardcodes something like "Latch User", every passkey
+ * collapses to the same label and becomes impossible to tell apart. We warn
+ * loudly (instead of silently mislabeling) rather than throwing, because the
+ * name is cosmetic and blocking passkey creation over it would be worse UX. The
+ * real fix is server-side (see the WebAuthn backend contract): map the requested
+ * `displayName` onto `user.displayName` and a unique `user.name`.
+ */
+export function warnIfBeginOptionsIgnoreDisplayName(
+  options: unknown,
+  requestedDisplayName: string | undefined
+): void {
+  const requested = requestedDisplayName?.trim()
+  if (!requested) return
+  const o = webauthnBeginOptionsToObject(options)
+  const user = o?.user as { displayName?: unknown; name?: unknown } | undefined
+  if (!user || typeof user !== 'object') return
+  const serverDisplayName = typeof user.displayName === 'string' ? user.displayName : undefined
+  if (serverDisplayName !== undefined && serverDisplayName !== requested) {
+    console.warn(
+      `[latch/passkey] The Latch API ignored the requested passkey display name. ` +
+        `Requested "${requested}" but options carry user.displayName "${serverDisplayName}". ` +
+        `New passkeys may all show the same label in Google Password Manager until the API maps ` +
+        `displayName -> user.displayName / user.name.`
+    )
+  }
+}
+
+/**
+ * Validate server begin options for `startRegistration` (do not mutate RP/user/challenge).
+ *
+ * Do NOT force `authenticatorAttachment: 'platform'` or `residentKey: 'required'`.
+ * Those overrides caused Chrome to hang / show no passkey UI for Google Password
+ * Manager and other non-platform authenticators — same class of bug as forcing
+ * `transports: ['internal']` on authentication. Preserve server
+ * `authenticatorSelection` and only fill missing `userVerification`.
+ *
+ * Strip `excludeCredentials`: when the Latch API lists existing session credentials
+ * here, Chrome/platform authenticators throw InvalidStateError
+ * ("authenticator was previously registered") and refuse to create another passkey
+ * on the same device. Latch intentionally supports multiple passkeys per install
+ * (unique WebAuthn user.id per enrollment); excludeCredentials blocks that.
+ */
+export function prepareRegistrationOptionsForCreate(
+  options: unknown,
+  requestedDisplayName?: string
+): unknown {
   const o = webauthnBeginOptionsToObject(options)
   if (!o) return options
   if (!isRegistrationBeginOptions(o)) {
@@ -636,20 +683,19 @@ export function prepareRegistrationOptionsForCreate(options: unknown): unknown {
       'Server returned authentication options instead of registration options. Try again or use “I have a wallet” → Existing passkey.'
     )
   }
+  warnIfBeginOptionsIgnoreDisplayName(o, requestedDisplayName)
   const authSel =
     o.authenticatorSelection != null && typeof o.authenticatorSelection === 'object'
       ? (o.authenticatorSelection as Record<string, unknown>)
       : {}
+  const rest = { ...o }
+  delete rest.excludeCredentials
   return {
-    ...o,
+    ...rest,
     authenticatorSelection: {
       ...authSel,
-      authenticatorAttachment: 'platform',
-      residentKey: 'required',
-      requireResidentKey: true,
-      userVerification: authSel.userVerification ?? 'required',
+      userVerification: authSel.userVerification ?? 'preferred',
     },
-    hints: PLATFORM_PASSKEY_HINTS,
   }
 }
 
@@ -676,11 +722,10 @@ export function prepareAuthenticationOptionsForGet(options: unknown): unknown {
   const out: Record<string, unknown> = {
     ...o,
     userVerification: o.userVerification ?? 'required',
-    hints: PLATFORM_PASSKEY_HINTS,
   }
   if (rpId) out.rpId = rpId
   if (Array.isArray(o.allowCredentials) && o.allowCredentials.length > 0) {
-    out.allowCredentials = normalizeAllowCredentialsForPlatform(o.allowCredentials)
+    out.allowCredentials = normalizeAllowCredentials(o.allowCredentials)
   }
   return out
 }

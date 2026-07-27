@@ -28,6 +28,7 @@ export type OnboardingPasskeyOption = {
 
 type PrefetchState = {
   kind: 'authentication'
+  optionsJSON: unknown
 }
 
 function mergePasskeyOptions(
@@ -90,7 +91,7 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
 
     void (async () => {
       try {
-        const [backendRes, localRes] = await Promise.all([
+        const [backendRes, localRes, beginRes] = await Promise.all([
           sendToBackground<undefined, BackendAccountsResponse>({
             type: 'GET_BACKEND_ACCOUNTS',
             payload: undefined,
@@ -99,8 +100,17 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
             type: 'GET_ACCOUNTS',
             payload: undefined,
           }),
+          sendToBackground<undefined, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_AUTH_BEGIN',
+            payload: undefined,
+          }),
         ])
         if (cancelled) return
+
+        if (!beginRes.ok) throw new Error(friendlyError(beginRes.error))
+
+        const optionsJSON = prepareAuthenticationOptionsForGet(beginRes.data?.options)
+        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
         const mergedAccounts: BackendSessionAccount[] = [
           ...(backendRes.ok ? (backendRes.data?.accounts ?? []) : []),
@@ -112,9 +122,9 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
             })),
         ]
 
-        prefetchRef.current = { kind: 'authentication' }
+        prefetchRef.current = { kind: 'authentication', optionsJSON }
 
-        const listed = mergePasskeyOptions(mergedAccounts, null)
+        const listed = mergePasskeyOptions(mergedAccounts, optionsJSON)
         setPasskeys(listed)
         setSelectedCredentialId(listed.length === 1 ? listed[0]!.credentialId : null)
 
@@ -145,15 +155,10 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
               : 'Still preparing passkey…')
         )
       }
-      const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-        type: 'PASSKEY_AUTH_BEGIN',
-        payload: undefined,
-      })
-      if (!begin.ok) throw new Error(friendlyError(begin.error))
 
       const narrowed = selectedCredentialId
-        ? narrowAuthenticationOptionsToCredential(begin.data?.options, selectedCredentialId)
-        : begin.data?.options
+        ? narrowAuthenticationOptionsToCredential(pre.optionsJSON, selectedCredentialId)
+        : pre.optionsJSON
       const optionsJSON = prepareAuthenticationOptionsForGet(narrowed)
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 

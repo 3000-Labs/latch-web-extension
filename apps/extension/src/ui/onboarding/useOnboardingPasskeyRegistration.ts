@@ -21,6 +21,7 @@ import {
 
 type PrefetchState = {
   kind: 'registration'
+  optionsJSON: unknown
   displayName: string
 }
 
@@ -57,7 +58,18 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
 
         const displayName = nextPasskeyAccountDisplayName(accountsRes.data?.accounts ?? [])
-        prefetchRef.current = { kind: 'registration', displayName }
+        const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
+          {
+            type: 'PASSKEY_REG_BEGIN',
+            payload: { displayName },
+          }
+        )
+        if (cancelled) return
+        if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+        const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
+        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+        prefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         if (!cancelled) setPrefetchReady(true)
       } catch (e) {
         if (!cancelled) {
@@ -86,16 +98,7 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         )
       }
 
-      const displayName = pre.displayName
-      const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
-        {
-          type: 'PASSKEY_REG_BEGIN',
-          payload: { displayName },
-        }
-      )
-      if (!begin.ok) throw new Error(friendlyError(begin.error))
-
-      const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options)
+      const optionsJSON = pre.optionsJSON
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
       let reg: Awaited<ReturnType<typeof startRegistration>>

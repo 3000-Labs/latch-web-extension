@@ -45,6 +45,7 @@ import {
   enrollNewPasskeyForDraft,
   listReusablePasskeyAccounts,
 } from '../lib/multisigPasskey'
+import { nextPasskeyRegistrationDisplayName } from '../webauthn/passkey'
 import {
   findDraftMemberForStoredAccount,
 } from '../lib/multisigJoinHelpers'
@@ -221,7 +222,10 @@ export function MultisigRouteViews({
       const { draft, credentialId } = await enrollNewPasskeyForDraft({
         draftId: wizard.draftId,
         label: wizard.walletName,
-        displayName: wizard.walletName || 'Latch Multisig',
+        displayName: nextPasskeyRegistrationDisplayName(
+          accounts,
+          `${wizard.walletName || 'Latch'} multisig`
+        ),
         surface,
       })
       applyDraftPasskeyEnrollment(draft, credentialId)
@@ -230,7 +234,7 @@ export function MultisigRouteViews({
     } finally {
       setPasskeyAdding(false)
     }
-  }, [wizard, surface, applyDraftPasskeyEnrollment])
+  }, [wizard, surface, applyDraftPasskeyEnrollment, accounts])
 
   const refreshDraftMembers = useCallback(
     async (opts?: { silent?: boolean }) => {
