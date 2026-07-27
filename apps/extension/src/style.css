@@ -34,7 +34,11 @@
   --latch-border: 225 225 225;
 }
 
-/* Better text rendering in small popup surfaces */
+/* Better text rendering in small popup surfaces.
+ *
+ * Popup also gets an intrinsic 360×600 size from `src/popup/index.html`
+ * (inline) so Chrome does not lock the action popup to an empty #__plasmo
+ * while the deferred bundle loads. Keep body able to fill sidepanel/tabs. */
 html,
 body {
   height: 100%;

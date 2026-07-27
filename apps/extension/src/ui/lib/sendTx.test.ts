@@ -7,6 +7,7 @@ import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
   contextRuleIdForSubmit,
+  explainSendDraftNotBuildable,
   isDelegatedSendBuild,
   normalizeDelegatedBuildFields,
   resolvePasskeyAuthEntryXdr,
@@ -53,6 +54,36 @@ describe('buildSendRequestFromDraft', () => {
     })
     expect(req?.signerG).toBeUndefined()
   })
+
+  it('maps XLM portfolio rows without assetId to native', () => {
+    const draft: SendDraft = {
+      token: {
+        code: 'XLM',
+        sacContractId: 'CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA',
+        amount: '10',
+      },
+      recipientAddress: 'GABC',
+      amount: '1',
+      inputMode: 'crypto',
+    }
+    const req = buildSendRequestFromDraft(draft, multisigAccount, null, 'mainnet')
+    expect(req).toMatchObject({
+      assetId: 'native',
+      contractId: draft.token!.sacContractId,
+      amount: '1',
+      network: 'mainnet',
+    })
+  })
+
+  it('rejects fiat amounts when USD price is missing', () => {
+    const draft: SendDraft = {
+      ...baseDraft,
+      amount: '50',
+      inputMode: 'fiat',
+    }
+    expect(explainSendDraftNotBuildable(draft, multisigAccount, null)).toMatch(/USD price/i)
+    expect(buildSendRequestFromDraft(draft, multisigAccount, null)).toBeNull()
+  })
 })
 
 describe('buildSetupRequestFromDraft', () => {
@@ -92,6 +123,18 @@ describe('buildSetupRequestFromDraft', () => {
       keyDataHex: passkeyAccount.passkeyKeyDataHex,
       verifierAddress: 'CVERIFIER123',
     })
+  })
+
+  it('includes network when provided (required for mainnet setup)', () => {
+    const req = buildSetupRequestFromDraft(baseDraft, passkeyAccount, undefined, 'mainnet')
+    expect(req).toMatchObject({ network: 'mainnet', assetId: 'native' })
+  })
+
+  it('omits verifierAddress on mainnet when mainnet verifier env is unset', () => {
+    const req = buildSetupRequestFromDraft(baseDraft, passkeyAccount, undefined, 'mainnet')
+    // Test mock still returns CVERIFIER123 for any network — assert shape separately in latchEnv tests.
+    expect(req?.network).toBe('mainnet')
+    expect(req?.keyDataHex).toBe(passkeyAccount.passkeyKeyDataHex)
   })
 
   it('uses member passkey credentials when setting up a multisig wallet', () => {

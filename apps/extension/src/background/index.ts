@@ -80,7 +80,9 @@ import {
   submitTxWebauthn,
 } from './backend'
 
-import { getActiveNetworkFromEnv } from './externalSign/callbackUrl'
+import { getActiveNetwork, getNetworkConfig, networkLabelFor, setActiveNetwork } from './network/config'
+import { clearNetworkScopedMemoryCaches } from './network/clearCaches'
+import { broadcastActiveAccountChanged, broadcastNetworkChanged } from './dappProviderEvents'
 import { buildSignRequestSearchParams } from './externalSign/parseSignRequest'
 import {
   runExternalSignFlow,
@@ -115,6 +117,7 @@ import { getMarketPrices } from './marketPrices'
 import { tryHandleMultisigMessage } from './multisig/handlers'
 import { tryHandleDepositMessage } from './deposit/handlers'
 import { tryHandleV1AuthMessage } from './v1Auth/handlers'
+import { debugAgentLog, postDebugPayload } from './debugAgentLog'
 
 import {
   createAccount,
@@ -123,11 +126,14 @@ import {
   listPendingDappRequests,
   addPendingDappRequest,
   removePendingDappRequest,
+  clearPendingDappRequests,
   disconnectSessionForLogoutDev,
   migrateLegacyPublicKeyIfNeeded,
   renameAccount,
   setActiveAccount,
   setDappPermissions,
+  getSetupStateForNetwork,
+  setSetupStateForNetwork,
   storageKeys,
 } from './storage'
 
@@ -140,26 +146,30 @@ const STORAGE_KEYS = {
 type UiSurfacePreference = 'popup' | 'sidepanel'
 
 async function getSetupState(): Promise<GetSetupStateResponse> {
-  const result = await chrome.storage.local.get([
-    STORAGE_KEYS.setupState,
-    STORAGE_KEYS.accountPublicKey,
-  ])
+  const network = await getActiveNetwork()
+  const setupState =
+    ((await getSetupStateForNetwork(network)) as SetupState | undefined) ?? 'new'
+  const result = await chrome.storage.local.get([STORAGE_KEYS.accountPublicKey])
 
   return {
-    setupState: (result[STORAGE_KEYS.setupState] as SetupState | undefined) ?? 'new',
+    setupState,
     accountPublicKey: result[STORAGE_KEYS.accountPublicKey] as string | undefined,
   }
 }
 
 async function setSetupState(req: SetSetupStateRequest): Promise<void> {
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.setupState]: req.setupState,
-    [STORAGE_KEYS.accountPublicKey]: req.accountPublicKey,
-  })
+  const network = await getActiveNetwork()
+  await setSetupStateForNetwork(network, req.setupState, req.accountPublicKey)
 }
 
 const ONBOARDING_TAB_PATH = 'tabs/onboarding.html'
-const ACCOUNTS_STORAGE_KEY = storageKeys().accounts
+const ACCOUNTS_BY_NETWORK_KEY = storageKeys().accountsByNetwork
+const ACTIVE_ID_BY_NETWORK_KEY = storageKeys().activeAccountIdByNetwork
+const SETUP_BY_NETWORK_KEY = storageKeys().setupStateByNetwork
+const LEGACY_ACCOUNTS_KEY = storageKeys().accounts
+const LEGACY_ACTIVE_ID_KEY = storageKeys().activeAccountId
+const LEGACY_SETUP_KEY = storageKeys().setupState
+const NETWORK_STORAGE_KEY = 'latch.network'
 
 /**
  * Stored accounts are the source of truth for whether onboarding should show.
@@ -320,10 +330,24 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return
   if (
     changes[STORAGE_KEYS.uiSurface] ||
-    changes[STORAGE_KEYS.setupState] ||
-    changes[ACCOUNTS_STORAGE_KEY]
+    changes[LEGACY_SETUP_KEY] ||
+    changes[SETUP_BY_NETWORK_KEY] ||
+    changes[LEGACY_ACCOUNTS_KEY] ||
+    changes[ACCOUNTS_BY_NETWORK_KEY] ||
+    changes[NETWORK_STORAGE_KEY]
   ) {
     void ensureSetupStateMatchesAccounts().then(() => applyActionClickBehavior())
+  }
+  if (
+    changes[LEGACY_ACTIVE_ID_KEY] ||
+    changes[ACTIVE_ID_BY_NETWORK_KEY] ||
+    changes[LEGACY_ACCOUNTS_KEY] ||
+    changes[ACCOUNTS_BY_NETWORK_KEY]
+  ) {
+    void broadcastActiveAccountChanged()
+  }
+  if (changes[NETWORK_STORAGE_KEY]) {
+    void broadcastNetworkChanged()
   }
 })
 
@@ -351,14 +375,18 @@ function waitForExternalSignDecision(requestId: string): Promise<ExternalSignDec
   })
 }
 
+function rejectAllPendingDappRequests(decision: ExternalSignDecision = { approved: false }) {
+  for (const [requestId, resolver] of pendingDappResolvers.entries()) {
+    resolver(decision)
+    pendingDappResolvers.delete(requestId)
+  }
+  void clearPendingDappRequests()
+}
+
 function rejectPendingOnWindowClose(windowId: number) {
   if (!approvalPopupWindowIds.has(windowId)) return
   approvalPopupWindowIds.delete(windowId)
-  for (const [requestId, resolver] of pendingDappResolvers.entries()) {
-    resolver({ approved: false })
-    pendingDappResolvers.delete(requestId)
-    void removePendingDappRequest(requestId)
-  }
+  rejectAllPendingDappRequests({ approved: false })
 }
 
 if (chrome.windows?.onRemoved) {
@@ -411,9 +439,11 @@ async function requireDappApproval(args: {
     prepared: args.prepared,
     source: args.source,
   }
+  // Register waiter before durable enqueue so LIST cannot treat this as an orphan.
+  const decisionPromise = waitForExternalSignDecision(requestId)
   await addPendingDappRequest(pending)
   await openApprovalPopup()
-  return await waitForExternalSignDecision(requestId)
+  return await decisionPromise
 }
 
 function mapExternalSignResultToProviderResponse(
@@ -440,6 +470,14 @@ function mapExternalSignResultToProviderResponse(
 }
 
 chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, sendResponse) => {
+  // #region agent log
+  const maybeDebug = rawMessage as { type?: string; payload?: Record<string, unknown> }
+  if (maybeDebug?.type === 'DEBUG_AGENT_LOG' && maybeDebug.payload) {
+    postDebugPayload(maybeDebug.payload as Parameters<typeof postDebugPayload>[0])
+    sendResponse({ ok: true })
+    return true
+  }
+  // #endregion
   const message = rawMessage as BackgroundMessage
 
   ;(async () => {
@@ -477,6 +515,20 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
       case 'GET_ACCOUNTS': {
         await ensureSetupStateMatchesAccounts()
+        let repairedCount = 0
+        try {
+          const { repairDisplacedPasskeySmartAccountAddresses } = await import(
+            './api/repairPasskeyAddress'
+          )
+          const repaired = await repairDisplacedPasskeySmartAccountAddresses()
+          repairedCount = repaired.repairedCount
+          if (repairedCount > 0) {
+            const { clearSmartAccountBalancesMemoryCache } = await import('./smartAccountBalances')
+            clearSmartAccountBalancesMemoryCache()
+          }
+        } catch {
+          // best-effort repair only
+        }
         const data = await getAccounts()
         let activeAccountHasMnemonicVault: boolean | undefined
         let activeAccountMnemonicSignerLoaded: boolean | undefined
@@ -500,6 +552,8 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       case 'SET_ACTIVE_ACCOUNT': {
         const req = message.payload as SetActiveAccountRequest
         await setActiveAccount(req.accountId)
+        // storage.onChanged also broadcasts; await here so dApps update before UI continues
+        await broadcastActiveAccountChanged()
         sendResponse(ok())
         return
       }
@@ -531,14 +585,45 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
       case 'CREATE_OR_CONNECT_PASSKEY': {
         const req = message.payload as CreateOrConnectPasskeyRequest
-        const data = await createOrConnectPasskey(req)
+        const before = await getAccounts()
+        const existing = before.accounts.find(
+          (a) =>
+            a.mode === 'passkey' &&
+            ((req.credentialId && a.passkeyCredentialId === req.credentialId) ||
+              (req.smartAccountAddress && a.smartAccountAddress === req.smartAccountAddress))
+        )
+        const data = await createOrConnectPasskey({
+          keyDataHex: req.keyDataHex,
+          credentialId: req.credentialId,
+        })
+        const existingAddr = existing?.smartAccountAddress?.trim()
+        const hinted = req.smartAccountAddress?.trim()
+        const apiAddr = data.smartAccountAddress?.trim() ?? ''
+        const keepAddr = existingAddr || hinted
+        if (keepAddr && apiAddr && keepAddr !== apiAddr) {
+          const { recordPasskeyAddressDisplacement } = await import('./api/repairPasskeyAddress')
+          await recordPasskeyAddressDisplacement({
+            credentialId: req.credentialId,
+            previousAddress: keepAddr,
+            factoryAddress: apiAddr,
+          })
+        }
+        // Never persist a different factory prediction over the funded local C-address.
+        const smartAccountAddress = keepAddr || apiAddr
         const { account } = await createAccount({
           mode: 'passkey',
-          smartAccountAddress: data.smartAccountAddress,
+          smartAccountAddress,
           passkeyCredentialId: req.credentialId,
           passkeyKeyDataHex: req.keyDataHex,
         })
-        sendResponse(ok({ ...data, account }))
+        sendResponse(
+          ok({
+            ...data,
+            smartAccountAddress,
+            alreadyDeployed: data.alreadyDeployed || Boolean(keepAddr && keepAddr === apiAddr),
+            account,
+          })
+        )
         return
       }
 
@@ -552,13 +637,26 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       case 'PASSKEY_REG_FINISH': {
         const req = message.payload as BackendWebauthnRegistrationFinishRequest
         const data = await passkeyRegistrationFinish(req)
+        let keyDataHex = typeof data.keyDataHex === 'string' ? data.keyDataHex.trim() : ''
+        let credentialId = data.credentialId
+        // Backend should return keyDataHex; fall back to client extraction so send/sign can proceed.
+        if (!keyDataHex && req.response) {
+          try {
+            const { extractRegistrationKeyData } = await import('../ui/webauthn/passkey')
+            const extracted = extractRegistrationKeyData(req.response)
+            keyDataHex = extracted.keyDataHex
+            if (!credentialId) credentialId = extracted.credentialId
+          } catch {
+            // keep empty; createAccount will surface missing data on send/setup
+          }
+        }
         const { account } = await createAccount({
           mode: 'passkey',
           smartAccountAddress: data.smartAccountAddress,
-          passkeyCredentialId: data.credentialId,
-          passkeyKeyDataHex: data.keyDataHex,
+          passkeyCredentialId: credentialId,
+          passkeyKeyDataHex: keyDataHex || undefined,
         })
-        sendResponse(ok({ ...data, account }))
+        sendResponse(ok({ ...data, credentialId, keyDataHex, account }))
         return
       }
 
@@ -791,14 +889,16 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
       case 'BUILD_SEND_TX': {
         const req = message.payload as BuildSendTxRequest
-        const data = await buildSendTx(req)
+        const network = req.network ?? (await getActiveNetwork())
+        const data = await buildSendTx({ ...req, network })
         sendResponse(ok(data))
         return
       }
 
       case 'SETUP_SEND_RULES': {
         const req = message.payload as SetupSendRulesRequest
-        const data = await setupSendRules(req)
+        const network = req.network ?? (await getActiveNetwork())
+        const data = await setupSendRules({ ...req, network })
         sendResponse(ok(data))
         return
       }
@@ -826,7 +926,8 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
       case 'SETUP_SWAP_RULES': {
         const req = message.payload as SetupSwapRulesRequest
-        const data = await setupSwapRules(req)
+        const network = req.network ?? (await getActiveNetwork())
+        const data = await setupSwapRules({ ...req, network })
         sendResponse(ok(data))
         return
       }
@@ -853,7 +954,15 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       }
 
       case 'LIST_PENDING_DAPP_REQUESTS': {
-        const requests = await listPendingDappRequests()
+        const stored = await listPendingDappRequests()
+        // Drop orphans left after SW restart (in-memory waiters are gone).
+        const requests = stored.filter((r) => pendingDappResolvers.has(r.id))
+        if (requests.length !== stored.length) {
+          const liveIds = new Set(requests.map((r) => r.id))
+          for (const orphan of stored) {
+            if (!liveIds.has(orphan.id)) await removePendingDappRequest(orphan.id)
+          }
+        }
         const data: ListPendingDappRequestsResponse = { requests }
         sendResponse(ok(data))
         return
@@ -866,6 +975,8 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         await removePendingDappRequest(req.requestId)
         resolver?.({
           approved: req.approved,
+          errorMessage: req.errorMessage,
+          errorCode: req.errorCode,
           signedXdr: req.signedXdr,
           txHash: req.txHash,
           signedAuthEntry: req.signedAuthEntry,
@@ -881,7 +992,18 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       }
 
       case 'GET_ACTIVE_NETWORK': {
-        sendResponse(ok({ network: getActiveNetworkFromEnv() }))
+        const cfg = await getNetworkConfig()
+        sendResponse(ok({ network: cfg.network, networkLabel: cfg.networkLabel }))
+        return
+      }
+
+      case 'SET_ACTIVE_NETWORK': {
+        const req = message.payload as { network: 'testnet' | 'mainnet' }
+        const network = await setActiveNetwork(req.network)
+        clearNetworkScopedMemoryCaches()
+        await broadcastNetworkChanged(network)
+        await broadcastActiveAccountChanged()
+        sendResponse(ok({ network, networkLabel: networkLabelFor(network) }))
         return
       }
 
@@ -983,6 +1105,28 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
             code: 'not_connected',
           })
         }
+
+        // #region agent log
+        {
+          const { accounts, activeAccountId } = await getAccounts()
+          const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+          debugAgentLog({
+            hypothesisId: 'H3',
+            location: 'background/index.ts:DAPP_SIGN_TRANSACTION',
+            message: 'dapp sign request vs active account',
+            data: {
+              origin,
+              accountToSignSuffix: (req.request.accountToSign ?? '').slice(-8),
+              activeSmartSuffix: (active?.smartAccountAddress ?? '').slice(-8),
+              accountsMatch: req.request.accountToSign === active?.smartAccountAddress,
+              activeMode: active?.mode ?? null,
+              passkeyCredSuffix: (active?.passkeyCredentialId ?? '').slice(-12),
+              hasPasskeyCred: Boolean(active?.passkeyCredentialId?.trim()),
+              submit: req.request.submit,
+            },
+          })
+        }
+        // #endregion
 
         const flowResult = await runExternalSignFlow({
           source: 'provider',

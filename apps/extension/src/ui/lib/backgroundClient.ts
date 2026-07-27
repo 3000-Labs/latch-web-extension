@@ -16,6 +16,12 @@ export function friendlyError(e?: SerializableError): string {
   if (e.code === 'fund_unsupported_mode') {
     return 'Fund via on-ramp is not available for this account type yet.'
   }
+  if (
+    typeof e.message === 'string' &&
+    /failed to build setup transaction/i.test(e.message)
+  ) {
+    return 'Could not set up send rules. Your smart account may not be deployed on this network yet — try again after the account finishes deploying.'
+  }
   if (e.status === 403) return 'Not authorized.'
   if (e.code === 'mnemonic_locked') {
     return 'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.'

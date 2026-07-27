@@ -3,7 +3,7 @@ import { StellarToml, StrKey } from '@stellar/stellar-sdk'
 import type { GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse } from '@latch/types'
 
 import { coinCapIconUrl, fetchTokenMap, iconFromTokenMap } from './assetTokenLists'
-import { getStellarNetworkFromEnv, horizonUrlFromEnv } from './migration/env'
+import { getActiveNetwork, horizonUrlFor } from './network/config'
 
 const CACHE_PREFIX = 'latch.assetIconDataUrl.v4'
 const MAX_ICON_BYTES = 200_000
@@ -182,8 +182,8 @@ export const resolveIconUrlForAsset = resolveIconDataUrlForAsset
 export async function getAssetIconDataUrlsBatch(
   req: GetAssetIconDataUrlsRequest
 ): Promise<GetAssetIconDataUrlsResponse> {
-  const network = getStellarNetworkFromEnv()
-  const horizonUrl = horizonUrlFromEnv()
+  const network = await getActiveNetwork()
+  const horizonUrl = horizonUrlFor(network)
   const icons = await Promise.all(
     req.assets.map((a) =>
       resolveIconDataUrlForAsset({

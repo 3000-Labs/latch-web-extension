@@ -11,6 +11,7 @@ export function SendSuccessScreen({
   draft,
   result,
   priceUsd,
+  network = 'testnet',
   onContinue,
   onViewReceipt,
 }: {
@@ -18,6 +19,7 @@ export function SendSuccessScreen({
   draft: SendDraft
   result: SendResult
   priceUsd: number | null
+  network?: import('@latch/types').Network
   onContinue: () => void
   onViewReceipt: () => void
 }) {
@@ -53,7 +55,7 @@ export function SendSuccessScreen({
               />
             )}
             {result.hash && !result.proposalId ? (
-              <SendViewTransactionLink hash={result.hash} onView={onViewReceipt} />
+              <SendViewTransactionLink hash={result.hash} network={network} onView={onViewReceipt} />
             ) : null}
           </div>
         </div>

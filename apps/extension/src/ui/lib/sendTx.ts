@@ -2,11 +2,14 @@ import type {
   AccountMode,
   BuildSendTxRequest,
   BuildSendTxResponse,
+  Network,
   SendSignerType,
   SetupSendRulesRequest,
+  SetupSendRulesResponse,
   StoredAccount,
 } from '@latch/types'
 
+import { friendlyError, sendToBackground } from './backgroundClient'
 import { fiatToCrypto } from './sendAmount'
 import { webauthnVerifierAddressFromEnv } from './latchEnv'
 import type { SendDraft } from '../types/send'
@@ -20,6 +23,25 @@ export function sendCryptoAmountFromDraft(draft: SendDraft, priceUsd: number | n
   return fiatToCrypto(draft.amount, priceUsd)
 }
 
+/** Why build-send cannot be assembled from the current draft (user-facing). */
+export function explainSendDraftNotBuildable(
+  draft: SendDraft,
+  account: StoredAccount | null | undefined,
+  priceUsd: number | null
+): string | null {
+  if (!account?.smartAccountAddress?.trim()) return 'No smart account is selected.'
+  if (!draft.token) return 'Select a token to send.'
+  if (!draft.recipientAddress.trim()) return 'Enter a recipient address.'
+  if (draft.inputMode === 'fiat' && (priceUsd == null || priceUsd <= 0)) {
+    return 'USD price is unavailable. Switch the amount to crypto and try again.'
+  }
+  if (!sendCryptoAmountFromDraft(draft, priceUsd)) return 'Enter a valid amount.'
+  if (!draft.token.assetId && !draft.token.sacContractId?.trim()) {
+    return 'This token is missing contract details. Refresh balances and try again.'
+  }
+  return null
+}
+
 export function accountToSignerType(mode: AccountMode): SendSignerType {
   if (mode === 'passkey' || mode === 'multisig') return 'passkey'
   if (mode === 'phantom') return 'phantom'
@@ -29,11 +51,12 @@ export function accountToSignerType(mode: AccountMode): SendSignerType {
 export function buildSendRequestFromDraft(
   draft: SendDraft,
   account: StoredAccount,
-  priceUsd: number | null
+  priceUsd: number | null,
+  network: Network = 'testnet'
 ): BuildSendTxRequest | null {
-  if (!account.smartAccountAddress || !draft.token || !draft.recipientAddress.trim()) return null
+  if (explainSendDraftNotBuildable(draft, account, priceUsd)) return null
   const amount = sendCryptoAmountFromDraft(draft, priceUsd)
-  if (!amount) return null
+  if (!amount || !draft.token) return null
 
   const signerType = accountToSignerType(account.mode)
   const req: BuildSendTxRequest = {
@@ -41,12 +64,20 @@ export function buildSendRequestFromDraft(
     signerType,
     recipient: draft.recipientAddress.trim(),
     amount,
+    network,
   }
 
+  const code = draft.token.code.toUpperCase()
   if (draft.token.assetId) {
     req.assetId = draft.token.assetId
+  } else if (code === 'XLM' && !draft.token.issuer) {
+    // Portfolio rows often omit catalog assetId; backend accepts `native`.
+    req.assetId = 'native'
+    if (draft.token.sacContractId?.trim()) req.contractId = draft.token.sacContractId.trim()
+  } else if (draft.token.sacContractId?.trim()) {
+    req.contractId = draft.token.sacContractId.trim()
   } else {
-    req.contractId = draft.token.sacContractId
+    return null
   }
 
   if (signerType === 'freighter' && account.gAddress) {
@@ -55,17 +86,18 @@ export function buildSendRequestFromDraft(
 
   return req
 }
-
 export function buildSetupRequestFromDraft(
   draft: SendDraft,
   account: StoredAccount,
-  signingAccount?: StoredAccount
+  signingAccount?: StoredAccount,
+  network: Network = 'testnet'
 ): SetupSendRulesRequest | null {
   if (!account.smartAccountAddress || !draft.token) return null
   const signerType = accountToSignerType(account.mode)
   const req: SetupSendRulesRequest = {
     smartAccountAddress: account.smartAccountAddress,
     signerType,
+    network,
   }
 
   if (draft.token.assetId) {
@@ -84,7 +116,7 @@ export function buildSetupRequestFromDraft(
     req.keyDataHex = keyDataHex
     // Backend no longer requires verifierAddress to set up rules (Swagger omits it),
     // but keep sending it when configured for backwards compatibility.
-    const verifierAddress = webauthnVerifierAddressFromEnv()
+    const verifierAddress = webauthnVerifierAddressFromEnv(network)
     if (verifierAddress) req.verifierAddress = verifierAddress
     const credentialId = passkeySource?.passkeyCredentialId?.trim()
     if (credentialId) {
@@ -105,6 +137,32 @@ export function buildSetupRequestFromDraft(
 
 export function isNoContextRuleError(error?: { code?: string; status?: number }): boolean {
   return error?.status === 409 && error?.code === 'NO_CONTEXT_RULE'
+}
+
+/**
+ * Call setup-send-rules only when build-send reports missing context rules.
+ * Not required on every send (testnet often already has rules after deploy).
+ */
+export async function ensureSendRulesConfigured(args: {
+  setupBody: SetupSendRulesRequest
+  signAndSubmit: (build: BuildSendTxResponse) => Promise<unknown>
+  onProgress?: (label: string) => void
+  maxAttempts?: number
+}): Promise<void> {
+  const maxAttempts = args.maxAttempts ?? 5
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    args.onProgress?.('Setting up…')
+    const setupRes = await sendToBackground<SetupSendRulesRequest, SetupSendRulesResponse>({
+      type: 'SETUP_SEND_RULES',
+      payload: args.setupBody,
+    })
+    if (!setupRes.ok) throw new Error(friendlyError(setupRes.error))
+    const setup = setupRes.data!
+    if (setup.alreadyConfigured) return
+    await args.signAndSubmit(setup)
+    if ((setup.remainingSetupCount ?? 0) <= 0) return
+  }
+  throw new Error('Send setup did not complete')
 }
 
 export function isSignerMismatchError(error?: { code?: string; status?: number }): boolean {

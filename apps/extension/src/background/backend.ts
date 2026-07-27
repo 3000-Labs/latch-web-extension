@@ -8,6 +8,7 @@ export {
   createOrConnectPasskey,
   createOrConnectPhantom,
   ensureFreighterSmartAccountDeployed,
+  ensurePasskeySmartAccountDeployed,
   fetchSignPayload,
   getBackendAccounts,
   getFreighterSmartAccountStatus,

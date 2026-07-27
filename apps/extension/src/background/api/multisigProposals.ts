@@ -10,6 +10,7 @@ import type {
 import { latchFetch } from './client'
 import { latchExtensionJsonBody } from './webauthn'
 import { normalizeMultisigProposalDetail } from './multisigNormalize'
+import { withActiveNetwork } from './withActiveNetwork'
 
 export async function listMultisigProposals(
   smartAccountAddress: string
@@ -26,7 +27,7 @@ export async function createMultisigProposal(
 ): Promise<CreateMultisigProposalResponse> {
   return await latchFetch<CreateMultisigProposalResponse>('/api/multisig/proposals', {
     method: 'POST',
-    body: JSON.stringify(req),
+    body: JSON.stringify(await withActiveNetwork(req)),
   })
 }
 
@@ -77,10 +78,12 @@ export async function multisigProposalApproveWebauthn(args: {
     `/api/multisig/proposals/${encodeURIComponent(args.proposalId)}/approve/webauthn`,
     {
       method: 'POST',
-      body: latchExtensionJsonBody({
-        memberId: args.memberId,
-        sigDataXdrHex: args.sigDataXdrHex,
-      }),
+      body: latchExtensionJsonBody(
+        await withActiveNetwork({
+          memberId: args.memberId,
+          sigDataXdrHex: args.sigDataXdrHex,
+        })
+      ),
     }
   )
   return normalizeMultisigProposalDetail(raw)

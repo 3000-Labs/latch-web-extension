@@ -26,8 +26,8 @@ async function sendToBackground<T>(message: BackgroundMessage): Promise<Backgrou
 
 type Surface = 'popup' | 'sidepanel'
 
-function stellarExpertTxUrl(hash: string): string {
-  const net = process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet'
+function stellarExpertTxUrl(hash: string, network: 'testnet' | 'mainnet' = 'testnet'): string {
+  const net = network === 'mainnet' ? 'public' : 'testnet'
   return `https://stellar.expert/explorer/${net}/tx/${encodeURIComponent(hash)}`
 }
 
@@ -45,12 +45,14 @@ function friendlySweepError(err?: { message?: string; code?: string }): string {
 export function MigrationScreen({
   surface: _surface,
   accountId,
+  network = 'testnet',
   onBack,
   onDone,
   onNeedUnlock,
 }: {
   surface: Surface
   accountId: string
+  network?: 'testnet' | 'mainnet'
   onBack: () => void
   onDone: () => void
   onNeedUnlock: () => void
@@ -323,7 +325,7 @@ export function MigrationScreen({
               ) : null}
               {lastSweepTxHash ? (
                 <a
-                  href={stellarExpertTxUrl(lastSweepTxHash)}
+                  href={stellarExpertTxUrl(lastSweepTxHash, network)}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-2 inline-block text-[11px] font-extrabold text-primary underline"

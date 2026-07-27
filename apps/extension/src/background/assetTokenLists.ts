@@ -1,3 +1,5 @@
+import { normalizeStellarContractId } from '@latch/swap'
+
 export type TokenListItem = {
   code: string
   issuer: string
@@ -26,7 +28,8 @@ const LISTS: Record<'mainnet' | 'testnet', string[]> = {
   ],
 }
 
-const STORAGE_KEY_PREFIX = 'latch.tokenListMap.v1'
+/** v2: contract ids normalized to C-address (Lobstr lists previously stored hex). */
+const STORAGE_KEY_PREFIX = 'latch.tokenListMap.v2'
 const LIST_STALE_MS = 24 * 60 * 60 * 1000
 const FETCH_TIMEOUT_MS = 10_000
 
@@ -42,12 +45,16 @@ function normalizeAssetEntry(raw: unknown): TokenListItem | null {
   const code = typeof o.code === 'string' ? o.code.trim() : ''
   const issuer = typeof o.issuer === 'string' ? o.issuer.trim() : ''
   const icon = typeof o.icon === 'string' ? o.icon.trim() : ''
-  const contract =
+  const rawContract =
     typeof o.contract === 'string'
       ? o.contract.trim()
       : typeof o.contract_id === 'string'
         ? o.contract_id.trim()
         : undefined
+  // Lobstr curated lists ship 32-byte hex; normalize to C-address for SAC APIs.
+  const contract = rawContract
+    ? (normalizeStellarContractId(rawContract) ?? undefined)
+    : undefined
   const name = typeof o.name === 'string' ? o.name.trim() : undefined
   const decimalsRaw = o.decimals
   const decimals =

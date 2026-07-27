@@ -6,8 +6,16 @@ import type {
   BackendWebauthnRegistrationFinishResponse,
 } from '@latch/types'
 
-import { latchFetch } from './client'
+import { latchApiBaseUrl } from './config'
+import { latchFetchAbsoluteWithResponse } from './client'
 import { normalizeWebauthnCredentialForApi } from './webauthnCredential'
+import {
+  captureSidAfterBegin,
+  clearWebauthnSession,
+  persistWebauthnCeremony,
+  webauthnSessionCookieHeader,
+} from './webauthnSession'
+import { withActiveNetwork } from './withActiveNetwork'
 
 /** When set, WebAuthn `/begin` routes should use `rp.id === chromeExtensionId` (Chrome extension WebAuthn). */
 function chromeExtensionIdForWebauthn(): string | undefined {
@@ -23,6 +31,11 @@ function chromeExtensionIdForWebauthn(): string | undefined {
     // ignore
   }
   return undefined
+}
+
+function chromeExtensionHeaders(): Record<string, string> {
+  const id = chromeExtensionIdForWebauthn()
+  return id ? { 'X-Latch-Chrome-Extension-Id': id } : {}
 }
 
 export function webauthnBeginBody(extra: Record<string, unknown> = {}): string {
@@ -42,21 +55,72 @@ export function latchExtensionJsonBody(payload: object): string {
   })
 }
 
-export function webauthnFinishBody(
+export async function webauthnFinishBody(
   payload: object,
   ceremony: 'registration' | 'authentication'
-): string {
+): Promise<string> {
   const id = chromeExtensionIdForWebauthn()
   const body = payload as Record<string, unknown>
   const response = body.response
   const normalizedResponse =
     response != null ? normalizeWebauthnCredentialForApi(response, ceremony) : response
+  const withNet = await withActiveNetwork(body)
 
   return JSON.stringify({
-    ...body,
+    ...withNet,
     ...(normalizedResponse != null ? { response: normalizedResponse } : {}),
     ...(id ? { chromeExtensionId: id } : {}),
   })
+}
+
+function challengeFromBeginOptions(options: unknown): string | undefined {
+  if (!options || typeof options !== 'object') return undefined
+  const challenge = (options as { challenge?: unknown }).challenge
+  return typeof challenge === 'string' && challenge.trim() !== '' ? challenge : undefined
+}
+
+async function passkeyBegin(
+  path: string,
+  kind: 'registration' | 'authentication',
+  extra: Record<string, unknown> = {}
+): Promise<BackendWebauthnBeginResponse> {
+  const baseUrl = latchApiBaseUrl()
+  const { res, data } = await latchFetchAbsoluteWithResponse<BackendWebauthnBeginResponse>(
+    `${baseUrl}${path}`,
+    {
+      method: 'POST',
+      body: webauthnBeginBody(extra),
+      headers: chromeExtensionHeaders(),
+    }
+  )
+  const sid = await captureSidAfterBegin(baseUrl, res)
+  await persistWebauthnCeremony(kind, {
+    sid,
+    challenge: challengeFromBeginOptions(data?.options),
+  })
+  return data
+}
+
+async function passkeyFinish<TRes>(
+  path: string,
+  kind: 'registration' | 'authentication',
+  req: object
+): Promise<TRes> {
+  const baseUrl = latchApiBaseUrl()
+  const cookieHeaders = await webauthnSessionCookieHeader(kind)
+  try {
+    const { data } = await latchFetchAbsoluteWithResponse<TRes>(`${baseUrl}${path}`, {
+      method: 'POST',
+      body: await webauthnFinishBody(req, kind),
+      headers: {
+        ...chromeExtensionHeaders(),
+        ...cookieHeaders,
+      },
+    })
+    return data
+  } finally {
+    await clearWebauthnSession()
+  }
 }
 
 export async function passkeyRegistrationBegin(args?: {
@@ -66,29 +130,21 @@ export async function passkeyRegistrationBegin(args?: {
   if (args?.displayName !== undefined && args.displayName !== '') {
     extra.displayName = args.displayName
   }
-  return latchFetch<BackendWebauthnBeginResponse>('/api/webauthn/registration/begin', {
-    method: 'POST',
-    body: webauthnBeginBody(extra),
-  })
+  return passkeyBegin('/api/webauthn/registration/begin', 'registration', extra)
 }
 
 export async function passkeyRegistrationFinish(
   req: BackendWebauthnRegistrationFinishRequest
 ): Promise<BackendWebauthnRegistrationFinishResponse> {
-  return latchFetch<BackendWebauthnRegistrationFinishResponse>(
+  return passkeyFinish<BackendWebauthnRegistrationFinishResponse>(
     '/api/webauthn/registration/finish',
-    {
-      method: 'POST',
-      body: webauthnFinishBody(req, 'registration'),
-    }
+    'registration',
+    req
   )
 }
 
 export async function passkeyAuthenticationBegin(): Promise<BackendWebauthnBeginResponse> {
-  return latchFetch<BackendWebauthnBeginResponse>('/api/webauthn/authentication/begin', {
-    method: 'POST',
-    body: webauthnBeginBody({}),
-  })
+  return passkeyBegin('/api/webauthn/authentication/begin', 'authentication')
 }
 
 /** Wallet-scoped WebAuthn begin for `/v1/auth/sign-in` (sets extension rpId). */
@@ -96,20 +152,18 @@ export async function passkeyAuthenticationBeginForWallet(
   wallet: string,
   keyType: string
 ): Promise<BackendWebauthnBeginResponse> {
-  return latchFetch<BackendWebauthnBeginResponse>('/api/webauthn/authentication/begin', {
-    method: 'POST',
-    body: webauthnBeginBody({ wallet: wallet.trim(), key_type: keyType }),
+  return passkeyBegin('/api/webauthn/authentication/begin', 'authentication', {
+    wallet: wallet.trim(),
+    key_type: keyType,
   })
 }
 
 export async function passkeyAuthenticationFinish(
   req: BackendWebauthnAuthenticationFinishRequest
 ): Promise<BackendWebauthnAuthenticationFinishResponse> {
-  return latchFetch<BackendWebauthnAuthenticationFinishResponse>(
+  return passkeyFinish<BackendWebauthnAuthenticationFinishResponse>(
     '/api/webauthn/authentication/finish',
-    {
-      method: 'POST',
-      body: webauthnFinishBody(req, 'authentication'),
-    }
+    'authentication',
+    req
   )
 }

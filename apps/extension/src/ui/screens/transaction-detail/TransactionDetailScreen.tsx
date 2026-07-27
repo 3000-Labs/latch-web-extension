@@ -10,8 +10,8 @@ import { ViewOnStellarExplorerButton } from './ViewOnStellarExplorerButton'
 
 export type TransactionDetailSurface = 'popup' | 'sidepanel'
 
-function stellarExpertTxUrl(hash: string): string {
-  const net = process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet'
+function stellarExpertTxUrl(hash: string, network: 'testnet' | 'mainnet' = 'testnet'): string {
+  const net = network === 'mainnet' ? 'public' : 'testnet'
   return `https://stellar.expert/explorer/${net}/tx/${encodeURIComponent(hash)}`
 }
 
@@ -37,10 +37,12 @@ function formatStepTime(iso: string): string {
 export function TransactionDetailScreen({
   surface: _surface,
   detail,
+  network = 'testnet',
   onBack,
 }: {
   surface: TransactionDetailSurface
   detail: TransactionDetailVm
+  network?: 'testnet' | 'mainnet'
   onBack: () => void
 }) {
   const stepTimes: [string, string, string] = [
@@ -68,7 +70,7 @@ export function TransactionDetailScreen({
         blockNumber={detail.blockNumber}
         networkLabel={detail.networkLabel}
       />
-      <ViewOnStellarExplorerButton href={stellarExpertTxUrl(detail.transactionHash)} />
+      <ViewOnStellarExplorerButton href={stellarExpertTxUrl(detail.transactionHash, network)} />
     </div>
   )
 }

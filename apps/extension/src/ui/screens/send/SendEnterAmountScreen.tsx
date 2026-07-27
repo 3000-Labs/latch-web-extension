@@ -44,6 +44,14 @@ export function SendEnterAmountScreen({
   }, [cryptoAmount, token.amount, token.decimals])
 
   const handlePresetUsd = (usd: number) => {
+    // Prefer crypto amounts so send can proceed even if the USD price later drops out.
+    if (priceUsd != null && priceUsd > 0) {
+      const crypto = fiatToCrypto(String(usd), priceUsd)
+      if (crypto) {
+        onDraftChange({ amount: crypto, inputMode: 'crypto' })
+        return
+      }
+    }
     onDraftChange({ amount: String(usd), inputMode: 'fiat' as SendInputMode })
   }
 
@@ -53,6 +61,7 @@ export function SendEnterAmountScreen({
 
   const toggleMode = () => {
     if (draft.inputMode === 'crypto') {
+      if (priceUsd == null || priceUsd <= 0) return
       const fiat = cryptoToFiat(draft.amount || '0', priceUsd)
       onDraftChange({
         inputMode: 'fiat',
@@ -92,7 +101,10 @@ export function SendEnterAmountScreen({
             onAmountChange={(amount) => onDraftChange({ amount })}
             onToggleMode={toggleMode}
           />
-          <SendQuickAmountButtons onSelect={handlePresetUsd} />
+          <SendQuickAmountButtons
+            onSelect={handlePresetUsd}
+            disabled={priceUsd == null || priceUsd <= 0}
+          />
         </div>
 
         <SendAvailableBalanceRow balance={token.amount} symbol={token.code} onMax={handleMax} />

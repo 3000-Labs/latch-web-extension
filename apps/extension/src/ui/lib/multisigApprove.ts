@@ -9,10 +9,10 @@ import type {
 } from '@latch/types'
 
 import { signAuthEntry } from '@stellar/freighter-api'
-import { Networks } from '@stellar/stellar-sdk'
 import { startAuthentication } from '@simplewebauthn/browser'
 
 import { normalizeDelegatedSignatureBase64 } from '../../lib/delegatedAuthSubmit'
+import { fetchActiveNetwork, networkPassphraseFor } from './activeNetwork'
 import { friendlyError, sendToBackground } from './backgroundClient'
 import {
   assertPasskeyAssertionMatchesAuthDigest,
@@ -316,8 +316,7 @@ export async function approveMultisigProposalWithDelegated(args: {
   const { templateXdr, signerAddress: beginSignerAddress } = parseDelegatedBeginTemplate(
     beginRes.data
   )
-  const networkPassphrase =
-    process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
+  const networkPassphrase = networkPassphraseFor((await fetchActiveNetwork()).network)
 
   let signedAuthEntryBase64: string
   let signerAddress: string

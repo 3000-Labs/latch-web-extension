@@ -6,38 +6,41 @@ import type {
   SwapQuotePayload,
 } from '@latch/types'
 
-import { AQUARIUS_CONFIG } from '@latch/swap'
+import { AQUARIUS_CONFIG, SOROSWAP_CONFIG } from '@latch/swap'
 
+import { fetchActiveNetwork } from './activeNetwork'
 import { webauthnVerifierAddressFromEnv } from './latchEnv'
 import { accountToSignerType, isDelegatedSendBuild, passkeySetupPrerequisiteError } from './sendTx'
 
-function stellarNetworkFromEnv(): Network {
-  return process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'mainnet' : 'testnet'
-}
-
 export function resolveSwapRouterContractId(
   quote: SwapQuotePayload,
-  network: Network = stellarNetworkFromEnv()
+  network: Network
 ): string | null {
   const payload = quote.buildPayload as { routerContractId?: string; kind?: string }
   if (payload.routerContractId?.startsWith('C')) return payload.routerContractId
 
-  if (quote.providerId === 'aquarius') {
+  if (quote.providerId === 'aquarius' || payload.kind === 'aquarius') {
     return AQUARIUS_CONFIG[network].routerContractId
+  }
+
+  if (quote.providerId === 'soroswap' || payload.kind === 'soroswap') {
+    return SOROSWAP_CONFIG[network].routerContractId
   }
 
   return null
 }
 
-export function buildSetupSwapRequestFromQuote(
+export async function buildSetupSwapRequestFromQuote(
   quote: SwapQuotePayload,
   account: StoredAccount
-): SetupSwapRulesRequest | null {
+): Promise<SetupSwapRulesRequest | null> {
   if (!account.smartAccountAddress) return null
 
-  const network = stellarNetworkFromEnv()
+  const { network } = await fetchActiveNetwork()
   const routerContractId = resolveSwapRouterContractId(quote, network)
-  if (!routerContractId) return null
+  // Aquarius needs an explicit router target. Soroswap / Default-rule backends
+  // accept optional routerContractId; still send it when known.
+  if (quote.providerId === 'aquarius' && !routerContractId) return null
 
   const signerType = accountToSignerType(account.mode)
   const req: SetupSwapRulesRequest = {
@@ -45,16 +48,18 @@ export function buildSetupSwapRequestFromQuote(
     signerType,
     network,
     providerId: quote.providerId,
-    routerContractId,
   }
+  if (routerContractId) req.routerContractId = routerContractId
 
   if (signerType === 'passkey') {
     const keyDataHex = account.passkeyKeyDataHex?.trim()
     if (!keyDataHex) return null
-    const verifierAddress = webauthnVerifierAddressFromEnv()
-    if (!verifierAddress) return null
     req.keyDataHex = keyDataHex
-    req.verifierAddress = verifierAddress
+    // Backend owns the verifier (Swagger omits it); send when configured for
+    // backwards compatibility — same as setup-send-rules. Do not block swap
+    // confirm when PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS[_MAINNET] is unset.
+    const verifierAddress = webauthnVerifierAddressFromEnv(network)
+    if (verifierAddress) req.verifierAddress = verifierAddress
     if (account.passkeyCredentialId?.trim()) {
       req.credentialId = account.passkeyCredentialId.trim()
     }
@@ -71,10 +76,10 @@ export function buildSetupSwapRequestFromQuote(
   return req
 }
 
-export function swapSetupPrerequisiteError(
+export async function swapSetupPrerequisiteError(
   account: StoredAccount,
   quote: SwapQuotePayload
-): string | null {
+): Promise<string | null> {
   const passkeyErr = passkeySetupPrerequisiteError(account)
   if (passkeyErr) return passkeyErr
   const signerType = accountToSignerType(account.mode)
@@ -84,7 +89,8 @@ export function swapSetupPrerequisiteError(
   if (signerType === 'phantom' && !account.phantomPublicKeyHex?.trim()) {
     return 'Missing Phantom public key for this account. Reconnect Phantom in Settings.'
   }
-  if (!resolveSwapRouterContractId(quote)) {
+  const { network } = await fetchActiveNetwork()
+  if (quote.providerId === 'aquarius' && !resolveSwapRouterContractId(quote, network)) {
     return 'Swap router is not configured for this provider.'
   }
   return null

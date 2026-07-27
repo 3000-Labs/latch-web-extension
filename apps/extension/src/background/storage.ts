@@ -4,17 +4,25 @@ import type {
   GetAccountsResponse,
   MultisigDraftMeta,
   MultisigPendingInvite,
+  Network,
   PendingDappRequest,
   StoredAccount,
 } from '@latch/types'
 
 import { clearAllMnemonicVaultRecords } from './mnemonicVault'
+import { getActiveNetwork } from './network/config'
 
 const STORAGE_KEYS = {
+  /** Legacy flat setup; migrated into setupStateByNetwork.testnet */
   setupState: 'latch.setupState',
+  setupStateByNetwork: 'latch.setupState.byNetwork',
   legacyAccountPublicKey: 'latch.accountPublicKey',
+  /** Legacy flat accounts; migrated into accountsByNetwork.testnet */
   accounts: 'latch.accounts',
+  accountsByNetwork: 'latch.accounts.byNetwork',
+  /** Legacy flat active id; migrated into activeAccountIdByNetwork.testnet */
   activeAccountId: 'latch.activeAccountId',
+  activeAccountIdByNetwork: 'latch.activeAccountId.byNetwork',
   dappPermissions: 'latch.dappPermissions',
   pendingDappRequests: 'latch.pendingDappRequests',
   multisigPendingInvites: 'latch.multisigPendingInvites',
@@ -24,19 +32,157 @@ const STORAGE_KEYS = {
 
 type DappPermissionsStore = Record<string, DappPermission[] | undefined>
 
+type AccountsByNetwork = Partial<Record<Network, StoredAccount[]>>
+type ActiveIdByNetwork = Partial<Record<Network, string | undefined>>
+type SetupStateByNetwork = Partial<Record<Network, string | undefined>>
+
 export function storageKeys() {
   return STORAGE_KEYS
 }
 
+let accountsMigratePromise: Promise<void> | null = null
+
+/**
+ * One-time: move flat latch.accounts / activeAccountId into the testnet bucket.
+ * Idempotent; safe to call on every getAccounts().
+ */
+async function ensureAccountsPartitionMigrated(): Promise<void> {
+  if (accountsMigratePromise) return accountsMigratePromise
+  accountsMigratePromise = (async () => {
+    const res = await chrome.storage.local.get([
+      STORAGE_KEYS.accounts,
+      STORAGE_KEYS.activeAccountId,
+      STORAGE_KEYS.accountsByNetwork,
+      STORAGE_KEYS.activeAccountIdByNetwork,
+      STORAGE_KEYS.setupState,
+      STORAGE_KEYS.setupStateByNetwork,
+    ])
+
+    const byNetwork = (res[STORAGE_KEYS.accountsByNetwork] as AccountsByNetwork | undefined) ?? {}
+    const activeByNetwork =
+      (res[STORAGE_KEYS.activeAccountIdByNetwork] as ActiveIdByNetwork | undefined) ?? {}
+    const setupByNetwork =
+      (res[STORAGE_KEYS.setupStateByNetwork] as SetupStateByNetwork | undefined) ?? {}
+
+    const flatAccounts = res[STORAGE_KEYS.accounts] as StoredAccount[] | undefined
+    const flatActive = res[STORAGE_KEYS.activeAccountId] as string | undefined
+    const flatSetup = res[STORAGE_KEYS.setupState] as string | undefined
+
+    const patch: Record<string, unknown> = {}
+    const remove: string[] = []
+
+    const hasPartitioned =
+      Array.isArray(byNetwork.testnet) || Array.isArray(byNetwork.mainnet)
+
+    if (!hasPartitioned && Array.isArray(flatAccounts) && flatAccounts.length > 0) {
+      patch[STORAGE_KEYS.accountsByNetwork] = {
+        ...byNetwork,
+        testnet: flatAccounts,
+      }
+      if (flatActive) {
+        patch[STORAGE_KEYS.activeAccountIdByNetwork] = {
+          ...activeByNetwork,
+          testnet: flatActive,
+        }
+      }
+      remove.push(STORAGE_KEYS.accounts, STORAGE_KEYS.activeAccountId)
+    } else if (!hasPartitioned && !Array.isArray(byNetwork.testnet)) {
+      // Ensure empty buckets exist so later writes use partitioned keys.
+      patch[STORAGE_KEYS.accountsByNetwork] = {
+        testnet: byNetwork.testnet ?? [],
+        mainnet: byNetwork.mainnet ?? [],
+      }
+      if (Object.keys(activeByNetwork).length === 0) {
+        patch[STORAGE_KEYS.activeAccountIdByNetwork] = { testnet: undefined, mainnet: undefined }
+      }
+      if (Array.isArray(flatAccounts)) {
+        remove.push(STORAGE_KEYS.accounts)
+      }
+      if (flatActive !== undefined) {
+        remove.push(STORAGE_KEYS.activeAccountId)
+      }
+    }
+
+    if (setupByNetwork.testnet === undefined && setupByNetwork.mainnet === undefined && flatSetup) {
+      patch[STORAGE_KEYS.setupStateByNetwork] = {
+        ...setupByNetwork,
+        testnet: flatSetup,
+      }
+      remove.push(STORAGE_KEYS.setupState)
+    }
+
+    if (Object.keys(patch).length > 0) {
+      await chrome.storage.local.set(patch)
+    }
+    if (remove.length > 0) {
+      await chrome.storage.local.remove(remove)
+    }
+  })().finally(() => {
+    // Allow retry if migration threw; otherwise keep promise for dedupe within session.
+  })
+
+  try {
+    await accountsMigratePromise
+  } catch (err) {
+    accountsMigratePromise = null
+    throw err
+  }
+}
+
+async function readAccountsBucket(network: Network): Promise<{
+  accounts: StoredAccount[]
+  activeAccountId?: string
+}> {
+  await ensureAccountsPartitionMigrated()
+  const res = await chrome.storage.local.get([
+    STORAGE_KEYS.accountsByNetwork,
+    STORAGE_KEYS.activeAccountIdByNetwork,
+  ])
+  const byNetwork = (res[STORAGE_KEYS.accountsByNetwork] as AccountsByNetwork | undefined) ?? {}
+  const activeByNetwork =
+    (res[STORAGE_KEYS.activeAccountIdByNetwork] as ActiveIdByNetwork | undefined) ?? {}
+  return {
+    accounts: byNetwork[network] ?? [],
+    activeAccountId: activeByNetwork[network],
+  }
+}
+
+async function writeAccountsBucket(
+  network: Network,
+  accounts: StoredAccount[],
+  activeAccountId: string | undefined
+): Promise<void> {
+  await ensureAccountsPartitionMigrated()
+  const res = await chrome.storage.local.get([
+    STORAGE_KEYS.accountsByNetwork,
+    STORAGE_KEYS.activeAccountIdByNetwork,
+  ])
+  const byNetwork = (res[STORAGE_KEYS.accountsByNetwork] as AccountsByNetwork | undefined) ?? {}
+  const activeByNetwork =
+    (res[STORAGE_KEYS.activeAccountIdByNetwork] as ActiveIdByNetwork | undefined) ?? {}
+
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.accountsByNetwork]: { ...byNetwork, [network]: accounts },
+    [STORAGE_KEYS.activeAccountIdByNetwork]: {
+      ...activeByNetwork,
+      [network]: activeAccountId,
+    },
+  })
+}
+
+export async function getAccountsForNetwork(network: Network): Promise<GetAccountsResponse> {
+  return await readAccountsBucket(network)
+}
+
 export async function getAccounts(): Promise<GetAccountsResponse> {
-  const res = await chrome.storage.local.get([STORAGE_KEYS.accounts, STORAGE_KEYS.activeAccountId])
-  const accounts = (res[STORAGE_KEYS.accounts] as StoredAccount[] | undefined) ?? []
-  const activeAccountId = res[STORAGE_KEYS.activeAccountId] as string | undefined
-  return { accounts, activeAccountId }
+  const network = await getActiveNetwork()
+  return await readAccountsBucket(network)
 }
 
 export async function setActiveAccount(accountId: string): Promise<void> {
-  await chrome.storage.local.set({ [STORAGE_KEYS.activeAccountId]: accountId })
+  const network = await getActiveNetwork()
+  const { accounts } = await readAccountsBucket(network)
+  await writeAccountsBucket(network, accounts, accountId)
 }
 
 function newId() {
@@ -46,7 +192,8 @@ function newId() {
 export async function upsertAccount(
   input: Omit<StoredAccount, 'id' | 'createdAt'> & Partial<Pick<StoredAccount, 'id' | 'createdAt'>>
 ) {
-  const { accounts, activeAccountId } = await getAccounts()
+  const network = await getActiveNetwork()
+  const { accounts, activeAccountId } = await readAccountsBucket(network)
 
   const now = Date.now()
   const id = input.id ?? newId()
@@ -57,12 +204,29 @@ export async function upsertAccount(
   const nextAccounts =
     existingIdx >= 0 ? accounts.map((a, i) => (i === existingIdx ? next : a)) : [...accounts, next]
 
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.accounts]: nextAccounts,
-    [STORAGE_KEYS.activeAccountId]: activeAccountId ?? id,
-  })
+  const nextActive = activeAccountId ?? id
+  await writeAccountsBucket(network, nextAccounts, nextActive)
 
-  return { account: next, activeAccountId: activeAccountId ?? id }
+  return { account: next, activeAccountId: nextActive }
+}
+
+/** Directly rewrite a stored account's C-address in a specific network bucket. */
+export async function patchAccountSmartAccountAddress(args: {
+  network: Network
+  accountId: string
+  smartAccountAddress: string
+}): Promise<StoredAccount | null> {
+  const addr = args.smartAccountAddress.trim()
+  if (!addr) return null
+  const { accounts, activeAccountId } = await readAccountsBucket(args.network)
+  const idx = accounts.findIndex((a) => a.id === args.accountId)
+  if (idx < 0) return null
+  const prev = accounts[idx]!
+  if (prev.smartAccountAddress === addr) return prev
+  const next: StoredAccount = { ...prev, smartAccountAddress: addr }
+  const nextAccounts = accounts.map((a, i) => (i === idx ? next : a))
+  await writeAccountsBucket(args.network, nextAccounts, activeAccountId)
+  return next
 }
 
 export async function createAccount(params: {
@@ -83,6 +247,11 @@ export async function createAccount(params: {
   multisigMembersSnapshot?:
     | import('@latch/types').MultisigDraftMember[]
     | import('@latch/types').CosignMemberInit[]
+  /**
+   * When false/omitted, never replace an existing passkey account's C-address with a
+   * different one (guards against create-or-connect factory drift). Repair flows set true.
+   */
+  replaceSmartAccountAddress?: boolean
 }) {
   const { accounts } = await getAccounts()
 
@@ -122,15 +291,51 @@ export async function createAccount(params: {
     )
   }
 
+  // Resolve the passkey pointer as a consistent (credentialId, keyDataHex) pair.
+  // `passkeyKeyDataHex` is `uncompressedPubkey || credentialIdBytes`, so the
+  // credential id and key data MUST stay in sync. PASSKEY_AUTH_FINISH upserts
+  // sibling accounts with only a `credentialId` (no keyDataHex); those must not
+  // clobber an existing complete pair, otherwise later signing fails with
+  // "Missing passkey data" even though a working passkey exists.
+  let passkeyCredentialId = params.passkeyCredentialId ?? existing?.passkeyCredentialId
+  let passkeyKeyDataHex = params.passkeyKeyDataHex ?? existing?.passkeyKeyDataHex
+  if (params.mode === 'passkey') {
+    const incomingHasFullPair = !!params.passkeyCredentialId && !!params.passkeyKeyDataHex
+    const existingHasFullPair = !!existing?.passkeyCredentialId && !!existing?.passkeyKeyDataHex
+    if (incomingHasFullPair) {
+      // Authoritative, self-consistent pair from registration / active login.
+      passkeyCredentialId = params.passkeyCredentialId
+      passkeyKeyDataHex = params.passkeyKeyDataHex
+    } else if (existingHasFullPair && existing) {
+      // Keep the existing complete pair rather than overwriting the credential id
+      // with one that has no matching key data (incomplete sibling payload).
+      passkeyCredentialId = existing.passkeyCredentialId
+      passkeyKeyDataHex = existing.passkeyKeyDataHex
+    }
+  }
+
   return await upsertAccount({
     id: existing?.id,
     createdAt: existing?.createdAt,
     mode: params.mode,
-    smartAccountAddress: params.smartAccountAddress,
+    smartAccountAddress: (() => {
+      const incoming = params.smartAccountAddress?.trim() ?? ''
+      const prev = existing?.smartAccountAddress?.trim() ?? ''
+      if (
+        params.mode === 'passkey' &&
+        prev &&
+        incoming &&
+        prev !== incoming &&
+        !params.replaceSmartAccountAddress
+      ) {
+        return prev
+      }
+      return params.smartAccountAddress
+    })(),
     gAddress: params.gAddress,
     phantomPublicKeyHex: params.phantomPublicKeyHex,
-    passkeyCredentialId: params.passkeyCredentialId,
-    passkeyKeyDataHex: params.passkeyKeyDataHex ?? existing?.passkeyKeyDataHex,
+    passkeyCredentialId,
+    passkeyKeyDataHex,
     label: params.label ?? existing?.label,
     multisigThreshold: params.multisigThreshold ?? existing?.multisigThreshold,
     multisigMemberId: params.multisigMemberId ?? existing?.multisigMemberId,
@@ -227,14 +432,44 @@ export async function dismissMultisigProposalsBanner(accountId: string): Promise
 }
 
 export async function renameAccount(args: { accountId: string; label?: string }) {
-  const { accounts, activeAccountId } = await getAccounts()
+  const network = await getActiveNetwork()
+  const { accounts, activeAccountId } = await readAccountsBucket(network)
   const nextAccounts = accounts.map((a) =>
     a.id === args.accountId ? { ...a, label: args.label } : a
   )
-  await chrome.storage.local.set({
-    [STORAGE_KEYS.accounts]: nextAccounts,
-    [STORAGE_KEYS.activeAccountId]: activeAccountId,
-  })
+  await writeAccountsBucket(network, nextAccounts, activeAccountId)
+}
+
+export async function getSetupStateForNetwork(network: Network): Promise<string | undefined> {
+  await ensureAccountsPartitionMigrated()
+  const res = await chrome.storage.local.get([
+    STORAGE_KEYS.setupStateByNetwork,
+    STORAGE_KEYS.setupState,
+  ])
+  const byNetwork = (res[STORAGE_KEYS.setupStateByNetwork] as SetupStateByNetwork | undefined) ?? {}
+  if (byNetwork[network] !== undefined) return byNetwork[network]
+  // Legacy flat key only applies to testnet.
+  if (network === 'testnet') {
+    return res[STORAGE_KEYS.setupState] as string | undefined
+  }
+  return undefined
+}
+
+export async function setSetupStateForNetwork(
+  network: Network,
+  setupState: string,
+  accountPublicKey?: string
+): Promise<void> {
+  await ensureAccountsPartitionMigrated()
+  const res = await chrome.storage.local.get([STORAGE_KEYS.setupStateByNetwork])
+  const byNetwork = (res[STORAGE_KEYS.setupStateByNetwork] as SetupStateByNetwork | undefined) ?? {}
+  const patch: Record<string, unknown> = {
+    [STORAGE_KEYS.setupStateByNetwork]: { ...byNetwork, [network]: setupState },
+  }
+  if (accountPublicKey !== undefined) {
+    patch[STORAGE_KEYS.legacyAccountPublicKey] = accountPublicKey
+  }
+  await chrome.storage.local.set(patch)
 }
 
 export async function getDappPermissions(origin: string): Promise<DappPermission[]> {
@@ -271,12 +506,20 @@ export async function removePendingDappRequest(requestId: string) {
   })
 }
 
+/** Drop durable queue entries that cannot complete (e.g. SW restarted). */
+export async function clearPendingDappRequests() {
+  await chrome.storage.local.remove([STORAGE_KEYS.pendingDappRequests])
+}
+
 export async function clearSession() {
   await clearAllMnemonicVaultRecords()
   await chrome.storage.local.remove([
     STORAGE_KEYS.accounts,
     STORAGE_KEYS.activeAccountId,
+    STORAGE_KEYS.accountsByNetwork,
+    STORAGE_KEYS.activeAccountIdByNetwork,
     STORAGE_KEYS.setupState,
+    STORAGE_KEYS.setupStateByNetwork,
     STORAGE_KEYS.legacyAccountPublicKey,
     STORAGE_KEYS.dappPermissions,
     STORAGE_KEYS.pendingDappRequests,
@@ -284,12 +527,26 @@ export async function clearSession() {
 }
 
 export async function disconnectSessionForLogoutDev() {
+  const network = await getActiveNetwork()
+  const res = await chrome.storage.local.get([
+    STORAGE_KEYS.activeAccountIdByNetwork,
+    STORAGE_KEYS.setupStateByNetwork,
+  ])
+  const activeByNetwork =
+    (res[STORAGE_KEYS.activeAccountIdByNetwork] as ActiveIdByNetwork | undefined) ?? {}
+  const setupByNetwork =
+    (res[STORAGE_KEYS.setupStateByNetwork] as SetupStateByNetwork | undefined) ?? {}
+
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.activeAccountIdByNetwork]: { ...activeByNetwork, [network]: undefined },
+    [STORAGE_KEYS.setupStateByNetwork]: { ...setupByNetwork, [network]: 'new' },
+  })
   await chrome.storage.local.remove([
-    STORAGE_KEYS.activeAccountId,
-    STORAGE_KEYS.setupState,
     STORAGE_KEYS.legacyAccountPublicKey,
     STORAGE_KEYS.dappPermissions,
     STORAGE_KEYS.pendingDappRequests,
+    STORAGE_KEYS.activeAccountId,
+    STORAGE_KEYS.setupState,
   ])
 }
 
@@ -307,4 +564,9 @@ export async function migrateLegacyPublicKeyIfNeeded() {
 
   // We don't know smartAccountAddress; keep as gAddress for now (treated as freighter-ish).
   await createAccount({ mode: 'freighter', smartAccountAddress: '', gAddress: pk })
+}
+
+/** Reset migration latch for tests. */
+export function resetAccountsPartitionMigrationForTests(): void {
+  accountsMigratePromise = null
 }

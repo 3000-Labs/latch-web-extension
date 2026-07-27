@@ -1,18 +1,18 @@
 import type { PortfolioTokenProbe } from '@latch/stellar'
 
-import { getStellarNetworkFromEnv } from './migration/env'
+import { getActiveNetwork } from './network/config'
 
 const MAX_KNOWN_PROBES = 20
 const STORAGE_KEY_PREFIX = 'latch.knownSacProbes.v1'
 
-function storageKey(accountId: string): string {
-  const network = getStellarNetworkFromEnv()
+async function storageKey(accountId: string): Promise<string> {
+  const network = await getActiveNetwork()
   return `${STORAGE_KEY_PREFIX}:${network}:${accountId}`
 }
 
 export async function getKnownSacProbes(accountId: string): Promise<PortfolioTokenProbe[]> {
   try {
-    const key = storageKey(accountId)
+    const key = await storageKey(accountId)
     const r = await chrome.storage.local.get([key])
     const raw = r[key]
     if (!Array.isArray(raw)) return []
@@ -44,7 +44,8 @@ export async function recordKnownSacProbe(
     ...filtered,
   ].slice(0, MAX_KNOWN_PROBES)
   try {
-    await chrome.storage.local.set({ [storageKey(accountId)]: next })
+    const key = await storageKey(accountId)
+    await chrome.storage.local.set({ [key]: next })
   } catch {
     // best-effort
   }

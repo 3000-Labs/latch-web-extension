@@ -17,6 +17,7 @@ export {
   ensureFreighterSmartAccountDeployed,
   createOrConnectPhantom,
   createOrConnectPasskey,
+  ensurePasskeySmartAccountDeployed,
 } from './smartAccount'
 export {
   buildSendTx,

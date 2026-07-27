@@ -1,8 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import type { BuildSendTxResponse, StoredAccount } from '@latch/types'
+import type { BuildSendTxResponse, StoredAccount, SwapQuotePayload } from '@latch/types'
 
-import { swapBuildNeedsSignerReconfigure } from './swapTx'
+import {
+  resolveSwapRouterContractId,
+  swapBuildNeedsSignerReconfigure,
+} from './swapTx'
+
+vi.mock('./activeNetwork', () => ({
+  fetchActiveNetwork: vi.fn(async () => ({ network: 'mainnet' as const })),
+}))
 
 const passkeyAccount: StoredAccount = {
   id: '1',
@@ -29,6 +36,75 @@ function baseBuild(overrides: Partial<BuildSendTxResponse> = {}): BuildSendTxRes
     ...overrides,
   }
 }
+
+function baseQuote(overrides: Partial<SwapQuotePayload> = {}): SwapQuotePayload {
+  return {
+    providerId: 'soroswap',
+    providerName: 'Soroswap',
+    amountInRaw: '10000000',
+    amountOutRaw: '9000000',
+    amountOutMinRaw: '8900000',
+    pathLabels: ['XLM', 'USDC'],
+    expiresAtMs: Date.now() + 60_000,
+    slippageBps: 50,
+    assetIn: {
+      id: 'xlm',
+      assetId: 'native',
+      symbol: 'XLM',
+      name: 'Stellar',
+      contractId: 'CDLZFC3SYJYDZT7K67MOXKV5WG76VMTOMEBV',
+      decimals: 7,
+      balance: '0',
+    },
+    assetOut: {
+      id: 'usdc',
+      assetId: 'USDC',
+      symbol: 'USDC',
+      name: 'USD Coin',
+      contractId: 'CCW67TSZV3SSS2HXMBQ5JFGCKJNXKZM7UQUWUZPUTHXTSYAOBMTK',
+      decimals: 7,
+      balance: '0',
+    },
+    buildPayload: { kind: 'soroswap', quote: {} },
+    ...overrides,
+  }
+}
+
+describe('resolveSwapRouterContractId', () => {
+  it('resolves Soroswap aggregator on mainnet when payload omits router', () => {
+    expect(resolveSwapRouterContractId(baseQuote(), 'mainnet')).toBe(
+      'CAYP3UWLJM7ZPTUKL6R6BFGTRWLZ46LRKOXTERI2K6BIJAWGYY62TXTO'
+    )
+  })
+
+  it('prefers routerContractId from the build payload when present', () => {
+    expect(
+      resolveSwapRouterContractId(
+        baseQuote({
+          buildPayload: {
+            kind: 'soroswap',
+            quote: {},
+            routerContractId: 'CROUTERFROMQUOTE000000000000000000000000000000000000000',
+          },
+        }),
+        'mainnet'
+      )
+    ).toBe('CROUTERFROMQUOTE000000000000000000000000000000000000000')
+  })
+
+  it('resolves Aquarius router on testnet', () => {
+    expect(
+      resolveSwapRouterContractId(
+        baseQuote({
+          providerId: 'aquarius',
+          providerName: 'Aquarius',
+          buildPayload: { kind: 'aquarius' },
+        }),
+        'testnet'
+      )
+    ).toBe('CBCFTQSPDBAIZ6R6PJQKSQWKNKWH2QIV3I4J72SHWBIK3ADRRAM5A6GD')
+  })
+})
 
 describe('swapBuildNeedsSignerReconfigure', () => {
   it('returns true for passkey when submitMethod is bundler-delegated', () => {

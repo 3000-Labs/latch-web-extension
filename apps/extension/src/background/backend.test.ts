@@ -64,7 +64,10 @@ describe('background/backend', () => {
   })
 
   it('passkey begin routes send chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'extid-abc' } })
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'extid-abc' },
+    })
 
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
@@ -95,7 +98,10 @@ describe('background/backend', () => {
   })
 
   it('passkey finish routes send chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'extid-xyz' } })
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'extid-xyz' },
+    })
 
     const mockCredential = {
       id: 'Y2g',
@@ -142,17 +148,25 @@ describe('background/backend', () => {
     expect(bodies[0]).toMatchObject({
       response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
     expect(bodies[1]).toMatchObject({
       response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
 
     vi.unstubAllGlobals()
   })
 
-  it('submitTxWebauthn sends chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'ext-submit' } })
+  it('submitTxWebauthn sends chromeExtensionId and active network', async () => {
+    const { clearCachedActiveNetwork, setCachedActiveNetwork } = await import('./network/config')
+    setCachedActiveNetwork('mainnet')
+
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'ext-submit' },
+    })
 
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
@@ -179,8 +193,10 @@ describe('background/backend', () => {
     expect(bodies[0]).toMatchObject({
       txXdr: 'x',
       chromeExtensionId: 'ext-submit',
+      network: 'mainnet',
     })
 
+    clearCachedActiveNetwork()
     vi.unstubAllGlobals()
   })
 
@@ -254,6 +270,7 @@ describe('background/backend', () => {
       amount: '2.5',
       assetId: 'usdc',
       signerG: 'G123',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
 
     vi.unstubAllGlobals()

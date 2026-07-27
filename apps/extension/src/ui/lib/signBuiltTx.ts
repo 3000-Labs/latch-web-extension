@@ -10,7 +10,6 @@ import type {
 } from '@latch/types'
 
 import { signAuthEntry } from '@stellar/freighter-api'
-import { Networks } from '@stellar/stellar-sdk'
 import { startAuthentication } from '@simplewebauthn/browser'
 
 import { normalizeDelegatedSignatureBase64, resolveDelegatedAuthEntryForSigner } from '../../lib/delegatedAuthSubmit'
@@ -32,6 +31,8 @@ import {
   resolvePasskeyAuthEntryXdr,
 } from './sendTx'
 import { friendlyError, sendToBackground } from './backgroundClient'
+import { debugAgentLog } from './debugAgentLog'
+import { fetchActiveNetwork, networkPassphraseFor } from './activeNetwork'
 
 type PhantomSolanaProvider = {
   signMessage(message: Uint8Array): Promise<Uint8Array | { signature: Uint8Array }>
@@ -54,6 +55,29 @@ async function runPasskeyAuth(
   surface: 'popup' | 'sidepanel',
   optionsJSON: unknown
 ): Promise<Awaited<ReturnType<typeof startAuthentication>>> {
+  const prepared = prepareAuthenticationOptionsForGet(optionsJSON) as {
+    allowCredentials?: Array<{ id?: string; transports?: string[] }>
+    hints?: string[]
+    rpId?: string
+  }
+  // #region agent log
+  debugAgentLog({
+    hypothesisId: 'H2-H4-H5',
+    location: 'signBuiltTx.ts:runPasskeyAuth',
+    message: 'prepared WebAuthn get() options before ceremony',
+    data: {
+      surface,
+      viaBridge: surface === 'sidepanel',
+      rpId: prepared.rpId ?? null,
+      allowCredCount: prepared.allowCredentials?.length ?? 0,
+      allowCredIdsSuffix: (prepared.allowCredentials ?? []).map((c) =>
+        typeof c.id === 'string' ? c.id.slice(-12) : null
+      ),
+      allowTransports: (prepared.allowCredentials ?? []).map((c) => c.transports ?? null),
+      hints: prepared.hints ?? null,
+    },
+  })
+  // #endregion
   if (surface === 'sidepanel') {
     return (await openPasskeyBridgeAndWait({
       mode: 'authentication',
@@ -61,7 +85,7 @@ async function runPasskeyAuth(
     })) as Awaited<ReturnType<typeof startAuthentication>>
   }
   return await startAuthentication({
-    optionsJSON: prepareAuthenticationOptionsForGet(optionsJSON),
+    optionsJSON: prepared,
   } as Parameters<typeof startAuthentication>[0])
 }
 
@@ -86,6 +110,8 @@ export async function signAndSubmitBuiltTx(args: {
   const submit = args.submit
   const passkeySource =
     activeAccount.mode === 'multisig' ? (args.signingAccount ?? activeAccount) : activeAccount
+  const { network } = await fetchActiveNetwork()
+  const networkPassphrase = networkPassphraseFor(network)
 
   if (
     (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
@@ -93,10 +119,6 @@ export async function signAndSubmitBuiltTx(args: {
   ) {
     if (activeAccount.mode === 'freighter') {
       if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
-      const networkPassphrase =
-        process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
-          ? Networks.PUBLIC
-          : Networks.TESTNET
       const delegated = resolveDelegatedAuthEntryForSigner({
         authEntriesXdr: build.authEntriesXdr,
         delegatedNativeAuthEntryIndices: build.delegatedNativeAuthEntryIndices,
@@ -152,7 +174,7 @@ export async function signAndSubmitBuiltTx(args: {
       payload: {
         accountId: activeAccount.id,
         gAddressEntryTemplateXdr: delegated.templateXdr,
-        networkPassphrase: Networks.TESTNET,
+        networkPassphrase,
       },
     })
     if (!signRes.ok) throw new Error(friendlyError(signRes.error))
@@ -205,8 +227,8 @@ export async function signAndSubmitBuiltTx(args: {
   if (!passkeySource.passkeyCredentialId || !passkeySource.passkeyKeyDataHex) {
     throw new Error(
       activeAccount.mode === 'multisig'
-        ? 'No passkey account is available to sign for this multisig wallet.'
-        : 'Missing passkey data for this account.'
+        ? 'No passkey account is available to sign for this multisig wallet. Sign in with your Latch passkey, then try again.'
+        : 'This account is missing its passkey signing data on this device. Log out and sign in again with your Latch passkey to restore it, then retry.'
     )
   }
   if (
@@ -225,6 +247,37 @@ export async function signAndSubmitBuiltTx(args: {
     credentialId: passkeySource.passkeyCredentialId,
     authDigestHex: build.authDigestHex,
   })
+  // #region agent log
+  {
+    const o = optionsJSON as {
+      rpId?: string
+      allowCredentials?: Array<{ id?: string; type?: string; transports?: string[] }>
+      hints?: string[]
+    }
+    debugAgentLog({
+      hypothesisId: 'H1-H2-H4',
+      location: 'signBuiltTx.ts:beforePasskeyAuth',
+      message: 'dapp/tx sign WebAuthn options about to run',
+      data: {
+        surface,
+        accountMode: activeAccount.mode,
+        accountId: activeAccount.id,
+        smartAccountSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
+        passkeyCredSuffix: (passkeySource.passkeyCredentialId ?? '').slice(-12),
+        hasKeyData: Boolean(passkeySource.passkeyKeyDataHex),
+        signingAccountId: args.signingAccount?.id ?? null,
+        rpId: o.rpId ?? null,
+        allowCredCount: o.allowCredentials?.length ?? 0,
+        allowCredIdsSuffix: (o.allowCredentials ?? []).map((c) =>
+          typeof c.id === 'string' ? c.id.slice(-12) : null
+        ),
+        allowTransports: (o.allowCredentials ?? []).map((c) => c.transports ?? null),
+        hints: o.hints ?? null,
+        authDigestLen: (build.authDigestHex ?? '').length,
+      },
+    })
+  }
+  // #endregion
   progress('Signing…')
   const assertion = await runPasskeyAuth(surface, optionsJSON)
   assertPasskeyAssertionMatchesAuthDigest(assertion, build.authDigestHex)

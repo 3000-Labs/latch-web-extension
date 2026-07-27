@@ -18,7 +18,7 @@ import { BackendError } from '../backend'
 import { getMnemonicKeypair } from '../mnemonicSession'
 import { getAccounts } from '../storage'
 import { invalidateDiscoveryCacheForAccount } from './discoveryCache'
-import { horizonUrlFromEnv, networkPassphraseFromEnv, sorobanRpcUrlFromEnv } from './env'
+import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from '../network/config'
 
 const sorobanPollOpts = { pollIntervalMs: 1500, maxAttempts: 90 } as const
 /** Keep at least this much XLM on G while further Soroban sweeps may run (per product / fee headroom). */
@@ -36,7 +36,8 @@ function requireMnemonicKeypair(accountId: string): Keypair {
 }
 
 async function fetchHorizonAccountJson(gAddress: string): Promise<unknown> {
-  const horizonUrl = horizonUrlFromEnv()
+  const network = await getActiveNetwork()
+  const horizonUrl = horizonUrlFor(network)
   const response = await fetch(
     `${horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(gAddress)}`
   )
@@ -68,8 +69,9 @@ export async function runMigrationSweepXlm(
   const keypair = requireMnemonicKeypair(accountId)
   const g = account.gAddress
   const c = account.smartAccountAddress
-  const passphrase = networkPassphraseFromEnv()
-  const rpcUrl = sorobanRpcUrlFromEnv()
+  const network = await getActiveNetwork()
+  const passphrase = networkPassphraseFor(network)
+  const rpcUrl = sorobanRpcUrlFor(network)
 
   const json = await fetchHorizonAccountJson(g)
   const record = parseHorizonAccountJson(json)
@@ -167,8 +169,9 @@ export async function runMigrationSweepToken(
   const keypair = requireMnemonicKeypair(accountId)
   const g = account.gAddress
   const c = account.smartAccountAddress
-  const passphrase = networkPassphraseFromEnv()
-  const rpcUrl = sorobanRpcUrlFromEnv()
+  const network = await getActiveNetwork()
+  const passphrase = networkPassphraseFor(network)
+  const rpcUrl = sorobanRpcUrlFor(network)
 
   const json = await fetchHorizonAccountJson(g)
   const record = parseHorizonAccountJson(json)

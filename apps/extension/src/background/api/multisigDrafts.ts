@@ -104,7 +104,7 @@ export async function multisigDraftPasskeyRegFinish(args: {
     `/api/multisig/drafts/${encodeURIComponent(args.draftId)}/webauthn/register/finish`,
     {
       method: 'POST',
-      body: webauthnFinishBody({ response: args.response }, 'registration'),
+      body: await webauthnFinishBody({ response: args.response }, 'registration'),
     }
   )
 }
@@ -129,7 +129,7 @@ export async function multisigDraftPasskeyAuthFinish(args: {
     `/api/multisig/drafts/${encodeURIComponent(args.draftId)}/webauthn/authenticate/finish`,
     {
       method: 'POST',
-      body: webauthnFinishBody({ response: args.response }, 'authentication'),
+      body: await webauthnFinishBody({ response: args.response }, 'authentication'),
     }
   )
 }

@@ -45,10 +45,19 @@ export function extractSidFromFetchResponse(res: Response): string | undefined {
 
 async function readSidCookie(baseUrl: string): Promise<string | undefined> {
   try {
+    if (typeof chrome === 'undefined' || !chrome.cookies?.get) return undefined
     const cookie = await chrome.cookies.get({ url: sessionCookieUrl(baseUrl), name: 'sid' })
     return cookie?.value
   } catch {
     return undefined
+  }
+}
+
+function chromeCookiesApiAvailable(): boolean {
+  try {
+    return typeof chrome !== 'undefined' && typeof chrome.cookies?.get === 'function'
+  } catch {
+    return false
   }
 }
 
@@ -58,6 +67,7 @@ export async function readSidCookieWithRetry(
   attempts = 8,
   delayMs = 40
 ): Promise<string | undefined> {
+  if (!chromeCookiesApiAvailable()) return undefined
   for (let i = 0; i < attempts; i++) {
     const sid = await readSidCookie(baseUrl)
     if (sid) return sid

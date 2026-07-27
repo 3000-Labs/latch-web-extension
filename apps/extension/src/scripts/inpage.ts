@@ -12,6 +12,7 @@ import type {
 
 const LATCH_PROVIDER_REQUEST = 'LATCH_PROVIDER_REQUEST'
 const LATCH_PROVIDER_RESPONSE = 'LATCH_PROVIDER_RESPONSE'
+const LATCH_PROVIDER_EVENT = 'LATCH_PROVIDER_EVENT'
 export const LATCH_PROVIDER_MARK = '__latchPostMessageBridge_v1'
 
 class LatchProviderError extends Error {
@@ -30,6 +31,21 @@ type BridgeResponse<T> = {
   data?: T
   error?: { message: string; code?: string }
 }
+
+type ProviderEventName = 'accountChanged' | 'networkChanged'
+
+type ProviderEventPayload = {
+  publicKey: string
+  network: Network
+}
+
+type ProviderEventMessage = {
+  source: typeof LATCH_PROVIDER_EVENT
+  event: ProviderEventName
+  data: ProviderEventPayload
+}
+
+type ProviderEventHandler = (payload: ProviderEventPayload) => void
 
 async function sendToBackground<TData>(type: string, payload: unknown): Promise<TData> {
   const messageId = Date.now() + Math.random()
@@ -96,12 +112,33 @@ interface LatchProvider {
   getNetwork(): Promise<Network>
   signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
   openSignRequest(params: OpenSignRequestParams): Promise<void>
+  on(event: ProviderEventName, handler: ProviderEventHandler): void
+  off(event: ProviderEventName, handler: ProviderEventHandler): void
   [LATCH_PROVIDER_MARK]?: true
 }
 
 function installLatch() {
   const w = window as Window & { latch?: LatchProvider }
   if (w.latch?.[LATCH_PROVIDER_MARK]) return
+
+  const emitter = new EventTarget()
+  const handlerMap = new WeakMap<ProviderEventHandler, EventListener>()
+
+  window.addEventListener('message', (event: MessageEvent) => {
+    if (event.source !== window) return
+    const data = event.data as ProviderEventMessage
+    if (!data || data.source !== LATCH_PROVIDER_EVENT) return
+    if (data.event !== 'accountChanged' && data.event !== 'networkChanged') return
+    if (!data.data?.publicKey) return
+    emitter.dispatchEvent(
+      new CustomEvent(data.event, {
+        detail: {
+          publicKey: data.data.publicKey,
+          network: data.data.network,
+        } satisfies ProviderEventPayload,
+      })
+    )
+  })
 
   const latch: LatchProvider = {
     [LATCH_PROVIDER_MARK]: true,
@@ -147,6 +184,20 @@ function installLatch() {
           origin: params.origin ?? window.location.origin,
         },
       })
+    },
+    on(event, handler) {
+      const listener: EventListener = (ev) => {
+        const detail = (ev as CustomEvent<ProviderEventPayload>).detail
+        handler(detail)
+      }
+      handlerMap.set(handler, listener)
+      emitter.addEventListener(event, listener)
+    },
+    off(event, handler) {
+      const listener = handlerMap.get(handler)
+      if (!listener) return
+      emitter.removeEventListener(event, listener)
+      handlerMap.delete(handler)
     },
   }
 

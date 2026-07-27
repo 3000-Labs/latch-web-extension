@@ -5,6 +5,8 @@
 
 import type { PlasmoCSConfig } from 'plasmo'
 
+import type { LatchProviderEventMessage, Network } from '@latch/types'
+
 import inpageUrl from 'url:../scripts/inpage.ts'
 
 export const config: PlasmoCSConfig = {
@@ -14,6 +16,10 @@ export const config: PlasmoCSConfig = {
 
 const LATCH_PROVIDER_REQUEST = 'LATCH_PROVIDER_REQUEST'
 const LATCH_PROVIDER_RESPONSE = 'LATCH_PROVIDER_RESPONSE'
+const LATCH_PROVIDER_EVENT = 'LATCH_PROVIDER_EVENT'
+
+const ACCOUNTS_KEY = 'latch.accounts'
+const ACTIVE_ACCOUNT_ID_KEY = 'latch.activeAccountId'
 
 type ProviderBridgeMessage = {
   source: typeof LATCH_PROVIDER_REQUEST
@@ -24,6 +30,8 @@ type ProviderBridgeMessage = {
 
 type BgRes<T> = { ok: boolean; data?: T; error?: { message: string; code?: string } }
 
+type StoredAccountRow = { id: string; smartAccountAddress?: string }
+
 function injectInpageProvider(): void {
   const root = document.documentElement
   if (root.dataset.latchInpage === '1') return
@@ -33,6 +41,47 @@ function injectInpageProvider(): void {
   script.src = inpageUrl
   script.async = false
   ;(document.head || root).prepend(script)
+}
+
+function postProviderEvent(message: LatchProviderEventMessage): void {
+  window.postMessage(
+    {
+      source: LATCH_PROVIDER_EVENT,
+      event: message.event,
+      data: message.data,
+    },
+    window.location.origin
+  )
+}
+
+async function emitActiveAccountFromStorage(): Promise<void> {
+  try {
+    const stored = await chrome.storage.local.get([ACCOUNTS_KEY, ACTIVE_ACCOUNT_ID_KEY])
+    const accounts = (stored[ACCOUNTS_KEY] as StoredAccountRow[] | undefined) ?? []
+    const activeAccountId = stored[ACTIVE_ACCOUNT_ID_KEY] as string | undefined
+    const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+    const publicKey = active?.smartAccountAddress?.trim()
+    if (!publicKey) return
+
+    let network: Network = 'testnet'
+    try {
+      const netRes = (await chrome.runtime.sendMessage({
+        type: 'GET_ACTIVE_NETWORK',
+        payload: {},
+      })) as BgRes<{ network: Network }>
+      if (netRes?.ok && netRes.data?.network) network = netRes.data.network
+    } catch {
+      // keep testnet default
+    }
+
+    postProviderEvent({
+      type: 'LATCH_PROVIDER_EVENT',
+      event: 'accountChanged',
+      data: { publicKey, network },
+    })
+  } catch {
+    // ignore
+  }
 }
 
 injectInpageProvider()
@@ -76,3 +125,16 @@ window.addEventListener(
   },
   false
 )
+
+chrome.runtime.onMessage.addListener((message: LatchProviderEventMessage) => {
+  if (!message || message.type !== 'LATCH_PROVIDER_EVENT') return
+  if (message.event !== 'accountChanged' && message.event !== 'networkChanged') return
+  postProviderEvent(message)
+})
+
+// Reliable path: popup account switches update chrome.storage without focusing the dApp tab.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return
+  if (!(ACTIVE_ACCOUNT_ID_KEY in changes) && !(ACCOUNTS_KEY in changes)) return
+  void emitActiveAccountFromStorage()
+})

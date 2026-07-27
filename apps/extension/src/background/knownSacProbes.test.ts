@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { getKnownSacProbes, recordKnownSacProbe } from './knownSacProbes'
 
-vi.mock('./migration/env', () => ({
-  getStellarNetworkFromEnv: () => 'testnet',
+vi.mock('./network/config', () => ({
+  getActiveNetwork: async () => 'testnet' as const,
 }))
 
 describe('knownSacProbes', () => {

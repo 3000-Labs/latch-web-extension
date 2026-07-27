@@ -54,7 +54,7 @@ export async function multisigJoinPasskeyRegFinish(args: {
     `/api/multisig/join/${encodeURIComponent(args.token)}/webauthn/register/finish`,
     {
       method: 'POST',
-      body: webauthnFinishBody({ response: args.response }, 'registration'),
+      body: await webauthnFinishBody({ response: args.response }, 'registration'),
     }
   )
 }
@@ -79,7 +79,7 @@ export async function multisigJoinPasskeyAuthFinish(args: {
     `/api/multisig/join/${encodeURIComponent(args.token)}/webauthn/authenticate/finish`,
     {
       method: 'POST',
-      body: webauthnFinishBody({ response: args.response }, 'authentication'),
+      body: await webauthnFinishBody({ response: args.response }, 'authentication'),
     }
   )
 }

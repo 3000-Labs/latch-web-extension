@@ -5,7 +5,7 @@ import { migrableAssetsFromHorizonAccount, parseHorizonAccountJson } from '@latc
 import { BackendError } from '../backend'
 import { getAccounts } from '../storage'
 import { getCachedDiscovery, setCachedDiscovery } from './discoveryCache'
-import { horizonUrlFromEnv, networkPassphraseFromEnv } from './env'
+import { getActiveNetwork, horizonUrlFor, networkPassphraseFor } from '../network/config'
 
 export async function runMigrationDiscover(accountId: string): Promise<MigrationDiscovery> {
   const { accounts } = await getAccounts()
@@ -40,8 +40,9 @@ export async function runMigrationDiscover(accountId: string): Promise<Migration
   const cached = getCachedDiscovery(accountId, g)
   if (cached) return cached
 
-  const passphrase = networkPassphraseFromEnv()
-  const horizonUrl = horizonUrlFromEnv()
+  const network = await getActiveNetwork()
+  const passphrase = networkPassphraseFor(network)
+  const horizonUrl = horizonUrlFor(network)
 
   let response: Response
   try {

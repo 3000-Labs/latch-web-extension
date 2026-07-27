@@ -3,12 +3,7 @@ import { buildSmartAccountPortfolioProbes, fetchSmartAccountPayments, stellarAdd
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
 
 import { getKnownSacProbes, recordKnownSacProbes } from './knownSacProbes'
-import {
-  getStellarNetworkFromEnv,
-  horizonUrlFromEnv,
-  networkPassphraseFromEnv,
-  sorobanRpcUrlFromEnv,
-} from './migration/env'
+import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from './network/config'
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd } from './tokenPrices'
@@ -24,6 +19,11 @@ const MAX_STALE_MS = 5 * 60_000
 let memoryCacheByAccountId: Map<string, Snapshot> | null = null
 const inflightByAccountId: Map<string, Promise<GetSmartAccountTransactionsResponse>> = new Map()
 
+export function clearSmartAccountTransactionsMemoryCache(): void {
+  memoryCacheByAccountId = null
+  inflightByAccountId.clear()
+}
+
 function snapshotFreshEnough(s: Snapshot, now: number): boolean {
   return now - s.updatedAtMs < FRESH_TTL_MS
 }
@@ -32,14 +32,14 @@ function snapshotUsableAsStaleFallback(s: Snapshot, now: number): boolean {
   return now - s.updatedAtMs < MAX_STALE_MS
 }
 
-function storageKeyForAccount(accountId: string): string {
-  const network = getStellarNetworkFromEnv()
+async function storageKeyForAccount(accountId: string): Promise<string> {
+  const network = await getActiveNetwork()
   return `latch.smartAccountTransactions.${network}.${accountId}.v1`
 }
 
 async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null> {
   try {
-    const key = storageKeyForAccount(accountId)
+    const key = await storageKeyForAccount(accountId)
     const r = await chrome.storage.local.get([key])
     const raw = r[key]
     if (!raw || typeof raw !== 'object') return null
@@ -54,7 +54,7 @@ async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null
 
 async function writePersistedSnapshot(accountId: string, snapshot: Snapshot): Promise<void> {
   try {
-    const key = storageKeyForAccount(accountId)
+    const key = await storageKeyForAccount(accountId)
     await chrome.storage.local.set({ [key]: snapshot })
   } catch {
     // best-effort only
@@ -85,20 +85,23 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
   if (!c) return { items: [] }
 
   const g = acc?.gAddress?.trim()
+  const network = await getActiveNetwork()
+  const horizonUrl = horizonUrlFor(network)
+  const rpcUrl = sorobanRpcUrlFor(network)
+  const networkPassphrase = networkPassphraseFor(network)
   const payments = await fetchSmartAccountPayments({
     cAddress: c,
     gAddress: g,
-    horizonUrl: horizonUrlFromEnv(),
-    rpcUrl: sorobanRpcUrlFromEnv(),
-    networkPassphrase: networkPassphraseFromEnv(),
+    horizonUrl,
+    rpcUrl,
+    networkPassphrase,
   })
 
-  const network = getStellarNetworkFromEnv()
   void buildSmartAccountPortfolioProbes({
     network,
-    networkPassphrase: networkPassphraseFromEnv(),
+    networkPassphrase,
     gAddress: g,
-    horizonUrl: horizonUrlFromEnv(),
+    horizonUrl,
     additionalProbes: await getKnownSacProbes(accountId),
   }).then((probes) => recordKnownSacProbes(accountId, probes))
 
