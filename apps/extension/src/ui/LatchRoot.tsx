@@ -137,9 +137,12 @@ import { saveToAddressBook } from './screens/send/useAddressBook'
 import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
+  enrichSendFailureDetail,
   ensureSendRulesConfigured,
   explainSendDraftNotBuildable,
   isNoContextRuleError,
+  isBuildSendMissingSetupError,
+  isPrepareSignMissingSetupError,
   isSwapRuleReconfigureError,
   passkeySetupPrerequisiteError,
 } from './lib/sendTx'
@@ -426,6 +429,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [swapCatalogLoading, setSwapCatalogLoading] = useState(false)
   const [swapBusy, setSwapBusy] = useState(false)
   const [swapStep, setSwapStep] = useState<'confirm' | 'success' | 'failure'>('confirm')
+  const [swapFailureDetail, setSwapFailureDetail] = useState<string | null>(null)
   const [swapTokenPriceUsdBySymbol, setSwapTokenPriceUsdBySymbol] = useState<
     Record<string, number>
   >({})
@@ -1042,6 +1046,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setSwapQuote(null)
     setSwapBusy(false)
     setSwapStep('confirm')
+    setSwapFailureDetail(null)
   }
 
   function openSwapFromNav() {
@@ -1369,6 +1374,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   async function executeSwapWithSetupLoop(quoteForTx: SwapQuoteVm): Promise<PrepareSwapTxResponse> {
     if (!activeAccount?.id) throw new Error('No active account')
 
+    const isSoroswap = quoteForTx.quotePayload.providerId === 'soroswap'
+
     async function runSwapRuleSetup(): Promise<void> {
       const setupPayload = await buildSetupSwapRequestFromQuote(
         quoteForTx.quotePayload,
@@ -1381,27 +1388,43 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             'Invalid swap setup details'
         )
       }
-      const setupRes = await sendToBackground<SetupSwapRulesRequest, SetupSwapRulesResponse>({
-        type: 'SETUP_SWAP_RULES',
-        payload: setupPayload,
-      })
-      if (!setupRes.ok) {
-        const code = setupRes.error?.code
-        if (code === 'signer_already_exists') return
-        throw new Error(friendlyError(setupRes.error))
+
+      // Match ensureSendRulesConfigured: keep calling until alreadyConfigured or remaining=0.
+      for (let setupAttempt = 0; setupAttempt < 5; setupAttempt++) {
+        const setupRes = await sendToBackground<SetupSwapRulesRequest, SetupSwapRulesResponse>({
+          type: 'SETUP_SWAP_RULES',
+          payload: setupPayload,
+        })
+        if (!setupRes.ok) {
+          const code = setupRes.error?.code
+          if (code === 'signer_already_exists') {
+            return
+          }
+          throw new Error(friendlyError(setupRes.error))
+        }
+        const setup = setupRes.data!
+        if (setup.alreadyConfigured) {
+          return
+        }
+        await signAndSubmitBuiltTx({
+          build: setup,
+          activeAccount,
+          surface,
+        })
+        if ((setup.remainingSetupCount ?? 0) <= 0) {
+          return
+        }
       }
-      const setup = setupRes.data!
-      if (setup.alreadyConfigured) return
-      await signAndSubmitBuiltTx({
-        build: setup,
-        activeAccount,
-        surface,
-      })
-      if ((setup.remainingSetupCount ?? 0) > 0) return
+      throw new Error('Swap setup did not complete')
     }
 
-    // Prepare (Soroswap /quote/build or Aquarius build-swap) first — same as send.
-    // Setup-swap-rules only runs when prepare reports missing context / reconfigure.
+    // prepare-sign-integration-guide: setup-swap-rules must run before the first
+    // prepare-sign for that signer/network. Soroswap prepare-sign returns a generic
+    // internal_error (not NO_CONTEXT_RULE) when rules are missing — so ensure setup first.
+    if (isSoroswap) {
+      await runSwapRuleSetup()
+    }
+
     for (let attempt = 0; attempt < 5; attempt++) {
       const prepareRes = await sendToBackground<PrepareSwapTxRequest, PrepareSwapTxResponse>({
         type: 'PREPARE_SWAP_TX',
@@ -1424,6 +1447,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         continue
       }
 
+      // Soroswap / prepare-sign: missing swap rules can surface as opaque 400 internal_error.
+      // Retry setup + prepare a few times (setup tx may still be landing).
+      if (isSoroswap && isPrepareSignMissingSetupError(prepareRes.error) && attempt < 4) {
+        await runSwapRuleSetup()
+        continue
+      }
+
       throw new Error(friendlyError(prepareRes.error))
     }
 
@@ -1433,8 +1463,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   async function handleConfirmSwap() {
     if (!activeAccount?.id || !swapQuote) return
     setSwapBusy(true)
+    setSwapFailureDetail(null)
     try {
       const quoteForTx =
+        swapQuote.quotePayload.providerId === 'soroswap' ||
         Date.now() >= swapQuote.quotePayload.expiresAtMs - 5_000
           ? await refreshSwapQuoteForConfirm()
           : swapQuote
@@ -1476,6 +1508,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       if (txHash) console.info('[latch:swap] submitted', txHash)
     } catch (e) {
       console.error('[latch:swap]', e)
+      setSwapFailureDetail(e instanceof Error ? e.message : String(e))
       setSwapStep('failure')
     } finally {
       setSwapBusy(false)
@@ -1496,6 +1529,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       )
     }
 
+    let configuredSendRulesInLoop = false
     for (let attempt = 0; attempt < 5; attempt++) {
       setSendProgressLabel('Building…')
       const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
@@ -1517,7 +1551,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         }
       }
 
-      if (isNoContextRuleError(buildRes.error)) {
+      // Missing CallContract send rules: API may return 409 NO_CONTEXT_RULE or opaque
+      // 400 internal_error ("failed to build transaction") — same as prepare-sign.
+      if (isBuildSendMissingSetupError(buildRes.error)) {
         const setupBody = buildSetupRequestFromDraft(draft, account, undefined, activeNetwork)
         if (!setupBody) {
           throw new Error(
@@ -1525,7 +1561,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               'Cannot set up send rules for this account. Sign in with your passkey again.'
           )
         }
-        await ensureSendRulesConfigured({
+        const setupResult = await ensureSendRulesConfigured({
           setupBody,
           signAndSubmit: (build) =>
             signAndSubmitBuiltTx({
@@ -1536,6 +1572,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             }),
           onProgress: setSendProgressLabel,
         })
+        if (setupResult === 'configured') configuredSendRulesInLoop = true
+        // Opaque build failure with rules already present is usually simulation (balance,
+        // etc.), not missing setup — unless we just configured and the rule may still be landing.
+        if (
+          setupResult === 'already_configured' &&
+          !configuredSendRulesInLoop &&
+          !isNoContextRuleError(buildRes.error)
+        ) {
+          throw new Error(friendlyError(buildRes.error))
+        }
         continue
       }
 
@@ -1599,9 +1645,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       console.error('[latch:send]', message, e)
+      const errorMessage = await enrichSendFailureDetail({
+        errorMessage: message,
+        draft: sendDraft,
+        network: activeNetwork,
+      })
       setSendResult({
         status: 'failure',
-        errorMessage: message,
+        errorMessage,
         submittedAt: new Date().toISOString(),
       })
       setSendStep('failure')
@@ -2685,11 +2736,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                       draft={swapDraft}
                       quote={swapQuote}
                       resolveSwapToken={resolveSwapToken}
+                      errorDetail={swapFailureDetail}
                       onBack={() => {
                         resetSwapFlow()
                         setRoute('swap')
                       }}
                       onTryAgain={() => {
+                        setSwapFailureDetail(null)
                         setSwapStep('confirm')
                       }}
                     />

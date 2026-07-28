@@ -11,12 +11,14 @@ export function SwapFailureScreen({
   draft,
   quote,
   resolveSwapToken,
+  errorDetail,
   onBack,
   onTryAgain,
 }: {
   draft: SwapDraft
   quote: SwapQuoteVm
   resolveSwapToken: (id: string) => SwapTokenVm | undefined
+  errorDetail?: string | null
   onBack: () => void
   onTryAgain: () => void
 }) {
@@ -36,6 +38,7 @@ export function SwapFailureScreen({
               paySymbol={payToken?.symbol ?? ''}
               receiveAmount={quote.receiveAmount}
               receiveSymbol={receiveToken?.symbol ?? ''}
+              detail={errorDetail}
             />
           </div>
         </div>

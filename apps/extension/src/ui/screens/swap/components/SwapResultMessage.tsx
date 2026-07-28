@@ -50,11 +50,13 @@ export function SwapFailureMessage({
   paySymbol,
   receiveAmount,
   receiveSymbol,
+  detail,
 }: {
   payAmount: string
   paySymbol: string
   receiveAmount: number
   receiveSymbol: string
+  detail?: string | null
 }) {
   const payLine = formatSwapAmountLine(payAmount, paySymbol)
   const receiveLine = formatReceiveAmountLine(receiveAmount, receiveSymbol)
@@ -70,6 +72,9 @@ export function SwapFailureMessage({
         <span>for </span>
         <span className="font-bold text-[#fcfcfc]">{receiveLine}.</span>
       </p>
+      {detail?.trim() ? (
+        <p className="w-full break-words px-2 text-[13px] leading-[1.4] text-[#8a8a8a]">{detail.trim()}</p>
+      ) : null}
     </div>
   )
 }

@@ -7,10 +7,17 @@ import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
   contextRuleIdForSubmit,
+  enrichSendFailureDetail,
   explainSendDraftNotBuildable,
   isDelegatedSendBuild,
+  isBuildSendMissingSetupError,
+  isMissingTrustlineErrorMessage,
+  isOpaqueSendBuildFailureMessage,
+  isPrepareSignMissingSetupError,
+  missingTrustlineSendMessage,
   normalizeDelegatedBuildFields,
   resolvePasskeyAuthEntryXdr,
+  tokenRequiresClassicTrustline,
 } from './sendTx'
 import type { SendDraft } from '../types/send'
 
@@ -50,6 +57,7 @@ describe('buildSendRequestFromDraft', () => {
       smartAccountAddress: multisigAccount.smartAccountAddress,
       recipient: baseDraft.recipientAddress,
       amount: '5',
+      assetId: 'USDC',
       contractId: baseDraft.token!.sacContractId,
     })
     expect(req?.signerG).toBeUndefined()
@@ -71,6 +79,15 @@ describe('buildSendRequestFromDraft', () => {
       assetId: 'native',
       contractId: draft.token!.sacContractId,
       amount: '1',
+      network: 'mainnet',
+    })
+  })
+
+  it('maps non-XLM portfolio rows without assetId to token code', () => {
+    const req = buildSendRequestFromDraft(baseDraft, multisigAccount, null, 'mainnet')
+    expect(req).toMatchObject({
+      assetId: 'USDC',
+      contractId: baseDraft.token!.sacContractId,
       network: 'mainnet',
     })
   })
@@ -201,5 +218,127 @@ describe('resolvePasskeyAuthEntryXdr', () => {
         smartAccountAuthEntryIndex: 1,
       })
     ).toBe(entry1)
+  })
+})
+
+describe('isPrepareSignMissingSetupError', () => {
+  it('matches prepare-sign opaque 400 internal_error', () => {
+    expect(
+      isPrepareSignMissingSetupError({
+        status: 400,
+        code: 'internal_error',
+        message: 'failed to prepare transaction',
+      })
+    ).toBe(true)
+  })
+
+  it('matches NO_CONTEXT_RULE 409', () => {
+    expect(isPrepareSignMissingSetupError({ status: 409, code: 'NO_CONTEXT_RULE' })).toBe(true)
+  })
+
+  it('ignores unrelated errors', () => {
+    expect(isPrepareSignMissingSetupError({ status: 400, code: 'invalid_network' })).toBe(false)
+    expect(isPrepareSignMissingSetupError({ status: 500, code: 'internal_error' })).toBe(false)
+  })
+})
+
+describe('isBuildSendMissingSetupError', () => {
+  it('matches opaque build-send 400 internal_error', () => {
+    expect(
+      isBuildSendMissingSetupError({
+        status: 400,
+        code: 'internal_error',
+        message: 'failed to build transaction',
+      })
+    ).toBe(true)
+  })
+
+  it('matches NO_CONTEXT_RULE 409', () => {
+    expect(isBuildSendMissingSetupError({ status: 409, code: 'NO_CONTEXT_RULE' })).toBe(true)
+  })
+
+  it('ignores unrelated errors', () => {
+    expect(isBuildSendMissingSetupError({ status: 400, code: 'invalid_network' })).toBe(false)
+    expect(isBuildSendMissingSetupError({ status: 500, code: 'internal_error' })).toBe(false)
+  })
+})
+
+describe('trustline send failure messaging', () => {
+  it('formats a clear missing-trustline message for any token symbol', () => {
+    expect(missingTrustlineSendMessage('USDC')).toBe(
+      'This address can’t receive USDC yet. They need to add a USDC trustline in their wallet first.'
+    )
+    expect(missingTrustlineSendMessage('EURC')).toContain('EURC')
+  })
+
+  it('detects trustline simulation / API error text', () => {
+    expect(
+      isMissingTrustlineErrorMessage(
+        'transfer simulation failed: trustline entry is missing for account GABC'
+      )
+    ).toBe(true)
+    expect(isMissingTrustlineErrorMessage('failed to build transaction')).toBe(false)
+  })
+
+  it('detects opaque build-send failure text', () => {
+    expect(isOpaqueSendBuildFailureMessage('failed to build transaction')).toBe(true)
+    expect(isOpaqueSendBuildFailureMessage('insufficient balance')).toBe(false)
+  })
+
+  it('requires a classic trustline only for non-native tokens', () => {
+    expect(
+      tokenRequiresClassicTrustline({
+        code: 'USDC',
+        issuer: 'GABC',
+        sacContractId: 'CUSDC',
+        amount: '1',
+      })
+    ).toBe(true)
+    expect(
+      tokenRequiresClassicTrustline({
+        code: 'XLM',
+        sacContractId: 'CXLM',
+        amount: '1',
+        assetId: 'native',
+      })
+    ).toBe(false)
+  })
+
+  it('maps explicit trustline errors without Horizon', async () => {
+    const detail = await enrichSendFailureDetail({
+      errorMessage: 'HostError: trustline entry is missing for account GABC',
+      draft: {
+        token: {
+          code: 'USDC',
+          issuer: 'GISSUER',
+          sacContractId: 'CUSDC',
+          amount: '1',
+        },
+        recipientAddress: 'GCEB7K5UTXGZ4HZTDXVVEDHWRUVRDAQC62AZ3T26LI42F42UWDM7L27E',
+        amount: '1',
+        inputMode: 'crypto',
+      },
+      network: 'mainnet',
+    })
+    expect(detail).toBe(missingTrustlineSendMessage('USDC'))
+  })
+
+  it('leaves unrelated failures unchanged', async () => {
+    const detail = await enrichSendFailureDetail({
+      errorMessage: 'Request timed out. Please try again.',
+      draft: {
+        token: {
+          code: 'USDC',
+          issuer: 'GISSUER',
+          sacContractId: 'CUSDC',
+          amount: '1',
+        },
+        recipientAddress: 'GCEB7K5UTXGZ4HZTDXVVEDHWRUVRDAQC62AZ3T26LI42F42UWDM7L27E',
+        amount: '1',
+        inputMode: 'crypto',
+      },
+      network: 'mainnet',
+    })
+    expect(detail).toBe('Request timed out. Please try again.')
   })
 })

@@ -8,6 +8,7 @@ import { SendTryAgainButton } from './SendTryAgainButton'
 
 export function SendFailureScreen({
   draft,
+  errorDetail,
   priceUsd,
   onTryAgain,
 }: {
@@ -33,6 +34,7 @@ export function SendFailureScreen({
             symbol={token.code}
             recipientName={draft.recipientName}
             recipientAddress={draft.recipientAddress}
+            errorDetail={errorDetail}
           />
         </div>
 
