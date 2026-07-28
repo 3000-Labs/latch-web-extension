@@ -1,23 +1,19 @@
 import { SOROSWAP_API_BASE, SOROSWAP_CONFIG } from '../constants'
 import { applySlippageMin, QUOTE_TTL_MS } from '../amounts'
 import type { SoroswapBuildPayload, SwapProvider, SwapQuote, SwapQuoteRequest } from '../types'
-import { normalizeSoroswapQuoteForBuild } from './soroswapQuote'
+import { buildSoroswapAggregatorUnsignedTx } from './soroswapBuild'
 
 type SoroswapQuoteResponse = {
   amountIn?: string | number
   amountOut?: string | number
+  /** Slippage-adjusted minimum from the API (preferred when present). */
+  otherAmountThreshold?: string | number
   assetIn?: string
   assetOut?: string
   tradeType?: string
   protocols?: string[]
   path?: string[]
   [key: string]: unknown
-}
-
-type SoroswapBuildResponse = {
-  xdr?: string
-  error?: string
-  message?: string
 }
 
 function soroswapApiKey(): string {
@@ -55,7 +51,16 @@ function parseSoroswapQuote(data: SoroswapQuoteResponse, req: SwapQuoteRequest):
     throw new Error('No swap route found for this pair')
   }
 
-  const amountOutMinRaw = applySlippageMin(amountOutRaw, req.slippageBps)
+  // Prefer API threshold when present; still clamp client-side for UI consistency.
+  const apiMin =
+    data.otherAmountThreshold != null ? String(data.otherAmountThreshold) : null
+  const clientMin = applySlippageMin(amountOutRaw, req.slippageBps)
+  let amountOutMinRaw = clientMin
+  if (apiMin && /^\d+$/.test(apiMin)) {
+    amountOutMinRaw =
+      BigInt(apiMin) < BigInt(clientMin) ? apiMin : clientMin
+  }
+
   const buildPayload: SoroswapBuildPayload = {
     kind: 'soroswap',
     quote: data as Record<string, unknown>,
@@ -89,20 +94,31 @@ export const soroswapProvider: SwapProvider = {
     })
     return parseSoroswapQuote(data, req)
   },
-  async buildUnsignedTx(req, quote, smartAccountAddress, _transactionSourceG, _rpcUrl, _networkPassphrase) {
+  async buildUnsignedTx(
+    req,
+    quote,
+    smartAccountAddress,
+    transactionSourceG,
+    rpcUrl,
+    networkPassphrase
+  ) {
     if (quote.buildPayload.kind !== 'soroswap') {
       throw new Error('Invalid build payload for Soroswap provider')
     }
-    // Quote returns aqua indexes as hex; build expects Base64 BytesN<32>.
-    const buildQuote = normalizeSoroswapQuoteForBuild(quote.buildPayload.quote)
-    const data = await soroswapPost<SoroswapBuildResponse>('/quote/build', req.network, {
-      quote: buildQuote,
-      from: smartAccountAddress,
-      to: smartAccountAddress,
+    // Do not call Soroswap /quote/build — it expects a classic G wallet as `from`.
+    // Build aggregator invoke XDR locally (bundler G source + smart account as `to`).
+    return buildSoroswapAggregatorUnsignedTx({
+      network: req.network,
+      smartAccountAddress,
+      transactionSourceG,
+      buildPayload: quote.buildPayload,
+      amountInRaw: quote.amountInRaw,
+      amountOutMinRaw: quote.amountOutMinRaw,
+      tokenInContractId: req.assetIn.contractId,
+      tokenOutContractId: req.assetOut.contractId,
+      rpcUrl,
+      networkPassphrase,
+      slippageBps: req.slippageBps,
     })
-    if (!data.xdr) {
-      throw new Error(data.message ?? data.error ?? 'Soroswap build failed')
-    }
-    return data.xdr
   },
 }

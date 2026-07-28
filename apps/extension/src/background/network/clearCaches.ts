@@ -7,10 +7,12 @@ import { clearSmartAccountTransactionsMemoryCache } from '../smartAccountTransac
 import { clearQuoteCache } from '../swap/quoteCache'
 import { resetSwapProviderRegistryCacheForTests } from '../swap/providerRegistry'
 import { clearDiscoveryCache } from '../migration/discoveryCache'
+import { clearTokenListMemoryCache } from '../assetTokenLists'
 
 export function clearNetworkScopedMemoryCaches(): void {
   clearQuoteCache()
   resetSwapProviderRegistryCacheForTests()
+  clearTokenListMemoryCache()
   clearSmartAccountBalancesMemoryCache()
   clearSmartAccountTransactionsMemoryCache()
   clearDiscoveryCache()

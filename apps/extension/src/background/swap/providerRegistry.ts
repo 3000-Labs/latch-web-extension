@@ -13,7 +13,10 @@ const REGISTRY_TTL_MS = 5 * 60_000
 
 let memoryCache: { network: SwapNetwork; at: number; registry: SwapProviderTokenRegistry } | null =
   null
-let inflight: Promise<SwapProviderTokenRegistry> | null = null
+/** In-flight loads keyed by network so a switch cannot await/poison the other network. */
+const inflightByNetwork: Partial<
+  Record<SwapNetwork, Promise<SwapProviderTokenRegistry>>
+> = {}
 
 function buildMainnetRegistry(items: TokenListItem[]): SwapProviderTokenRegistry {
   // Mainnet passphrase is fixed; network switch only changes which registry we load.
@@ -38,24 +41,45 @@ export async function loadSwapProviderRegistry(options?: {
     return memoryCache.registry
   }
 
-  if (inflight) return inflight
+  const existing = inflightByNetwork[network]
+  if (existing && !options?.forceRefresh) return existing
 
-  inflight = (async () => {
+  const loadPromise = (async (): Promise<SwapProviderTokenRegistry> => {
+    const closedOverNetwork = network
     const registry =
-      network === 'testnet'
+      closedOverNetwork === 'testnet'
         ? await fetchAquariusSwapRegistry('testnet', options)
         : buildMainnetRegistry(await fetchCombinedTokenLists('mainnet'))
 
-    memoryCache = { network, at: Date.now(), registry }
+    // Ignore late writes after a network switch (or a newer load for this network).
+    if (inflightByNetwork[closedOverNetwork] !== loadPromise) {
+      return registry
+    }
+    const active = await getActiveNetwork()
+    if (active !== closedOverNetwork) {
+      return registry
+    }
+
+    memoryCache = { network: closedOverNetwork, at: Date.now(), registry }
     return registry
   })().finally(() => {
-    inflight = null
+    if (inflightByNetwork[network] === loadPromise) {
+      delete inflightByNetwork[network]
+    }
   })
 
-  return inflight
+  inflightByNetwork[network] = loadPromise
+  return loadPromise
 }
 
 export function resetSwapProviderRegistryCacheForTests(): void {
   memoryCache = null
-  inflight = null
+  for (const key of Object.keys(inflightByNetwork) as SwapNetwork[]) {
+    delete inflightByNetwork[key]
+  }
+}
+
+/** Test helper: peek cached network without loading. */
+export function peekSwapProviderRegistryCacheNetworkForTests(): SwapNetwork | null {
+  return memoryCache?.network ?? null
 }

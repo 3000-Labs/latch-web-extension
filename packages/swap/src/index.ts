@@ -17,6 +17,15 @@ export {
 export { mockSwapProvider } from './providers/mock'
 export { soroswapProvider } from './providers/soroswap'
 export {
+  buildDexDistributionScVal,
+  buildSoroswapAggregatorUnsignedTx,
+  dexDistributionEntryToScVal,
+  extractAggregatorAmountOut,
+} from './providers/soroswapBuild'
+export {
   normalizePoolHashForBuild,
   normalizeSoroswapQuoteForBuild,
+  parseSoroswapDistribution,
+  poolHashToBytes,
+  soroswapProtocolIdToU32,
 } from './providers/soroswapQuote'

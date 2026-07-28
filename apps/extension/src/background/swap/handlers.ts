@@ -211,19 +211,12 @@ export async function runPrepareSwapTx(
     recipient: account.smartAccountAddress!,
   }
 
-  // Soroswap /quote/build sources the transaction; do not require a local fee-payer G
-  // before calling build (passkey mainnet accounts often have no linked G).
-  const buildPayloadKind = (payload.buildPayload as { kind?: string } | undefined)?.kind
-  const linkedG = account.gAddress?.trim()
-  const transactionSourceG =
-    buildPayloadKind === 'soroswap' || provider.id === 'soroswap'
-      ? linkedG?.startsWith('G')
-        ? linkedG
-        : ''
-      : resolveSwapTransactionSourceG({
-          gAddress: account.gAddress,
-          network,
-        })
+  // Local aggregator / Aquarius XDR builds need a bundler G as tx source (sequence + fees).
+  // Never fall back to an empty source — mainnet must set PLASMO_PUBLIC_LATCH_FEE_PAYER_G_MAINNET.
+  const transactionSourceG = resolveSwapTransactionSourceG({
+    gAddress: account.gAddress,
+    network,
+  })
 
   const unsignedTxXdr = await provider.buildUnsignedTx(
     quoteRequest,
@@ -240,6 +233,8 @@ export async function runPrepareSwapTx(
     unsignedTxXdr,
     signerType,
     signerG: account.gAddress,
+    // Bundler public G used as tx source when building local Soroswap XDR.
+    feePayerG: transactionSourceG,
   })
 
   return prepared

@@ -1,27 +1,33 @@
 /**
- * Soroswap /quote returns Aquarius pool indexes as 64-char hex, but /quote/build
- * (and the aggregator DexDistribution parser) expect Base64-encoded BytesN<32>.
- * See soroswap/frontend `poolHashesToScVal`.
+ * Helpers for Soroswap quote → on-chain DexDistribution encoding.
+ * Aquarius pool indexes arrive from /quote as 64-char hex; aggregator expects BytesN<32>.
  */
-export function normalizePoolHashForBuild(hash: string): string {
+
+export function poolHashToBytes(hash: string): Buffer {
   const trimmed = hash.trim()
   if (!trimmed) {
     throw new Error('Invalid poolHashes string: empty')
   }
 
   if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    return Buffer.from(trimmed, 'hex').toString('base64')
+    return Buffer.from(trimmed, 'hex')
   }
 
-  // Already Base64 (or StrKey) — ensure it decodes to 32 bytes when Base64.
-  if (!/^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
-    return trimmed
+  // Base64-encoded 32-byte hash (legacy / alternate quote shapes).
+  if (/^[A-Za-z0-9+/]+=*$/.test(trimmed)) {
+    const buf = Buffer.from(trimmed, 'base64')
+    if (buf.length !== 32) {
+      throw new Error(`Invalid poolHashes string: ${trimmed}`)
+    }
+    return buf
   }
-  const buf = Buffer.from(trimmed, 'base64')
-  if (buf.length !== 32) {
-    throw new Error(`Invalid poolHashes string: ${trimmed}`)
-  }
-  return trimmed
+
+  throw new Error(`Invalid poolHashes string: ${trimmed}`)
+}
+
+/** @deprecated Prefer poolHashToBytes for local aggregator XDR builds. */
+export function normalizePoolHashForBuild(hash: string): string {
+  return poolHashToBytes(hash).toString('base64')
 }
 
 type DistributionLike = {
@@ -35,8 +41,8 @@ type RawTradeLike = {
 }
 
 /**
- * Deep-clone a Soroswap quote and normalize aqua `poolHashes` for /quote/build.
- * Leaves non-aqua distributions and already-valid hashes untouched.
+ * Deep-clone a Soroswap quote and normalize aqua `poolHashes` to Base64.
+ * Used only when re-serializing quote payloads; local XDR build uses {@link poolHashToBytes}.
  */
 export function normalizeSoroswapQuoteForBuild(
   quote: Record<string, unknown>
@@ -62,4 +68,75 @@ export function normalizeSoroswapQuoteForBuild(
   }
 
   return cloned
+}
+
+export type SoroswapDistributionEntry = {
+  protocolId: string
+  path: string[]
+  parts: number
+  poolHashes?: string[]
+}
+
+export function parseSoroswapDistribution(
+  quote: Record<string, unknown>
+): SoroswapDistributionEntry[] {
+  const rawTrade = quote.rawTrade as RawTradeLike | undefined
+  const distribution = rawTrade?.distribution
+  if (!Array.isArray(distribution) || distribution.length === 0) {
+    throw new Error('Soroswap quote is missing rawTrade.distribution')
+  }
+
+  return distribution.map((entry, index) => {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`Invalid Soroswap distribution entry at ${index}`)
+    }
+    const protocolId = String(
+      entry.protocol_id ?? entry.protocolId ?? ''
+    ).toLowerCase()
+    if (!protocolId) {
+      throw new Error(`Soroswap distribution entry ${index} missing protocol_id`)
+    }
+    const path = entry.path
+    if (!Array.isArray(path) || path.length < 2 || !path.every((p) => typeof p === 'string')) {
+      throw new Error(`Soroswap distribution entry ${index} has an invalid path`)
+    }
+    const partsRaw = entry.parts
+    const parts = typeof partsRaw === 'number' ? partsRaw : Number(partsRaw)
+    if (!Number.isFinite(parts) || parts <= 0) {
+      throw new Error(`Soroswap distribution entry ${index} has invalid parts`)
+    }
+    const hashes = entry.poolHashes
+    const poolHashes = Array.isArray(hashes)
+      ? hashes.map((h) => {
+          if (typeof h !== 'string') {
+            throw new Error(`Invalid poolHashes string: ${String(h)}`)
+          }
+          return h
+        })
+      : undefined
+
+    return {
+      protocolId,
+      path: path as string[],
+      parts: Math.floor(parts),
+      poolHashes,
+    }
+  })
+}
+
+/** Soroswap aggregator Protocol enum (#[repr(u32)]). */
+export function soroswapProtocolIdToU32(protocolId: string): number {
+  switch (protocolId.toLowerCase()) {
+    case 'soroswap':
+      return 0
+    case 'phoenix':
+      return 1
+    case 'aqua':
+    case 'aquarius':
+      return 2
+    case 'comet':
+      return 3
+    default:
+      throw new Error(`Unknown Soroswap protocol_id: ${protocolId}`)
+  }
 }

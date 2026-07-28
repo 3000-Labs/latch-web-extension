@@ -31,6 +31,6 @@ export function resolveSwapTransactionSourceG(source: SwapFeePayerSource): strin
       ? 'Set PLASMO_PUBLIC_LATCH_FEE_PAYER_G_MAINNET in apps/extension/.env'
       : 'Set PLASMO_PUBLIC_LATCH_FEE_PAYER_G in apps/extension/.env'
   throw new Error(
-    `Swap fee payer G-address is not configured for ${network}. ${hint} (Latch API bundler public key) or use an account with a linked G-address.`
+    `Swap fee payer G-address is not configured for ${network}. ${hint} (Latch API bundler public key — public G only, not the secret). Passkey accounts have no linked G, so this env is required for mainnet Soroswap.`
   )
 }

@@ -35,6 +35,10 @@ const FETCH_TIMEOUT_MS = 10_000
 
 let memoryCache: { network: 'mainnet' | 'testnet'; at: number; map: TokenMap } | null = null
 
+export function clearTokenListMemoryCache(): void {
+  memoryCache = null
+}
+
 function storageKey(network: 'mainnet' | 'testnet'): string {
   return `${STORAGE_KEY_PREFIX}:${network}`
 }
