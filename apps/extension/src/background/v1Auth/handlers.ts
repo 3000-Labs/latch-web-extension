@@ -1,7 +1,9 @@
 import type { BackgroundMessage } from '@latch/types'
 
+import { BackendError } from '../api/client'
 import { completeWalletSignInFromAssertion, requestWalletChallenge, resolveAccessToken } from '../api/v1Client'
 import { v1AuthWalletForLinkedAccount } from '../cosign/v1AuthWallet'
+import { getActiveNetwork } from '../network/config'
 import { getAccounts } from '../storage'
 
 type OkFn = (data?: unknown) => { ok: boolean; data?: unknown }
@@ -38,7 +40,20 @@ export async function tryHandleV1AuthMessage(
       const challenge = await requestWalletChallenge(wallet, keyType)
       const nonce = String(challenge.nonce ?? challenge.challenge ?? '').trim()
       if (!nonce) throw new Error('V1 auth challenge missing nonce')
-      sendResponse(ok({ wallet, nonce, keyType }))
+
+      const active = await getActiveNetwork()
+      const issued =
+        typeof challenge.network === 'string' ? challenge.network.trim().toLowerCase() : ''
+      if (issued === 'mainnet' || issued === 'testnet') {
+        if (issued !== active) {
+          throw new BackendError(
+            `Latch API issued a ${issued} challenge while the wallet is on ${active}.`,
+            { code: 'network_mismatch', status: 409 }
+          )
+        }
+      }
+
+      sendResponse(ok({ wallet, nonce, keyType, network: active }))
       return true
     }
     case 'COSIGN_V1_AUTH_SIGN_IN': {

@@ -4,6 +4,7 @@ import { latchApiBaseUrl } from './config'
 import { BackendError } from './client'
 import { clearV1TokenPair, getV1TokenPair, isTokenFresh, setV1TokenPair } from './v1TokenStorage'
 import { buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
+import { withActiveNetwork } from './withActiveNetwork'
 
 export { base64UrlToStandardB64, buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
 
@@ -158,9 +159,10 @@ export async function requestWalletChallenge(wallet: string, keyType: string): P
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id
   }
+  const withNetwork = await withActiveNetwork(body)
   return v1Fetch<Record<string, unknown>>('/v1/auth/challenge', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withNetwork),
   })
 }
 
@@ -170,15 +172,16 @@ export async function completeWalletSignIn(body: Record<string, unknown>): Promi
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id
   }
+  const withNetwork = await withActiveNetwork(body)
   const data = await v1Fetch<{
     access_token: string
     refresh_token: string
     expires_in: number
   }>('/v1/auth/sign-in', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withNetwork),
   })
-  const wallet = String(body.wallet ?? '').trim()
+  const wallet = String(withNetwork.wallet ?? '').trim()
   const pair: V1TokenPair = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
