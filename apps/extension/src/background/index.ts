@@ -862,7 +862,9 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
 
       case 'GET_SMART_ACCOUNT_TRANSACTIONS': {
         const req = message.payload as GetSmartAccountTransactionsRequest
-        const data = await runGetSmartAccountTransactions(req.accountId)
+        const data = await runGetSmartAccountTransactions(req.accountId, {
+          force: req.force === true,
+        })
         sendResponse(ok(data))
         return
       }

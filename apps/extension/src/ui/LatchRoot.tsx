@@ -388,6 +388,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [setupState, setSetupState] = useState<GetSetupStateResponse['setupState']>('new')
   const [accountsHydrated, setAccountsHydrated] = useState(false)
+  /** True only after GET_ACCOUNTS returned successfully (empty or not). False on timeout/error — never treat that as "needs setup". */
+  const [accountsLoadSucceeded, setAccountsLoadSucceeded] = useState(false)
   const onboardingTabOpenedRef = useRef(false)
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | undefined>(undefined)
@@ -451,12 +453,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [portfolioError, setPortfolioError] = useState<string | null>(null)
   const [historySections, setHistorySections] = useState<HistorySectionVm[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyHydrated, setHistoryHydrated] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
   const portfolioRowsRef = useRef(portfolioRows)
   portfolioRowsRef.current = portfolioRows
   const portfolioHydratedRef = useRef(false)
-  const historyHydratedRef = useRef(false)
   const [transactionDetail, setTransactionDetail] = useState<TransactionDetailVm | null>(null)
   const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
   const [pendingMnemonic, setPendingMnemonic] = useState('')
@@ -717,37 +717,25 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       })
       .catch(() => {})
 
+    let cancelled = false
     void (async () => {
-      try {
-        const netRes = await sendToBackground<
-          undefined,
-          { network: 'testnet' | 'mainnet'; networkLabel: string }
-        >({
-          type: 'GET_ACTIVE_NETWORK',
-          payload: undefined,
-        })
-        if (netRes.ok && netRes.data?.network) {
-          setActiveNetwork(netRes.data.network)
-          setDappNetwork(netRes.data.network)
-          setNetworkLabel(
-            netRes.data.networkLabel ||
-              (netRes.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
-          )
-        }
-      } catch {
-        // keep defaults
-      }
-
+      // Load accounts first so we never flash "Set up Latch" while the SW is still waking.
+      // Network is independent and can fill in after.
       try {
         const res = await sendToBackground<undefined, GetAccountsResponse>({
           type: 'GET_ACCOUNTS',
           payload: undefined,
         })
-        if (!res.ok || !res.data) return
+        if (cancelled) return
+        if (!res.ok || !res.data) {
+          setAccountsLoadSucceeded(false)
+          return
+        }
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
         setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
         setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
+        setAccountsLoadSucceeded(true)
         if (res.data.accounts.length > 0) {
           const locked = needsMnemonicUnlockFromAccounts(
             res.data.accounts,
@@ -767,22 +755,90 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           )
         }
       } catch {
-        // ignore
+        if (!cancelled) setAccountsLoadSucceeded(false)
       } finally {
-        setAccountsHydrated(true)
+        if (!cancelled) setAccountsHydrated(true)
+      }
+
+      try {
+        const netRes = await sendToBackground<
+          undefined,
+          { network: 'testnet' | 'mainnet'; networkLabel: string }
+        >({
+          type: 'GET_ACTIVE_NETWORK',
+          payload: undefined,
+        })
+        if (cancelled) return
+        if (netRes.ok && netRes.data?.network) {
+          setActiveNetwork(netRes.data.network)
+          setDappNetwork(netRes.data.network)
+          setNetworkLabel(
+            netRes.data.networkLabel ||
+              (netRes.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
+          )
+        }
+      } catch {
+        // keep defaults
       }
     })()
 
-    // Safety: never leave the shell stuck on "Loading…" if the background SW is unresponsive.
-    const hydrateWatchdog = window.setTimeout(() => setAccountsHydrated(true), 8_000)
+    // Safety: never leave the shell stuck if the background SW is unresponsive.
+    // Do NOT mark accountsLoadSucceeded — that would falsely open "Set up Latch".
+    const hydrateWatchdog = window.setTimeout(() => {
+      setAccountsHydrated(true)
+    }, 8_000)
 
     void loadPendingDapp().catch(() => {})
     void apiGetMultisigProposalsBannerDismissed()
       .then(setMultisigBannerDismissedIds)
       .catch(() => {})
 
-    return () => window.clearTimeout(hydrateWatchdog)
+    return () => {
+      cancelled = true
+      window.clearTimeout(hydrateWatchdog)
+    }
   }, [])
+
+  // Retry GET_ACCOUNTS when the first attempt failed / timed out (keep Latch loader, never "Set up Latch").
+  useEffect(() => {
+    if (!accountsHydrated || accountsLoadSucceeded || accounts.length > 0) return
+    let cancelled = false
+    const attempt = async () => {
+      try {
+        const res = await sendToBackground<undefined, GetAccountsResponse>({
+          type: 'GET_ACCOUNTS',
+          payload: undefined,
+        })
+        if (cancelled || !res.ok || !res.data) return
+        setAccounts(res.data.accounts)
+        setActiveAccountId(res.data.activeAccountId)
+        setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
+        setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
+        setAccountsLoadSucceeded(true)
+        if (res.data.accounts.length > 0) {
+          const locked = needsMnemonicUnlockFromAccounts(
+            res.data.accounts,
+            res.data.activeAccountId,
+            res.data.activeAccountHasMnemonicVault,
+            res.data.activeAccountMnemonicSignerLoaded
+          )
+          setRoute((prev) =>
+            prev === 'joinMultisig'
+              ? prev
+              : resolveMainRoute({ needsMnemonicUnlock: locked, preferred: prev })
+          )
+        }
+      } catch {
+        // keep retrying
+      }
+    }
+    void attempt()
+    const t = window.setInterval(() => void attempt(), 2_500)
+    return () => {
+      cancelled = true
+      window.clearInterval(t)
+    }
+  }, [accountsHydrated, accountsLoadSucceeded, accounts.length])
 
   useEffect(() => {
     function onStorage(
@@ -830,13 +886,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       return
     }
 
+    // Only open setup when we *know* there are no accounts — not on SW timeout/error.
+    if (!accountsLoadSucceeded) return
     if (route === 'joinMultisig') return
 
     if (!onboardingTabOpenedRef.current) {
       onboardingTabOpenedRef.current = true
       void openOnboardingTab().catch(() => {})
     }
-  }, [accountsHydrated, accounts.length, needsMnemonicUnlock, route])
+  }, [accountsHydrated, accountsLoadSucceeded, accounts.length, needsMnemonicUnlock, route])
 
   async function persistSetupHasAccount(publicKey: string) {
     const req: SetSetupStateRequest = { setupState: 'has_account', accountPublicKey: publicKey }
@@ -856,6 +914,8 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     setActiveAccountId(res.data.activeAccountId)
     setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
     setActiveAccountMnemonicSignerLoaded(Boolean(res.data.activeAccountMnemonicSignerLoaded))
+    setAccountsLoadSucceeded(true)
+    setAccountsHydrated(true)
     const locked = needsMnemonicUnlockFromAccounts(
       res.data.accounts,
       res.data.activeAccountId,
@@ -881,15 +941,63 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   useEffect(() => {
     portfolioHydratedRef.current = false
-    historyHydratedRef.current = false
     setPortfolioHydrated(false)
-    setHistoryHydrated(false)
     setPortfolioRows([])
     setTotalBalanceUsd(null)
     setHistorySections([])
     setPortfolioError(null)
     setHistoryError(null)
+    // Do not clear portfolioLoading/historyLoading here — in-flight fetches still
+    // own those flags and will clear them in finally.
   }, [activeAccountId])
+
+  // Network switch: drop stale history rows. Skip the initial mount so we don't
+  // race GET_ACTIVE_NETWORK and leave hydrated=false with no refetch started.
+  const prevNetworkForHistoryRef = useRef<'testnet' | 'mainnet' | null>(null)
+  useEffect(() => {
+    const prev = prevNetworkForHistoryRef.current
+    prevNetworkForHistoryRef.current = activeNetwork
+    if (prev === null || prev === activeNetwork) return
+    setHistorySections([])
+    setHistoryError(null)
+  }, [activeNetwork])
+
+  const loadHistory = useCallback(
+    async (opts?: { force?: boolean }) => {
+      const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
+      if (!acc?.id) {
+        setHistorySections([])
+        setHistoryLoading(false)
+        return
+      }
+      setHistoryLoading(true)
+      setHistoryError(null)
+      try {
+        const res = await sendToBackground<
+          GetSmartAccountTransactionsRequest,
+          GetSmartAccountTransactionsResponse
+        >({
+          type: 'GET_SMART_ACCOUNT_TRANSACTIONS',
+          payload: { accountId: acc.id, force: opts?.force === true },
+        })
+        if (!res.ok) {
+          setHistoryError(res.error?.message ?? 'Could not load transactions')
+          setHistorySections([])
+          return
+        }
+        const items = (res.data?.items ?? []).map((row) =>
+          mapTransactionToHistoryItem(
+            row,
+            iconUrlForCode(portfolioRowsRef.current, row.assetCode)
+          )
+        )
+        setHistorySections(groupHistoryItems(items))
+      } finally {
+        setHistoryLoading(false)
+      }
+    },
+    [accounts, activeAccountId]
+  )
 
   const loadPortfolio = useCallback(async () => {
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
@@ -922,44 +1030,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       setPortfolioLoading(false)
       portfolioHydratedRef.current = true
       setPortfolioHydrated(true)
-    }
-  }, [accounts, activeAccountId])
-
-  const loadHistory = useCallback(async () => {
-    const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-    if (!acc?.id) {
-      setHistorySections([])
-      historyHydratedRef.current = true
-      setHistoryHydrated(true)
-      return
-    }
-    const showLoading = !historyHydratedRef.current
-    if (showLoading) setHistoryLoading(true)
-    setHistoryError(null)
-    try {
-      const res = await sendToBackground<
-        GetSmartAccountTransactionsRequest,
-        GetSmartAccountTransactionsResponse
-      >({
-        type: 'GET_SMART_ACCOUNT_TRANSACTIONS',
-        payload: { accountId: acc.id },
-      })
-      if (!res.ok) {
-        setHistoryError(res.error?.message ?? 'Could not load transactions')
-        setHistorySections([])
-        return
-      }
-      const items = (res.data?.items ?? []).map((row) =>
-        mapTransactionToHistoryItem(
-          row,
-          iconUrlForCode(portfolioRowsRef.current, row.assetCode)
-        )
-      )
-      setHistorySections(groupHistoryItems(items))
-    } finally {
-      setHistoryLoading(false)
-      historyHydratedRef.current = true
-      setHistoryHydrated(true)
     }
   }, [accounts, activeAccountId])
 
@@ -1005,9 +1075,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [route, setupState, page, portfolioError, loadPortfolio])
 
   useEffect(() => {
+    if (!accountsHydrated || !accountsLoadSucceeded) return
     if (route !== 'history' && route !== 'home' && route !== 'explore') return
     void loadHistory()
-  }, [route, loadHistory])
+  }, [route, loadHistory, activeNetwork, accountsHydrated, accountsLoadSucceeded])
 
   const loadMultisigProposals = useCallback(async () => {
     if (!activeAccount?.smartAccountAddress || activeAccount.mode !== 'multisig') {
@@ -1700,7 +1771,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }
 
   const showOnboardingTabPrompt =
-    accountsHydrated && accounts.length === 0 && route !== 'joinMultisig' && !loading
+    accountsHydrated &&
+    accountsLoadSucceeded &&
+    accounts.length === 0 &&
+    route !== 'joinMultisig' &&
+    !loading
 
   async function logout() {
     setError(null)
@@ -1730,11 +1805,17 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
   const showTopHeader =
     page === 'main' && !needsMnemonicUnlock && route === 'migration'
+  // Home shell waits on portfolio only. History (Horizon + SAC) can be slow; gating
+  // the whole home UI on it left a stuck "Loading..." overlay after the heavier fetch.
+  const showAccountsHydrateOverlay =
+    !loading && (!accountsHydrated || (!accountsLoadSucceeded && accounts.length === 0))
   const showHomeLoadingOverlay =
+    !showAccountsHydrateOverlay &&
     (page === 'main' || page === 'settings') &&
     route === 'home' &&
     !loading &&
-    ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
+    !portfolioHydrated &&
+    portfolioLoading
   const showSwapCatalogLoadingOverlay =
     (page === 'main' || page === 'settings') &&
     route === 'swap' &&
@@ -2412,12 +2493,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && !accountsHydrated ? (
-              <div className={`${flowHeightClass} flex items-center justify-center text-sm text-muted`}>
-                Loading…
-              </div>
-            ) : null}
-
             {!loading && route === 'home' && !needsMnemonicUnlock && !showOnboardingTabPrompt ? (
               <div
                 className={[
@@ -2655,7 +2730,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   loading={historyLoading}
                   error={historyError}
                   onBack={() => setRoute('home')}
-                  onRefresh={() => void loadHistory()}
+                  onRefresh={() => void loadHistory({ force: true })}
                   onSelectItem={(it) => {
                     const c = activeAccount?.smartAccountAddress ?? ''
                     setTransactionDetailReturnRoute('history')
@@ -2919,6 +2994,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
       {showMainBottomNav ? (
         <MainBottomNav active={activeMainTab} onSelect={handleMainTabSelect} />
+      ) : null}
+
+      {showAccountsHydrateOverlay ? (
+        <div className="absolute inset-0 z-40">
+          <HomeLoadingOverlay />
+        </div>
       ) : null}
 
       {showHomeLoadingOverlay ? (

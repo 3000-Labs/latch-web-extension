@@ -49,8 +49,13 @@ export {
 } from './smartAccountPortfolio'
 export type { SmartAccountPortfolioRow, PortfolioTokenProbe } from './smartAccountPortfolio'
 export {
+  buildSacAssetInfoMap,
   buildSacProbesForHistory,
+  classifyPaymentTxTypes,
+  fetchBundlerOps,
+  fetchGAddressOps,
+  fetchSacTransferEvents,
   fetchSmartAccountPayments,
   stellarAddressEquals,
 } from './smartAccountTransactions'
-export type { SmartAccountPayment } from './smartAccountTransactions'
+export type { SacAssetInfo, SmartAccountPayment } from './smartAccountTransactions'

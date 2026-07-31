@@ -1,6 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { resolveSwapTransactionSourceG } from './feePayer'
+import { resolveBundlerPublicG, resolveSwapTransactionSourceG } from './feePayer'
+
+describe('resolveBundlerPublicG', () => {
+  it('returns testnet fee payer G from env', () => {
+    vi.stubEnv('PLASMO_PUBLIC_LATCH_FEE_PAYER_G', 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB')
+    expect(resolveBundlerPublicG('testnet')).toBe(
+      'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB'
+    )
+    vi.unstubAllEnvs()
+  })
+
+  it('does not fall back to testnet on mainnet', () => {
+    vi.stubEnv('PLASMO_PUBLIC_LATCH_FEE_PAYER_G', 'GTESTNETFEEPAYERXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX')
+    vi.stubEnv('PLASMO_PUBLIC_LATCH_FEE_PAYER_G_MAINNET', '')
+    expect(resolveBundlerPublicG('mainnet')).toBeUndefined()
+    vi.unstubAllEnvs()
+  })
+})
 
 describe('resolveSwapTransactionSourceG', () => {
   it('prefers account gAddress', () => {

@@ -6,10 +6,10 @@ export type SwapFeePayerSource = {
   network?: SwapNetwork
 }
 
-function feePayerGFromEnv(network: SwapNetwork): string | undefined {
+/** Public bundler / fee-payer G from env (never a secret). Network-specific — no testnet→mainnet fallback. */
+export function resolveBundlerPublicG(network: SwapNetwork = 'testnet'): string | undefined {
   if (network === 'mainnet') {
     const mainnet = process.env.PLASMO_PUBLIC_LATCH_FEE_PAYER_G_MAINNET?.trim()
-    // Never fall back to the testnet bundler G on mainnet.
     if (mainnet?.startsWith('G')) return mainnet
     return undefined
   }
@@ -23,7 +23,7 @@ export function resolveSwapTransactionSourceG(source: SwapFeePayerSource): strin
   if (fromAccount?.startsWith('G')) return fromAccount
 
   const network = source.network ?? 'testnet'
-  const fromEnv = feePayerGFromEnv(network)
+  const fromEnv = resolveBundlerPublicG(network)
   if (fromEnv) return fromEnv
 
   const hint =

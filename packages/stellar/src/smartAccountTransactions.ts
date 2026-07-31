@@ -1,10 +1,24 @@
+/**
+ * Smart-account activity feed: merge Horizon (G-address + bundler) with Soroban
+ * SAC transfer events. Horizon cannot query C-addresses via /accounts/{C}/operations
+ * (HTTP 400), so passkey wallets rely on bundler ops + wildcard getEvents.
+ *
+ * Depth limits (same as mobile — not archival history):
+ * - Horizon G: last 50 ops
+ * - Horizon bundler: last 200 ops
+ * - SAC getEvents: ~6k ledgers (~hours on mainnet); shrinks on RPC processing limits
+ */
+
 import { Address, Asset, scValToNative, xdr } from '@stellar/stellar-sdk'
 
+import {
+  curatedPortfolioProbes,
+  type StellarNetwork,
+} from './curatedAssets'
 import { parseHorizonAccountJson } from './migrationBalances'
 import { formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
 import {
   fetchHorizonAccountJson,
-  loadSmartAccountPortfolioRows,
   portfolioProbesFromHorizonAccount,
   type PortfolioTokenProbe,
 } from './smartAccountPortfolio'
@@ -13,6 +27,8 @@ export interface SmartAccountPayment {
   id: string
   transactionHash: string
   type: string
+  /** Derived after classifyPaymentTxTypes */
+  txType?: 'send' | 'receive' | 'swap' | 'bridge' | 'unknown'
   from: string
   to: string
   amount: string
@@ -21,24 +37,50 @@ export interface SmartAccountPayment {
   createdAt: string
 }
 
+export type SacAssetInfo = { code: string; assetType: string }
+
+/** Largest reach that clears mainnet processing-limit for wildcard-topic queries. */
+const SAC_EVENTS_REACH_LEDGERS = 6_000
+const SAC_EVENTS_MIN_REACH_LEDGERS = 500
 const MAX_SAC_PROBE_CONTRACTS = 15
-/** ~1–2 days on testnet. */
-const EVENT_LEDGER_WINDOW = 17_000
-const EVENT_LEDGER_WINDOW_FALLBACK = 4_320
-const EVENT_PAGE_SIZE = 200
-const MAX_EVENT_PAGES_PER_CONTRACT = 15
-const MAX_TRANSFERS_PER_CONTRACT = 50
+
+function mergeAbortSignals(
+  timeoutMs: number,
+  signal?: AbortSignal
+): { signal: AbortSignal; cleanup: () => void } {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+  const onParentAbort = () => ctrl.abort()
+  if (signal) {
+    if (signal.aborted) ctrl.abort()
+    else signal.addEventListener('abort', onParentAbort)
+  }
+  return {
+    signal: ctrl.signal,
+    cleanup: () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onParentAbort)
+    },
+  }
+}
 
 async function horizonGet(url: string, signal?: AbortSignal): Promise<unknown> {
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal,
-  })
-  if (!res.ok) return null
+  const { signal: merged, cleanup } = mergeAbortSignals(12_000, signal)
   try {
-    return await res.json()
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: merged,
+    })
+    if (!res.ok) return null
+    try {
+      return await res.json()
+    } catch {
+      return null
+    }
   } catch {
     return null
+  } finally {
+    cleanup()
   }
 }
 
@@ -48,16 +90,23 @@ async function sorobanRpc(
   params: object,
   signal?: AbortSignal
 ): Promise<unknown> {
-  const res = await fetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-    signal,
-  })
+  const { signal: merged, cleanup } = mergeAbortSignals(15_000, signal)
   try {
-    return await res.json()
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: merged,
+    })
+    try {
+      return await res.json()
+    } catch {
+      return {}
+    }
   } catch {
     return {}
+  } finally {
+    cleanup()
   }
 }
 
@@ -70,52 +119,46 @@ export function stellarAddressEquals(a: string, b: string): boolean {
   }
 }
 
-function topicToSymbol(topicB64: string): string {
+function scValB64(val: xdr.ScVal): string {
+  return val.toXDR('base64')
+}
+
+/** Build contractId → asset info for labeling SAC transfer events. */
+export function buildSacAssetInfoMap(params: {
+  networkPassphrase: string
+  network?: StellarNetwork
+  additionalProbes?: PortfolioTokenProbe[]
+}): Map<string, SacAssetInfo> {
+  const map = new Map<string, SacAssetInfo>()
   try {
-    const val = xdr.ScVal.fromXDR(topicB64, 'base64')
-    if (val.switch() === xdr.ScValType.scvSymbol()) return val.sym().toString()
+    map.set(Asset.native().contractId(params.networkPassphrase), {
+      code: 'XLM',
+      assetType: 'native',
+    })
   } catch {
     // ignore
   }
-  return ''
-}
 
-function topicToAddress(topicB64: string): string {
-  try {
-    const val = xdr.ScVal.fromXDR(topicB64, 'base64')
-    if (val.switch() !== xdr.ScValType.scvAddress()) return ''
-    return Address.fromScAddress(val.address()).toString()
-  } catch {
-    return ''
+  const network = params.network ?? 'testnet'
+  for (const p of curatedPortfolioProbes(params.networkPassphrase, network)) {
+    map.set(p.sacContractId, {
+      code: p.code,
+      assetType: p.code.toUpperCase() === 'XLM' && !p.issuer ? 'native' : 'credit_alphanum4',
+    })
   }
-}
 
-function parseTransferAmountRaw(event: Record<string, unknown>): bigint {
-  const raw = event.value
-  if (raw == null) return 0n
-  const val = xdr.ScVal.fromXDR(String(raw), 'base64')
-  const native = scValToNative(val)
-  if (typeof native === 'bigint') return native >= 0n ? native : 0n
-  if (native && typeof native === 'object' && 'amount' in native) {
-    const amt = (native as { amount?: unknown }).amount
-    if (typeof amt === 'bigint') return amt >= 0n ? amt : 0n
+  for (const p of params.additionalProbes ?? []) {
+    if (!p.sacContractId) continue
+    map.set(p.sacContractId, {
+      code: p.code,
+      assetType: p.code.toUpperCase() === 'XLM' && !p.issuer ? 'native' : 'credit_alphanum4',
+    })
   }
-  return 0n
+
+  return map
 }
 
-function mergeProbes(...lists: PortfolioTokenProbe[][]): PortfolioTokenProbe[] {
-  const out: PortfolioTokenProbe[] = []
-  const seen = new Set<string>()
-  for (const list of lists) {
-    for (const p of list) {
-      if (seen.has(p.sacContractId)) continue
-      seen.add(p.sacContractId)
-      out.push(p)
-    }
-  }
-  return out.slice(0, MAX_SAC_PROBE_CONTRACTS)
-}
-
+/** @deprecated Prefer buildSacAssetInfoMap — kept for callers that need probe lists. */
 export async function buildSacProbesForHistory(params: {
   horizonUrl: string
   networkPassphrase: string
@@ -146,58 +189,161 @@ export async function buildSacProbesForHistory(params: {
 }
 
 function paymentDedupeKey(tx: SmartAccountPayment): string {
-  if (tx.id) return tx.id
-  return `${tx.transactionHash}|${tx.assetCode ?? ''}|${tx.from}|${tx.to}|${tx.amount}`
+  return `${tx.transactionHash || tx.id}|${tx.from}|${tx.to}|${tx.assetCode ?? 'XLM'}`
 }
 
-async function fetchGAddressHistory(
+/**
+ * G-address Horizon ops → payments.
+ * Prefers asset_balance_changes; falls back to effects. Also maps classic payment /
+ * create_account (G remapped to C so classifiers work).
+ */
+export async function fetchGAddressOps(
   horizonUrl: string,
   gAddress: string,
   cAddress: string,
   signal?: AbortSignal
 ): Promise<SmartAccountPayment[]> {
+  const base = horizonUrl.replace(/\/$/, '')
   const resp = (await horizonGet(
-    `${horizonUrl.replace(/\/$/, '')}/accounts/${encodeURIComponent(gAddress)}/operations?limit=50&order=desc`,
+    `${base}/accounts/${encodeURIComponent(gAddress)}/operations?limit=50&order=desc&include_failed=false`,
+    signal
+  )) as { _embedded?: { records?: unknown[] } } | null
+
+  const allOps = (resp?._embedded?.records ?? []) as Record<string, unknown>[]
+  if (allOps.length === 0) return []
+
+  const results: SmartAccountPayment[] = []
+
+  for (const op of allOps.filter((r) => r.type === 'payment')) {
+    results.push({
+      id: String(op.id),
+      transactionHash: String(op.transaction_hash ?? ''),
+      type: 'payment',
+      from: op.from === gAddress ? cAddress : String(op.from ?? ''),
+      to: op.to === gAddress ? cAddress : String(op.to ?? ''),
+      amount: String(op.amount ?? '0'),
+      assetType: String(op.asset_type ?? 'native'),
+      assetCode: typeof op.asset_code === 'string' ? op.asset_code : undefined,
+      createdAt: String(op.created_at ?? ''),
+    })
+  }
+
+  for (const op of allOps.filter((r) => r.type === 'create_account')) {
+    results.push({
+      id: String(op.id),
+      transactionHash: String(op.transaction_hash ?? ''),
+      type: 'create_account',
+      from: String(op.funder ?? ''),
+      to: op.account === gAddress ? cAddress : String(op.account ?? ''),
+      amount: String(op.starting_balance ?? '0'),
+      assetType: 'native',
+      createdAt: String(op.created_at ?? ''),
+    })
+  }
+
+  const invokeOps = allOps.filter((r) => r.type === 'invoke_host_function')
+  const needEffects: Record<string, unknown>[] = []
+
+  for (const op of invokeOps) {
+    const changes = (op.asset_balance_changes ?? []) as Record<string, unknown>[]
+    const matched = changes.filter((c) => c.from === cAddress || c.to === cAddress)
+
+    if (matched.length > 0) {
+      matched.forEach((change, ci) => {
+        results.push({
+          id: matched.length > 1 ? `${String(op.id)}_${ci}` : String(op.id),
+          transactionHash: String(op.transaction_hash ?? ''),
+          type: 'invoke_host_function',
+          from: String(change.from ?? ''),
+          to: String(change.to ?? ''),
+          amount: String(change.amount ?? '0'),
+          assetType: change.asset_type === 'native' ? 'native' : 'credit_alphanum4',
+          assetCode: typeof change.asset_code === 'string' ? change.asset_code : undefined,
+          createdAt: String(op.created_at ?? ''),
+        })
+      })
+    } else {
+      needEffects.push(op)
+    }
+  }
+
+  if (needEffects.length > 0) {
+    const effectsBatch = await Promise.all(
+      needEffects.map((op) =>
+        horizonGet(`${base}/operations/${String(op.id)}/effects`, signal).then(
+          (r) =>
+            (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? []
+        )
+      )
+    )
+
+    for (let i = 0; i < needEffects.length; i++) {
+      const op = needEffects[i]!
+      const effects = effectsBatch[i] as Record<string, unknown>[]
+      const matchesCAddr = (e: Record<string, unknown>) =>
+        e.contract === cAddress || e.account === cAddress
+      const creditEffect = effects.find(
+        (e) => e.type === 'contract_credited' && matchesCAddr(e)
+      )
+      const debitEffect = effects.find(
+        (e) => e.type === 'contract_debited' && matchesCAddr(e)
+      )
+      if (!creditEffect && !debitEffect) continue
+
+      const isIncoming = !!creditEffect
+      const effect = (creditEffect ?? debitEffect)!
+      results.push({
+        id: String(op.id),
+        transactionHash: String(op.transaction_hash ?? ''),
+        type: 'invoke_host_function',
+        from: isIncoming ? String(op.source_account) : cAddress,
+        to: isIncoming ? cAddress : String(op.source_account),
+        amount: String(effect.amount ?? '0'),
+        assetType: effect.asset_type === 'native' ? 'native' : 'credit_alphanum4',
+        assetCode: typeof effect.asset_code === 'string' ? effect.asset_code : undefined,
+        createdAt: String(op.created_at ?? ''),
+      })
+    }
+  }
+
+  return results
+}
+
+/**
+ * Bundler Horizon ops for passkey (and Latch↔Latch) activity.
+ * Outer tx source is the bundler G; filter asset_balance_changes by C-address.
+ */
+export async function fetchBundlerOps(
+  horizonUrl: string,
+  bundlerGAddress: string,
+  cAddress: string,
+  signal?: AbortSignal
+): Promise<SmartAccountPayment[]> {
+  const base = horizonUrl.replace(/\/$/, '')
+  const resp = (await horizonGet(
+    `${base}/accounts/${encodeURIComponent(bundlerGAddress)}/operations?limit=200&order=desc&include_failed=false`,
     signal
   )) as { _embedded?: { records?: unknown[] } } | null
 
   const allOps = (resp?._embedded?.records ?? []) as Record<string, unknown>[]
   const invokeOps = allOps.filter((r) => r.type === 'invoke_host_function')
-  if (invokeOps.length === 0) return []
-
-  const effectsBatch = await Promise.all(
-    invokeOps.map((op) =>
-      horizonGet(
-        `${horizonUrl.replace(/\/$/, '')}/operations/${String(op.id)}/effects`,
-        signal
-      ).then((r) => (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? [])
-    )
-  )
-
   const results: SmartAccountPayment[] = []
-  for (let i = 0; i < invokeOps.length; i++) {
-    const op = invokeOps[i]!
-    const effects = effectsBatch[i] as Record<string, unknown>[]
 
-    const matchesCAddress = (e: Record<string, unknown>) =>
-      e.account === cAddress || e.contract === cAddress
-    const creditEffect = effects.find((e) => e.type === 'contract_credited' && matchesCAddress(e))
-    const debitEffect = effects.find((e) => e.type === 'contract_debited' && matchesCAddress(e))
-    if (!creditEffect && !debitEffect) continue
-
-    const isIncoming = !!creditEffect
-    const effect = (creditEffect ?? debitEffect)!
-
-    results.push({
-      id: `horizon-op-${String(op.id)}`,
-      transactionHash: String(op.transaction_hash ?? ''),
-      type: 'invoke_host_function',
-      from: isIncoming ? String(op.source_account) : cAddress,
-      to: isIncoming ? cAddress : String(op.source_account),
-      amount: String(effect.amount ?? '0'),
-      assetType: effect.asset_type === 'native' ? 'native' : 'credit_alphanum4',
-      assetCode: typeof effect.asset_code === 'string' ? effect.asset_code : undefined,
-      createdAt: String(op.created_at ?? ''),
+  for (const op of invokeOps) {
+    const changes = (op.asset_balance_changes ?? []) as Record<string, unknown>[]
+    const matched = changes.filter((c) => c.from === cAddress || c.to === cAddress)
+    matched.forEach((change, ci) => {
+      results.push({
+        id: matched.length > 1 ? `${String(op.id)}_${ci}` : String(op.id),
+        transactionHash: String(op.transaction_hash ?? ''),
+        type: 'invoke_host_function',
+        from: String(change.from ?? ''),
+        to: String(change.to ?? ''),
+        amount: String(change.amount ?? '0'),
+        assetType: change.asset_type === 'native' ? 'native' : 'credit_alphanum4',
+        assetCode: typeof change.asset_code === 'string' ? change.asset_code : undefined,
+        createdAt: String(op.created_at ?? ''),
+      })
     })
   }
 
@@ -209,70 +355,118 @@ type SorobanEventsPage = {
   error?: { message?: string }
 }
 
-async function fetchContractEventsPaginated(
+/**
+ * Fetch one direction of transfer events, shrinking reach on processing-limit errors.
+ * Cost is a function of ledger range to chain tip — never grow past SAC_EVENTS_REACH_LEDGERS.
+ */
+async function fetchTransferEvents(
   rpcUrl: string,
-  sacContractId: string,
-  startLedger: number,
-  signal?: AbortSignal
-): Promise<Record<string, unknown>[]> {
-  const collected: Record<string, unknown>[] = []
-  let cursor: string | undefined
-
-  for (let page = 0; page < MAX_EVENT_PAGES_PER_CONTRACT; page++) {
-    const resp = (await sorobanRpc(
-      rpcUrl,
-      'getEvents',
-      {
-        startLedger,
-        filters: [{ type: 'contract', contractIds: [sacContractId] }],
-        pagination: { limit: EVENT_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
-      },
-      signal
-    )) as SorobanEventsPage
-
-    if (resp?.error) return collected
-
-    const events = (resp.result?.events ?? []) as Record<string, unknown>[]
-    collected.push(...events)
-    cursor = resp.result?.cursor
-    if (!cursor || events.length === 0) break
-  }
-
-  return collected
-}
-
-async function fetchSacTransferEventsForContract(
-  rpcUrl: string,
-  cAddress: string,
-  probe: PortfolioTokenProbe,
+  buildParams: (start: number) => object,
   latestLedger: number,
   signal?: AbortSignal
-): Promise<SmartAccountPayment[]> {
-  const sacContractId = probe.sacContractId
-  const isNative = probe.code.toUpperCase() === 'XLM' && !probe.issuer
+): Promise<Record<string, unknown>[]> {
+  let reach = SAC_EVENTS_REACH_LEDGERS
 
-  const mapEvent = (event: Record<string, unknown>, index: number): SmartAccountPayment | null => {
+  for (;;) {
+    const start = Math.max(1, latestLedger - reach)
+    const resp = (await sorobanRpc(rpcUrl, 'getEvents', buildParams(start), signal)) as SorobanEventsPage
+
+    if (resp?.error) {
+      if (reach <= SAC_EVENTS_MIN_REACH_LEDGERS) return []
+      reach = Math.max(SAC_EVENTS_MIN_REACH_LEDGERS, Math.floor(reach / 2))
+      continue
+    }
+
+    return (resp.result?.events ?? []) as Record<string, unknown>[]
+  }
+}
+
+function parseTransferAmountRaw(event: Record<string, unknown>): bigint {
+  const raw = event.value ?? event.valueXdr
+  if (raw == null) return 0n
+  try {
+    const val = xdr.ScVal.fromXDR(String(raw), 'base64')
+    const native = scValToNative(val)
+    if (typeof native === 'bigint') return native >= 0n ? native : 0n
+    if (typeof native === 'number' && Number.isFinite(native)) {
+      return BigInt(Math.trunc(native))
+    }
+    if (native && typeof native === 'object' && 'amount' in native) {
+      const amt = (native as { amount?: unknown }).amount
+      if (typeof amt === 'bigint') return amt >= 0n ? amt : 0n
+    }
+    return BigInt(String(native ?? 0))
+  } catch {
+    return 0n
+  }
+}
+
+/**
+ * Wildcard-topic SAC transfer events for a C-address (any contract).
+ * Incoming + outgoing in parallel; labels via assetInfoByContractId.
+ */
+export async function fetchSacTransferEvents(
+  rpcUrl: string,
+  cAddress: string,
+  assetInfoByContractId: Map<string, SacAssetInfo>,
+  signal?: AbortSignal
+): Promise<SmartAccountPayment[]> {
+  const latestLedgerResp = (await sorobanRpc(rpcUrl, 'getLatestLedger', {}, signal)) as {
+    result?: { sequence?: number }
+  }
+  const latestLedger = latestLedgerResp?.result?.sequence ?? 0
+  if (latestLedger === 0) return []
+
+  const transferSym = scValB64(xdr.ScVal.scvSymbol('transfer'))
+  const cAddressVal = scValB64(new Address(cAddress).toScVal())
+  const wildcard = '*'
+
+  const buildParams = (sender: string, recipient: string) => (start: number) => ({
+    startLedger: start,
+    filters: [
+      {
+        type: 'contract',
+        topics: [[transferSym, sender, recipient, wildcard]],
+      },
+    ],
+    pagination: { limit: 200 },
+  })
+
+  const [incoming, outgoing] = await Promise.all([
+    fetchTransferEvents(rpcUrl, buildParams(wildcard, cAddressVal), latestLedger, signal),
+    fetchTransferEvents(rpcUrl, buildParams(cAddressVal, wildcard), latestLedger, signal),
+  ])
+
+  const mapEvent = (event: Record<string, unknown>): SmartAccountPayment | null => {
     try {
-      const topics = (event.topic ?? []) as string[]
+      const topics = (event.topic ?? event.topicXdr ?? event.topics ?? []) as string[]
       if (topics.length < 3) return null
-      if (topicToSymbol(topics[0]!) !== 'transfer') return null
-      const from = topicToAddress(topics[1]!)
-      const to = topicToAddress(topics[2]!)
-      if (!from || !to) return null
-      if (!stellarAddressEquals(from, cAddress) && !stellarAddressEquals(to, cAddress)) return null
+
+      const fnName = scValToNative(xdr.ScVal.fromXDR(topics[0]!, 'base64'))
+      if (String(fnName) !== 'transfer') return null
+
+      const from = Address.fromScVal(xdr.ScVal.fromXDR(topics[1]!, 'base64')).toString()
+      const to = Address.fromScVal(xdr.ScVal.fromXDR(topics[2]!, 'base64')).toString()
 
       const amountRaw = parseTransferAmountRaw(event)
+      const contractId = String(event.contractId ?? '')
+      const assetInfo = assetInfoByContractId.get(contractId) ?? {
+        code: 'XLM',
+        assetType: 'native',
+      }
+
       const txHash = String(event.txHash ?? event.transactionHash ?? '')
       const eventId = event.id != null ? String(event.id) : ''
+
       return {
-        id: eventId || `${txHash}:${sacContractId}:${index}:${from}:${to}:${amountRaw.toString()}`,
+        id: eventId || txHash,
         transactionHash: txHash,
-        type: 'sac_transfer',
+        type: 'invoke_host_function',
         from,
         to,
         amount: formatSacRawToHuman(amountRaw, STELLAR_SAC_DISPLAY_DECIMALS),
-        assetType: isNative ? 'native' : 'credit_alphanum4',
-        assetCode: probe.code,
+        assetType: assetInfo.assetType,
+        assetCode: assetInfo.code === 'XLM' ? undefined : assetInfo.code,
         createdAt: String(event.ledgerClosedAt ?? ''),
       }
     } catch {
@@ -280,109 +474,112 @@ async function fetchSacTransferEventsForContract(
     }
   }
 
-  const startLedgers = [
-    Math.max(1, latestLedger - EVENT_LEDGER_WINDOW),
-    Math.max(1, latestLedger - EVENT_LEDGER_WINDOW_FALLBACK),
-  ]
-
-  for (const startLedger of startLedgers) {
-    const events = await fetchContractEventsPaginated(rpcUrl, sacContractId, startLedger, signal)
-    const matches: SmartAccountPayment[] = []
-    for (let i = 0; i < events.length; i++) {
-      const mapped = mapEvent(events[i]!, i)
-      if (mapped) matches.push(mapped)
-      if (matches.length >= MAX_TRANSFERS_PER_CONTRACT) break
-    }
-    if (matches.length > 0) return matches
+  const seen = new Set<string>()
+  const out: SmartAccountPayment[] = []
+  for (const event of [...incoming, ...outgoing]) {
+    const tx = mapEvent(event)
+    if (!tx || !tx.transactionHash) continue
+    const key = paymentDedupeKey(tx)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(tx)
   }
-
-  return []
+  return out
 }
 
-async function fetchSacTransferEventsForProbes(
-  rpcUrl: string,
-  cAddress: string,
-  probes: PortfolioTokenProbe[],
-  signal?: AbortSignal
-): Promise<SmartAccountPayment[]> {
-  const latestLedgerResp = (await sorobanRpc(rpcUrl, 'getLatestLedger', {}, signal)) as {
-    result?: { sequence?: number }
-    error?: unknown
+/**
+ * Group by transaction hash — multi-asset out+in under one hash is a swap.
+ */
+export function classifyPaymentTxTypes(
+  payments: SmartAccountPayment[],
+  cAddress: string
+): SmartAccountPayment[] {
+  const byHash = new Map<string, SmartAccountPayment[]>()
+  for (const p of payments) {
+    const key = p.transactionHash || p.id
+    const group = byHash.get(key) ?? []
+    group.push(p)
+    byHash.set(key, group)
   }
-  const latestLedger = latestLedgerResp?.result?.sequence ?? 0
-  if (latestLedger === 0 || probes.length === 0) return []
 
-  const settled = await Promise.allSettled(
-    probes.map((probe) =>
-      fetchSacTransferEventsForContract(rpcUrl, cAddress, probe, latestLedger, signal)
-    )
-  )
+  return payments.map((p) => {
+    const key = p.transactionHash || p.id
+    const group = byHash.get(key) ?? [p]
 
-  const seen = new Set<string>()
-  const merged: SmartAccountPayment[] = []
-  for (const result of settled) {
-    if (result.status !== 'fulfilled') continue
-    for (const tx of result.value) {
-      if (!tx.transactionHash) continue
-      const key = paymentDedupeKey(tx)
-      if (seen.has(key)) continue
-      seen.add(key)
-      merged.push(tx)
+    const hasOutgoing = group.some((g) => stellarAddressEquals(g.from, cAddress))
+    const hasIncoming = group.some((g) => stellarAddressEquals(g.to, cAddress))
+    const distinctAssets = new Set(group.map((g) => g.assetCode ?? 'XLM')).size
+
+    let txType: NonNullable<SmartAccountPayment['txType']>
+    if (hasOutgoing && hasIncoming && distinctAssets > 1) {
+      txType = 'swap'
+    } else if (stellarAddressEquals(p.from, cAddress)) {
+      txType = 'send'
+    } else if (stellarAddressEquals(p.to, cAddress)) {
+      txType = 'receive'
+    } else {
+      txType = 'unknown'
     }
-  }
 
-  return merged
+    return { ...p, txType }
+  })
 }
 
 export async function fetchSmartAccountPayments(params: {
   cAddress: string
   gAddress?: string | null
+  /** Latch bundler / fee-payer public G (required for passkey history). */
+  bundlerGAddress?: string | null
   horizonUrl: string
   rpcUrl: string
   networkPassphrase: string
+  network?: StellarNetwork
+  /** Extra SAC probes for asset labeling (portfolio / known tokens). */
+  additionalProbes?: PortfolioTokenProbe[]
   signal?: AbortSignal
 }): Promise<SmartAccountPayment[]> {
-  const trustlineProbes = await buildSacProbesForHistory({
-    horizonUrl: params.horizonUrl,
-    networkPassphrase: params.networkPassphrase,
-    gAddress: params.gAddress,
-    signal: params.signal,
-  })
-
-  let portfolioProbes: PortfolioTokenProbe[] = []
+  let trustlineProbes: PortfolioTokenProbe[] = []
   try {
-    const rows = await loadSmartAccountPortfolioRows({
-      rpcUrl: params.rpcUrl,
-      networkPassphrase: params.networkPassphrase,
-      cAddress: params.cAddress,
-      gAddress: params.gAddress ?? undefined,
+    trustlineProbes = await buildSacProbesForHistory({
       horizonUrl: params.horizonUrl,
+      networkPassphrase: params.networkPassphrase,
+      gAddress: params.gAddress,
       signal: params.signal,
     })
-    portfolioProbes = rows.map((r) => ({
-      code: r.code,
-      issuer: r.issuer,
-      sacContractId: r.sacContractId,
-    }))
   } catch {
-    // use trustline probes only
+    // labeling only
   }
 
-  const probes = mergeProbes(trustlineProbes, portfolioProbes)
+  const assetInfo = buildSacAssetInfoMap({
+    networkPassphrase: params.networkPassphrase,
+    network: params.network,
+    additionalProbes: [...trustlineProbes, ...(params.additionalProbes ?? [])],
+  })
 
-  const [gAddrResult, sacResult] = await Promise.allSettled([
-    params.gAddress
-      ? fetchGAddressHistory(params.horizonUrl, params.gAddress, params.cAddress, params.signal)
-      : Promise.resolve([]),
-    fetchSacTransferEventsForProbes(params.rpcUrl, params.cAddress, probes, params.signal),
+  const bundlerG = params.bundlerGAddress?.trim()
+
+  const [gAddrResult, bundlerResult, sacResult] = await Promise.allSettled([
+    params.gAddress?.trim()
+      ? fetchGAddressOps(
+          params.horizonUrl,
+          params.gAddress.trim(),
+          params.cAddress,
+          params.signal
+        )
+      : Promise.resolve([] as SmartAccountPayment[]),
+    bundlerG
+      ? fetchBundlerOps(params.horizonUrl, bundlerG, params.cAddress, params.signal)
+      : Promise.resolve([] as SmartAccountPayment[]),
+    fetchSacTransferEvents(params.rpcUrl, params.cAddress, assetInfo, params.signal),
   ])
 
-  const horizonTxs = gAddrResult.status === 'fulfilled' ? gAddrResult.value : []
-  const sacEvents = sacResult.status === 'fulfilled' ? sacResult.value : []
+  const gAddrTxs = gAddrResult.status === 'fulfilled' ? gAddrResult.value : []
+  const bundlerTxs = bundlerResult.status === 'fulfilled' ? bundlerResult.value : []
+  const sacTxs = sacResult.status === 'fulfilled' ? sacResult.value : []
 
   const seen = new Set<string>()
   const merged: SmartAccountPayment[] = []
-  for (const tx of [...sacEvents, ...horizonTxs]) {
+  for (const tx of [...gAddrTxs, ...bundlerTxs, ...sacTxs]) {
     if (!tx.transactionHash) continue
     const key = paymentDedupeKey(tx)
     if (seen.has(key)) continue
@@ -390,5 +587,8 @@ export async function fetchSmartAccountPayments(params: {
     merged.push(tx)
   }
 
-  return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const sorted = merged.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )
+  return classifyPaymentTxTypes(sorted, params.cAddress)
 }
