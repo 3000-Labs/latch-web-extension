@@ -243,6 +243,8 @@ export interface SmartAccountTransactionRow {
 
 export interface GetSmartAccountTransactionsRequest {
   accountId: string
+  /** Bypass fresh TTL and recompute (History pull-to-refresh). */
+  force?: boolean
 }
 
 export interface GetSmartAccountTransactionsResponse {
@@ -630,6 +632,10 @@ export interface DepositIntent {
   memo_id: string
   pool_address: string
   expires_at: string
+  /** Server-signed MoonPay buy URL (snake_case from Latch API). */
+  widget_url?: string
+  /** Server-signed MoonPay buy URL (camelCase alias). */
+  widgetUrl?: string
 }
 
 export interface DepositForward {
