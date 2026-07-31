@@ -1,6 +1,7 @@
 import type { DepositIntent, DepositStatus } from '@latch/types'
 
 import { v1FetchForWallet } from './v1Client'
+import { withActiveNetwork } from './withActiveNetwork'
 
 /**
  * Mint a TTL-bound latch-relayer funding intent for the smart account.
@@ -13,9 +14,10 @@ export async function createDepositIntent(
   wallet: string,
   smartAccountAddress: string
 ): Promise<DepositIntent> {
+  const body = await withActiveNetwork({ smart_account_address: smartAccountAddress })
   return await v1FetchForWallet<DepositIntent>(wallet, '/v1/accounts/deposit-intent', {
     method: 'POST',
-    body: JSON.stringify({ smart_account_address: smartAccountAddress }),
+    body: JSON.stringify(body),
   })
 }
 

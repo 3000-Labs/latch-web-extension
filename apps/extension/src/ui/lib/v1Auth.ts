@@ -1,5 +1,6 @@
 import { startAuthentication } from '@simplewebauthn/browser'
 
+import { formatFundError } from '../fund/fundErrors'
 import { friendlyError, sendToBackground } from './backgroundClient'
 import {
   assertPasskeyAssertionMatchesV1Challenge,
@@ -24,13 +25,13 @@ async function signInWithPasskey(args: {
 }) {
   const challengeRes = await sendToBackground<
     { linkedAccountId: string },
-    { wallet: string; nonce: string; keyType: string }
+    { wallet: string; nonce: string; keyType: string; network?: string }
   >({
     type: 'COSIGN_V1_AUTH_CHALLENGE',
     payload: { linkedAccountId: args.linkedAccountId },
   })
   if (!challengeRes.ok || !challengeRes.data) {
-    throw new Error(friendlyError(challengeRes.error))
+    throw new Error(formatFundError(challengeRes.error) || friendlyError(challengeRes.error))
   }
   const { wallet, nonce, keyType } = challengeRes.data
 
@@ -74,19 +75,7 @@ async function signInWithPasskey(args: {
     },
   })
   if (!signInRes.ok) {
-    const msg = friendlyError(signInRes.error)
-    if (
-      signInRes.error?.code === 'UNAUTHORIZED' ||
-      /signature verification failed/i.test(signInRes.error?.message ?? '')
-    ) {
-      const extId =
-        typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : '<extension-id>'
-      throw new Error(
-        `${msg} The API must allow origin chrome-extension://${extId} in WEBAUTHN_ALLOWED_ORIGINS (V1 wallet sign-in). ` +
-          `Extension WebAuthn already uses WEBAUTHN_EXTENSION_IDS for /api/webauthn/* — those lists are separate.`
-      )
-    }
-    throw new Error(msg)
+    throw new Error(formatFundError(signInRes.error, { wallet }))
   }
 }
 
