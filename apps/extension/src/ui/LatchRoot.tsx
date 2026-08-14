@@ -1076,7 +1076,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   useEffect(() => {
     if (!accountsHydrated || !accountsLoadSucceeded) return
-    if (route !== 'history' && route !== 'home' && route !== 'explore') return
+    if (route !== 'history' && route !== 'home') return
     void loadHistory()
   }, [route, loadHistory, activeNetwork, accountsHydrated, accountsLoadSucceeded])
 
@@ -2648,18 +2648,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <ExploreScreen
-                  items={recentActivityItems}
-                  loading={historyLoading}
-                  error={historyError}
-                  onBack={() => setRoute('home')}
-                  onSelectItem={(it) => {
-                    const c = activeAccount?.smartAccountAddress ?? ''
-                    setTransactionDetailReturnRoute('explore')
-                    setTransactionDetail(buildTransactionDetail(it, c, networkLabel))
-                    setRoute('transactionDetail')
-                  }}
-                />
+                <ExploreScreen onBack={() => setRoute('home')} />
               </div>
             ) : null}
 
