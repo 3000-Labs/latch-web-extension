@@ -1,4 +1,8 @@
-import type { CreateDepositIntentRequest, DepositIntent } from '@latch/types'
+import type {
+  CreateDepositIntentRequest,
+  DepositIntent,
+  DepositOnRampCrypto,
+} from '@latch/types'
 
 import { formatFundError } from './fundErrors'
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
@@ -9,6 +13,8 @@ export async function createDepositIntentForAccount(args: {
   passkeyCredentialId?: string
   surface: 'popup' | 'sidepanel'
   openMoonPay?: boolean
+  openTransak?: boolean
+  cryptoCurrency?: DepositOnRampCrypto
 }): Promise<DepositIntent> {
   if (!args.accountId.trim()) {
     throw new Error('No active account selected')
@@ -30,6 +36,8 @@ export async function createDepositIntentForAccount(args: {
       payload: {
         accountId: args.accountId,
         openMoonPay: args.openMoonPay,
+        openTransak: args.openTransak,
+        cryptoCurrency: args.cryptoCurrency,
       },
     })
 
@@ -67,5 +75,18 @@ export async function startMoonPayOnRamp(args: {
   return createDepositIntentForAccount({
     ...args,
     openMoonPay: true,
+  })
+}
+
+export async function startTransakOnRamp(args: {
+  accountId: string
+  passkeyCredentialId?: string
+  surface: 'popup' | 'sidepanel'
+  cryptoCurrency: DepositOnRampCrypto
+}): Promise<DepositIntent> {
+  return createDepositIntentForAccount({
+    ...args,
+    openTransak: true,
+    cryptoCurrency: args.cryptoCurrency,
   })
 }

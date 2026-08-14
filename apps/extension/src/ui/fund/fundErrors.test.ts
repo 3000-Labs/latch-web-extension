@@ -58,4 +58,9 @@ describe('formatFundError', () => {
       formatFundError({ code: 'moonpay_unsigned_url', message: 'missing signature' })
     ).toMatch(/missing signature/)
   })
+
+  it('explains transak_missing_widget_url', () => {
+    expect(formatFundError({ code: 'transak_missing_widget_url' })).toMatch(/Transak/i)
+    expect(formatFundError({ code: 'transak_missing_widget_url' })).toMatch(/widget_url/)
+  })
 })

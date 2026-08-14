@@ -47,6 +47,21 @@ export function formatFundError(
     )
   }
 
+  if (code === 'transak_missing_widget_url') {
+    return (
+      message ||
+      'Transak did not return a widget URL. The Latch API must create a Transak session and return widget_url.'
+    )
+  }
+
+  if (code === 'transak_crypto_required') {
+    return message || 'Choose XLM or USDC before opening Transak.'
+  }
+
+  if (code === 'fund_provider_conflict') {
+    return message || 'Choose a single on-ramp provider.'
+  }
+
   if (
     code === 'INTERNAL_ERROR' ||
     code === 'internal_error' ||

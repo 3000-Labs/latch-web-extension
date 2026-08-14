@@ -162,4 +162,62 @@ describe('V1 Fund path network propagation', () => {
       network: 'mainnet',
     })
   })
+
+  it('sends provider and crypto_currency on deposit-intent for Transak', async () => {
+    const store: Record<string, unknown> = {
+      'latch.v1TokensByWallet': {
+        'mainnet:CABC': {
+          accessToken: 'tok',
+          refreshToken: 'ref',
+          expiresAt: Date.now() + 60_000,
+          wallet: 'CABC',
+        },
+      },
+    }
+    vi.stubGlobal('chrome', {
+      runtime: { id: 'ext-id-abc' },
+      storage: {
+        local: {
+          get: vi.fn(async (keys: string | string[]) => {
+            const list = Array.isArray(keys) ? keys : [keys]
+            const out: Record<string, unknown> = {}
+            for (const k of list) out[k] = store[k]
+            return out
+          }),
+          set: vi.fn(async (patch: Record<string, unknown>) => {
+            Object.assign(store, patch)
+          }),
+        },
+      },
+    })
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 201,
+      async text() {
+        return JSON.stringify({
+          data: {
+            intent_id: 'i1',
+            memo_id: '123',
+            pool_address: 'GPOOL',
+            expires_at: '2026-07-21T12:00:00Z',
+            widget_url: 'https://global-stg.transak.com?sessionId=x',
+          },
+        })
+      },
+    })
+
+    await createDepositIntent('CABC', 'CABC', {
+      provider: 'transak',
+      cryptoCurrency: 'XLM',
+    })
+
+    const body = JSON.parse(String((fetchMock.mock.calls[0]![1] as RequestInit).body))
+    expect(body).toEqual({
+      smart_account_address: 'CABC',
+      network: 'mainnet',
+      provider: 'transak',
+      crypto_currency: 'XLM',
+    })
+  })
 })

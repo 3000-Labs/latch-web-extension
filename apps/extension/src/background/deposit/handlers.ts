@@ -8,6 +8,7 @@ import type {
 import { BackendError } from '../api/client'
 import { createDepositIntent, fetchDepositIntentStatus } from '../api/deposit'
 import { openMoonPayBuyTab } from '../../lib/moonpayBuyUrl'
+import { openTransakBuyTab } from '../../lib/transakBuyUrl'
 import { resolveAccessToken } from '../api/v1Client'
 import { v1AuthWalletForLinkedAccount } from '../cosign/v1AuthWallet'
 import { getActiveNetwork } from '../network/config'
@@ -66,6 +67,22 @@ export async function tryHandleDepositMessage(
   switch (message.type) {
     case 'CREATE_DEPOSIT_INTENT': {
       const req = message.payload as CreateDepositIntentRequest
+      if (req.openMoonPay && req.openTransak) {
+        throw new BackendError('Choose a single on-ramp provider', {
+          status: 400,
+          code: 'fund_provider_conflict',
+        })
+      }
+      if (req.openTransak) {
+        const crypto = req.cryptoCurrency
+        if (crypto !== 'XLM' && crypto !== 'USDC') {
+          throw new BackendError('Transak requires cryptoCurrency XLM or USDC', {
+            status: 400,
+            code: 'transak_crypto_required',
+          })
+        }
+      }
+
       const { accounts } = await getAccounts()
       const account = accounts.find((a) => a.id === req.accountId)
       if (!account) {
@@ -88,7 +105,13 @@ export async function tryHandleDepositMessage(
       const { wallet } = v1AuthWalletForLinkedAccount(account)
       await resolveAccessToken(wallet)
 
-      const intent = assertDepositIntent(await createDepositIntent(wallet, smartAccountAddress))
+      const provider = req.openTransak ? 'transak' : req.openMoonPay ? 'moonpay' : undefined
+      const intent = assertDepositIntent(
+        await createDepositIntent(wallet, smartAccountAddress, {
+          provider,
+          cryptoCurrency: req.openTransak ? req.cryptoCurrency : undefined,
+        })
+      )
 
       if (req.openMoonPay) {
         const network = await getActiveNetwork()
@@ -103,6 +126,17 @@ export async function tryHandleDepositMessage(
         } catch (err) {
           mapMoonPayOpenError(err)
         }
+      }
+
+      if (req.openTransak) {
+        const widgetUrl = signedWidgetUrlFromIntent(intent)
+        if (!widgetUrl) {
+          throw new BackendError(
+            'Transak did not return a widget URL. The Latch API must create a Transak session and return widget_url.',
+            { code: 'transak_missing_widget_url', status: 400 }
+          )
+        }
+        await openTransakBuyTab({ widgetUrl })
       }
 
       sendResponse(ok(intent))

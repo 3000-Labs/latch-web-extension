@@ -1,7 +1,14 @@
-import type { DepositIntent, DepositStatus } from '@latch/types'
+import type { DepositIntent, DepositOnRampCrypto, DepositStatus } from '@latch/types'
 
 import { v1FetchForWallet } from './v1Client'
 import { withActiveNetwork } from './withActiveNetwork'
+
+export type DepositOnRampProvider = 'moonpay' | 'transak'
+
+export type CreateDepositIntentOptions = {
+  provider?: DepositOnRampProvider
+  cryptoCurrency?: DepositOnRampCrypto
+}
 
 /**
  * Mint a TTL-bound latch-relayer funding intent for the smart account.
@@ -12,12 +19,22 @@ import { withActiveNetwork } from './withActiveNetwork'
  */
 export async function createDepositIntent(
   wallet: string,
-  smartAccountAddress: string
+  smartAccountAddress: string,
+  options?: CreateDepositIntentOptions
 ): Promise<DepositIntent> {
-  const body = await withActiveNetwork({ smart_account_address: smartAccountAddress })
+  const body: Record<string, unknown> = {
+    smart_account_address: smartAccountAddress,
+  }
+  if (options?.provider) {
+    body.provider = options.provider
+  }
+  if (options?.cryptoCurrency) {
+    body.crypto_currency = options.cryptoCurrency
+  }
+  const payload = await withActiveNetwork(body)
   return await v1FetchForWallet<DepositIntent>(wallet, '/v1/accounts/deposit-intent', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   })
 }
 
