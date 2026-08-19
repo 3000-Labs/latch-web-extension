@@ -12,9 +12,11 @@ import type {
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import {
   assertBeginOptionsRpIdMatchesExtension,
+  assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   nextPasskeyAccountDisplayName,
+  prepareRegistrationOptionsForCreate,
 } from '../webauthn/passkey'
 
 type PrefetchState = {
@@ -65,7 +67,7 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         if (cancelled) return
         if (!begin.ok) throw new Error(friendlyError(begin.error))
 
-        const optionsJSON = begin.data?.options
+        const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
         assertBeginOptionsRpIdMatchesExtension(optionsJSON)
         prefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         if (!cancelled) setPrefetchReady(true)
@@ -107,6 +109,8 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
       } catch (e) {
         throw new Error(formatWebauthnBrowserError(e))
       }
+
+      assertRegistrationCeremonyForFinish(reg)
 
       const res = await sendToBackground<
         { response: unknown },

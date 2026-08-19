@@ -1,9 +1,12 @@
+import { normalizeStellarContractId } from '@latch/swap'
+
 export type TokenListItem = {
   code: string
   issuer: string
   contract?: string
   icon: string
   name?: string
+  decimals?: number
 }
 
 /** @deprecated use TokenListItem */
@@ -25,11 +28,16 @@ const LISTS: Record<'mainnet' | 'testnet', string[]> = {
   ],
 }
 
-const STORAGE_KEY_PREFIX = 'latch.tokenListMap.v1'
+/** v2: contract ids normalized to C-address (Lobstr lists previously stored hex). */
+const STORAGE_KEY_PREFIX = 'latch.tokenListMap.v2'
 const LIST_STALE_MS = 24 * 60 * 60 * 1000
 const FETCH_TIMEOUT_MS = 10_000
 
 let memoryCache: { network: 'mainnet' | 'testnet'; at: number; map: TokenMap } | null = null
+
+export function clearTokenListMemoryCache(): void {
+  memoryCache = null
+}
 
 function storageKey(network: 'mainnet' | 'testnet'): string {
   return `${STORAGE_KEY_PREFIX}:${network}`
@@ -41,15 +49,24 @@ function normalizeAssetEntry(raw: unknown): TokenListItem | null {
   const code = typeof o.code === 'string' ? o.code.trim() : ''
   const issuer = typeof o.issuer === 'string' ? o.issuer.trim() : ''
   const icon = typeof o.icon === 'string' ? o.icon.trim() : ''
-  const contract =
+  const rawContract =
     typeof o.contract === 'string'
       ? o.contract.trim()
       : typeof o.contract_id === 'string'
         ? o.contract_id.trim()
         : undefined
+  // Lobstr curated lists ship 32-byte hex; normalize to C-address for SAC APIs.
+  const contract = rawContract
+    ? (normalizeStellarContractId(rawContract) ?? undefined)
+    : undefined
   const name = typeof o.name === 'string' ? o.name.trim() : undefined
+  const decimalsRaw = o.decimals
+  const decimals =
+    typeof decimalsRaw === 'number' && Number.isFinite(decimalsRaw) && decimalsRaw >= 0
+      ? decimalsRaw
+      : undefined
   if (!code || !icon || !icon.startsWith('http')) return null
-  return { code, issuer: issuer || '', contract, icon, name }
+  return { code, issuer: issuer || '', contract, icon, name, decimals }
 }
 
 /** Parse SEP-0042 lists, Soroswap, Lobstr, and similar shapes. */
@@ -124,14 +141,32 @@ export function iconFromTokenLists(
   return iconFromTokenMap(buildTokenMap(lists), params)
 }
 
-async function fetchListUrl(url: string): Promise<TokenListItem[]> {
+export function listJsonMatchesNetwork(
+  json: unknown,
+  network: 'mainnet' | 'testnet'
+): boolean {
+  if (!json || typeof json !== 'object') return true
+  const declared = (json as Record<string, unknown>).network
+  if (typeof declared !== 'string') return true
+  const n = declared.toLowerCase()
+  if (n === 'public' || n === 'mainnet') return network === 'mainnet'
+  if (n === 'testnet') return network === 'testnet'
+  return true
+}
+
+async function fetchListUrl(
+  url: string,
+  network: 'mainnet' | 'testnet'
+): Promise<TokenListItem[]> {
   try {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
     if (!res.ok) return []
-    return normalizeListJson(await res.json())
+    const json = await res.json()
+    if (!listJsonMatchesNetwork(json, network)) return []
+    return normalizeListJson(json)
   } catch {
     return []
   }
@@ -156,7 +191,7 @@ async function persistMap(network: 'mainnet' | 'testnet', map: TokenMap): Promis
 
 async function fetchTokenListFromNetwork(network: 'mainnet' | 'testnet'): Promise<TokenMap> {
   const urls = LISTS[network]
-  const settled = await Promise.allSettled(urls.map((url) => fetchListUrl(url)))
+  const settled = await Promise.allSettled(urls.map((url) => fetchListUrl(url, network)))
 
   const combined: TokenListItem[] = []
   for (const result of settled) {

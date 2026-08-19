@@ -10,13 +10,23 @@ export interface SignTransactionRequest {
   xdr: string
   network: Network
   accountToSign: string
+  /**
+   * When false, the wallet signs but does not broadcast. The response returns
+   * `signedTxXdr` (and `signedAuthEntry`) so the dApp can submit itself.
+   * Defaults to true (wallet signs and submits, returning `txHash`).
+   */
+  submit?: boolean
 }
 
 export interface SignTransactionResponse {
-  signedXdr: string
+  txHash?: string
+  signedAuthEntry?: string
+  signedTxXdr?: string
+  /** @deprecated Prefer txHash when wallet submits on behalf of dapp */
+  signedXdr?: string
 }
 
-export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic'
+export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic' | 'multisig'
 
 export interface StoredAccount {
   id: string
@@ -46,6 +56,32 @@ export interface StoredAccount {
    * uncompressed P-256 pubkey (65 bytes) || credentialIdBytes
    */
   passkeyKeyDataHex?: string
+
+  /** Present when `mode === 'multisig'`. */
+  multisigThreshold?: number
+  /**
+   * Backend `multisig_members.id` for this session user on this wallet.
+   * Required for `/api/multisig` proposal approve/execute.
+   */
+  multisigMemberId?: string
+  /** Backend `multisig_accounts.id` for this wallet. */
+  multisigBackendAccountId?: string
+  /** Cosign (unwired / not shipped): background WCK record id (IndexedDB). */
+  cosignWckRefId?: string
+  /** Cosign (unwired / not shipped): cached HMAC blind signer id for this member. */
+  cosignBlindSignerId?: string
+  /** Cosign (unwired / not shipped): local passkey/freighter account id used to sign. */
+  cosignLinkedAccountId?: string
+  /** Factory deploy salt for this multisig wallet. */
+  multisigAccountSaltHex?: string
+  /**
+   * Cached draft/account members for register+sync after deploy.
+   * Prefer MultisigDraftMember shape from `/api/multisig`; CosignMemberInit
+   * may appear on unwired cosign paths.
+   */
+  multisigMembersSnapshot?:
+    | import('./multisig').MultisigDraftMember[]
+    | import('./cosign').CosignMemberInit[]
 
   createdAt: number
 }
@@ -105,6 +141,8 @@ export interface BuildSendTxRequest {
   assetId?: string
   contractId?: string
   signerG?: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildSendAssetInfo {
@@ -120,6 +158,7 @@ export interface BuildSendTxResponse {
   authEntriesXdr?: string[]
   smartAccountAuthEntryIndex?: number
   contextRuleId: number | string
+  contextRuleIds?: number[]
   authDigestHex: string
   signaturePayloadHex?: string
   validUntilLedger: number
@@ -135,6 +174,10 @@ export interface BuildSendTxResponse {
   estimatedFeeXlm?: string
   estimatedFeeUsd?: string
   feeLabel?: string
+  delegatedGAuthEntrySynthesized?: boolean
+  delegatedNativeAuthEntryIndices?: number[]
+  delegatedNativeSignBlobPayloadsBase64?: string[]
+  submitMethod?: 'webauthn' | 'delegated' | 'bundler-delegated'
   [k: string]: unknown
 }
 
@@ -147,7 +190,11 @@ export interface SetupSendRulesRequest {
   /** WebAuthn verifier C-address (must match Latch API `NEXT_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS`). */
   verifierAddress?: string
   keyDataHex?: string
+  /** Optional WebAuthn credential id (base64url). */
+  credentialId?: string
   gAddress?: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SetupSendRulesResponse extends BuildSendTxResponse {
@@ -165,6 +212,15 @@ export interface GetSmartAccountBalancesRequest {
 export interface GetSmartAccountBalancesResponse {
   rows: SmartAccountBalanceRow[]
   totalBalanceUsd?: string
+}
+
+export interface RecordKnownSacProbeRequest {
+  accountId: string
+  probe: {
+    code: string
+    issuer?: string
+    sacContractId: string
+  }
 }
 
 export type SmartAccountTransactionKind = 'sent' | 'received' | 'deposit' | 'swap'
@@ -208,6 +264,8 @@ export interface SetActiveAccountRequest {
 
 export interface CreateOrConnectFreighterRequest {
   gAddress: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface CreateOrConnectFreighterResponse {
@@ -255,6 +313,8 @@ export interface SignDelegatedGAuthEntryResponse {
 
 export interface CreateOrConnectPhantomRequest {
   publicKeyHex: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface CreateOrConnectPhantomResponse {
@@ -266,6 +326,13 @@ export interface CreateOrConnectPhantomResponse {
 export interface CreateOrConnectPasskeyRequest {
   keyDataHex: string
   credentialId: string
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
+  /**
+   * Extension-only hint: when set, skip deploy POST if this C-address already has a
+   * contract instance on the active network. Never forwarded to the Latch API body.
+   */
+  smartAccountAddress?: string
 }
 
 export interface CreateOrConnectPasskeyResponse {
@@ -288,6 +355,8 @@ export interface BuildTxRequest {
   smartAccountAddress: string
   signerG?: string
   transfer?: BuildTransferIntent
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildTxResponse {
@@ -307,6 +376,8 @@ export interface BuildDelegatedTxRequest {
   smartAccountAddress: string
   gAddress: string
   transfer?: BuildTransferIntent
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BuildDelegatedTxResponse {
@@ -326,7 +397,11 @@ export interface SubmitPhantomTxRequest {
   authSignatureHex: string
   prefixedMessage: string
   publicKeyHex: string
-  contextRuleId: number | string
+  contextRuleId: number
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitDelegatedTxRequest {
@@ -336,6 +411,16 @@ export interface SubmitDelegatedTxRequest {
   /** Base64 of raw 64-byte Ed25519 signature (not full signed auth entry XDR). */
   signedAuthEntryBase64: string
   signerAddress: string
+  contextRuleId?: number
+  delegatedNativeAuthEntryIndex?: number
+  delegatedNativeAuthEntryIndices?: number[]
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  delegatedGAuthEntrySynthesized?: boolean
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitWebauthnTxRequest {
@@ -343,13 +428,24 @@ export interface SubmitWebauthnTxRequest {
   authEntryXdr: string
   sigDataXdr: string
   keyDataHex: string
-  contextRuleId: string
+  contextRuleId?: number
+  authEntriesXdr?: string[]
+  smartAccountAuthEntryIndex?: number
+  delegatedGAuthEntrySynthesized?: boolean
+  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
+  submit?: boolean
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface SubmitTxResponse {
   transactionHash?: string
   hash?: string
   status?: string
+  /** Present when the request used `submit: false`; a submit-ready signed tx envelope. */
+  signedTxXdr?: string
+  /** False when the backend signed but did not broadcast. */
+  submitted?: boolean
   // backend response is not specified; accept opaque
   [k: string]: unknown
 }
@@ -360,6 +456,8 @@ export interface BackendWebauthnBeginResponse {
 
 export interface BackendWebauthnRegistrationFinishRequest {
   response: unknown
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BackendWebauthnRegistrationFinishResponse {
@@ -373,6 +471,8 @@ export interface BackendWebauthnRegistrationFinishResponse {
 
 export interface BackendWebauthnAuthenticationFinishRequest {
   response: unknown
+  /** Stellar network; omit → API defaults to testnet. */
+  network?: Network
 }
 
 export interface BackendSessionAccount {
@@ -398,13 +498,16 @@ export interface BackendWebauthnAuthenticationFinishResponse {
 
 export type DappPermission = 'getPublicKey' | 'signTransaction'
 
-export type PendingDappRequestKind = DappPermission
+export type PendingDappRequestKind = DappPermission | 'externalSignReview'
 
 export interface PendingDappRequest {
   id: string
   origin: string
   kind: PendingDappRequestKind
   createdAt: number
+  signRequest?: import('./externalSign').ExternalSignRequest
+  prepared?: import('./externalSign').PrepareSignResponse
+  source?: import('./externalSign').ExternalSignSource
 }
 
 export type ListPendingDappRequestsRequest = Record<string, never>
@@ -416,7 +519,13 @@ export interface ListPendingDappRequestsResponse {
 export interface ResolvePendingDappRequest {
   requestId: string
   approved: boolean
+  /** When approved is false and set, dapp receives status "error" instead of "rejected". */
+  errorMessage?: string
+  errorCode?: string
   signedXdr?: string
+  txHash?: string
+  signedAuthEntry?: string
+  signedTxXdr?: string
 }
 
 export interface GetDappPermissionsRequest {
@@ -438,6 +547,7 @@ export interface DappGetPublicKeyResponse {
 }
 
 export interface DappSignTransactionRequest {
+  origin?: string
   request: SignTransactionRequest
 }
 
@@ -514,6 +624,44 @@ export interface GetMarketPricesResponse {
   pricesByCodeUpper: Record<string, MarketTokenPrice>
 }
 
+/** Per-funding-session latch-relayer deposit intent (`POST /v1/accounts/deposit-intent`). */
+export interface DepositIntent {
+  intent_id: string
+  memo_id: string
+  pool_address: string
+  expires_at: string
+}
+
+export interface DepositForward {
+  tx_hash: string
+  amount: string
+  asset: string
+  status: string
+  forward_tx?: string
+  created_at: string
+}
+
+export interface DepositStatus {
+  intent_id: string
+  memo_id: string
+  c_address: string
+  pool_address: string
+  status: 'pending' | 'completed' | 'expired' | 'failed' | string
+  expires_at: string
+  forwards: DepositForward[]
+}
+
+export interface CreateDepositIntentRequest {
+  accountId: string
+  /** When true, background opens the MoonPay buy tab after minting the intent. */
+  openMoonPay?: boolean
+}
+
+export interface GetDepositIntentStatusRequest {
+  accountId: string
+  memoId: string
+}
+
 // Message types for popup/content ↔ background communication
 export type MessageType =
   | 'SIGN_TRANSACTION'
@@ -548,16 +696,90 @@ export type MessageType =
   | 'RESOLVE_PENDING_DAPP_REQUEST'
   | 'DAPP_GET_PUBLIC_KEY'
   | 'DAPP_SIGN_TRANSACTION'
+  | 'DAPP_OPEN_SIGN_REQUEST'
   | 'MIGRATION_DISCOVER'
   | 'MIGRATION_SWEEP_XLM'
   | 'MIGRATION_SWEEP_TOKEN'
   | 'GET_SMART_ACCOUNT_BALANCES'
   | 'GET_SMART_ACCOUNT_TRANSACTIONS'
   | 'GET_MARKET_PRICES'
+  | 'CREATE_DEPOSIT_INTENT'
+  | 'GET_DEPOSIT_INTENT_STATUS'
   | 'GET_ASSET_ICON_DATA_URLS'
   | 'BUILD_SEND_TX'
   | 'SETUP_SEND_RULES'
   | 'OPEN_WALLET_AFTER_ONBOARDING'
+  | 'OPEN_ONBOARDING_TAB'
+  | 'PREPARE_EXTERNAL_SIGN'
+  | 'RUN_EXTERNAL_SIGN_FLOW'
+  | 'GET_ACTIVE_NETWORK'
+  | 'SET_ACTIVE_NETWORK'
+  | 'PING_EXTENSION'
+  | 'GET_SWAP_TOKEN_CATALOG'
+  | 'GET_SWAP_QUOTE'
+  | 'PREPARE_SWAP_TX'
+  | 'SETUP_SWAP_RULES'
+  | 'RECORD_KNOWN_SAC_PROBE'
+  | 'MULTISIG_CREATE_DRAFT'
+  | 'MULTISIG_GET_ACTIVE_DRAFT'
+  | 'MULTISIG_ADD_DRAFT_MEMBER'
+  | 'MULTISIG_REMOVE_DRAFT_MEMBER'
+  | 'MULTISIG_UPDATE_DRAFT_THRESHOLD'
+  | 'MULTISIG_PREDICT_DRAFT'
+  | 'MULTISIG_DEPLOY_DRAFT'
+  | 'MULTISIG_DRAFT_PASSKEY_REG_BEGIN'
+  | 'MULTISIG_DRAFT_PASSKEY_REG_FINISH'
+  | 'MULTISIG_DRAFT_PASSKEY_AUTH_BEGIN'
+  | 'MULTISIG_DRAFT_PASSKEY_AUTH_FINISH'
+  | 'MULTISIG_LIST_ACCOUNTS'
+  | 'MULTISIG_REGISTER_ACCOUNT'
+  | 'MULTISIG_JOIN_PREVIEW'
+  | 'MULTISIG_JOIN_MEMBER'
+  | 'MULTISIG_JOIN_PASSKEY_REG_BEGIN'
+  | 'MULTISIG_JOIN_PASSKEY_REG_FINISH'
+  | 'MULTISIG_JOIN_PASSKEY_AUTH_BEGIN'
+  | 'MULTISIG_JOIN_PASSKEY_AUTH_FINISH'
+  | 'MULTISIG_LIST_PROPOSALS'
+  | 'MULTISIG_GET_PROPOSAL'
+  | 'MULTISIG_CREATE_PROPOSAL'
+  | 'MULTISIG_APPROVE_DELEGATED_BEGIN'
+  | 'MULTISIG_APPROVE_DELEGATED_FINISH'
+  | 'MULTISIG_APPROVE_WEBAUTHN'
+  | 'MULTISIG_EXECUTE_PROPOSAL'
+  | 'MULTISIG_REFRESH_PROPOSAL'
+  | 'MULTISIG_CREATE_LOCAL_ACCOUNT'
+  | 'MULTISIG_GET_PENDING_INVITES'
+  | 'MULTISIG_ADD_PENDING_INVITE'
+  | 'MULTISIG_REMOVE_PENDING_INVITE'
+  | 'MULTISIG_GET_DRAFT_META'
+  | 'MULTISIG_SET_DRAFT_META'
+  | 'MULTISIG_CLEAR_DRAFT_META'
+  | 'MULTISIG_SYNC_LOCAL_ACCOUNTS'
+  | 'MULTISIG_GET_PROPOSALS_BANNER_DISMISSED'
+  | 'MULTISIG_DISMISS_PROPOSALS_BANNER'
+  | 'COSIGN_GET_TRANSPORT_PUBKEY'
+  | 'COSIGN_DEPLOY_ACCOUNT'
+  | 'COSIGN_POST_JOIN_RELAY'
+  | 'COSIGN_POLL_JOIN_RELAY'
+  | 'COSIGN_SEAL_MEMBER_WCK'
+  | 'COSIGN_DISCOVER_MEMBERSHIPS'
+  | 'COSIGN_LIST_PENDING'
+  | 'COSIGN_GET_REQUEST'
+  | 'COSIGN_PROPOSE'
+  | 'COSIGN_SIGN_REQUEST'
+  | 'COSIGN_EXECUTE_REQUEST'
+  | 'COSIGN_CANCEL_REQUEST'
+  | 'COSIGN_GET_WCK_RECORD'
+  | 'COSIGN_ENSURE_V1_AUTH'
+  | 'COSIGN_V1_AUTH_CHALLENGE'
+  | 'COSIGN_V1_AUTH_SIGN_IN'
+  | 'COSIGN_CREATE_LOCAL_ACCOUNT'
+  | 'COSIGN_GET_PROPOSALS_BANNER_DISMISSED'
+  | 'COSIGN_DISMISS_PROPOSALS_BANNER'
+  | 'COSIGN_RUN_POLL'
+  | 'COSIGN_PREDICT_ACCOUNT'
+  | 'COSIGN_PREPARE_SIGN'
+  | 'COSIGN_ATTACH_WEBAUTHN_AUTH'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -611,16 +833,119 @@ export type BackgroundRequestPayloadByType = {
   RESOLVE_PENDING_DAPP_REQUEST: ResolvePendingDappRequest
   DAPP_GET_PUBLIC_KEY: GetDappPermissionsRequest
   DAPP_SIGN_TRANSACTION: DappSignTransactionRequest
+  DAPP_OPEN_SIGN_REQUEST: import('./externalSign').DappOpenSignRequestPayload
   MIGRATION_DISCOVER: MigrationDiscoverRequest
   MIGRATION_SWEEP_XLM: MigrationSweepXlmRequest
   MIGRATION_SWEEP_TOKEN: MigrationSweepTokenRequest
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesRequest
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsRequest
   GET_MARKET_PRICES: GetMarketPricesRequest
+  CREATE_DEPOSIT_INTENT: CreateDepositIntentRequest
+  GET_DEPOSIT_INTENT_STATUS: GetDepositIntentStatusRequest
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsRequest
   BUILD_SEND_TX: BuildSendTxRequest
   SETUP_SEND_RULES: SetupSendRulesRequest
   OPEN_WALLET_AFTER_ONBOARDING: undefined
+  OPEN_ONBOARDING_TAB: undefined
+  PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowRequest
+  RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').RunExternalSignFlowRequest
+  GET_ACTIVE_NETWORK: undefined
+  SET_ACTIVE_NETWORK: { network: Network }
+  PING_EXTENSION: undefined
+  GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogRequest
+  GET_SWAP_QUOTE: import('./swap').GetSwapQuoteRequest
+  PREPARE_SWAP_TX: import('./swap').PrepareSwapTxRequest
+  SETUP_SWAP_RULES: import('./swap').SetupSwapRulesRequest
+  RECORD_KNOWN_SAC_PROBE: RecordKnownSacProbeRequest
+  MULTISIG_CREATE_DRAFT: undefined
+  MULTISIG_GET_ACTIVE_DRAFT: undefined
+  MULTISIG_ADD_DRAFT_MEMBER: import('./multisig').MultisigDraftMemberActionRequest
+  MULTISIG_REMOVE_DRAFT_MEMBER: import('./multisig').MultisigDraftMemberRemoveRequest
+  MULTISIG_UPDATE_DRAFT_THRESHOLD: import('./multisig').UpdateMultisigDraftThresholdRequest
+  MULTISIG_PREDICT_DRAFT: import('./multisig').MultisigDraftIdRequest
+  MULTISIG_DEPLOY_DRAFT: import('./multisig').MultisigDraftIdRequest
+  MULTISIG_DRAFT_PASSKEY_REG_BEGIN: import('./multisig').MultisigDraftPasskeyRegBeginRequest
+  MULTISIG_DRAFT_PASSKEY_REG_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishRequest
+  MULTISIG_DRAFT_PASSKEY_AUTH_BEGIN: import('./multisig').MultisigDraftPasskeyRegBeginRequest
+  MULTISIG_DRAFT_PASSKEY_AUTH_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishRequest
+  MULTISIG_LIST_ACCOUNTS: undefined
+  MULTISIG_REGISTER_ACCOUNT: import('./multisig').RegisterMultisigAccountRequest
+  MULTISIG_JOIN_PREVIEW: import('./multisig').MultisigJoinTokenRequest
+  MULTISIG_JOIN_MEMBER: import('./multisig').MultisigJoinMemberRequest
+  MULTISIG_JOIN_PASSKEY_REG_BEGIN: import('./multisig').MultisigJoinPasskeyRegBeginRequest
+  MULTISIG_JOIN_PASSKEY_REG_FINISH: import('./multisig').MultisigJoinPasskeyRegFinishRequest
+  MULTISIG_JOIN_PASSKEY_AUTH_BEGIN: import('./multisig').MultisigJoinPasskeyRegBeginRequest
+  MULTISIG_JOIN_PASSKEY_AUTH_FINISH: import('./multisig').MultisigJoinPasskeyRegFinishRequest
+  MULTISIG_LIST_PROPOSALS: import('./multisig').ListMultisigProposalsRequest
+  MULTISIG_GET_PROPOSAL: import('./multisig').MultisigProposalIdRequest
+  MULTISIG_CREATE_PROPOSAL: import('./multisig').CreateMultisigProposalRequest
+  MULTISIG_APPROVE_DELEGATED_BEGIN: import('./multisig').MultisigApproveDelegatedBeginRequest
+  MULTISIG_APPROVE_DELEGATED_FINISH: import('./multisig').MultisigApproveDelegatedFinishRequest
+  MULTISIG_APPROVE_WEBAUTHN: import('./multisig').MultisigApproveWebauthnRequest
+  MULTISIG_EXECUTE_PROPOSAL: import('./multisig').MultisigProposalIdRequest
+  MULTISIG_REFRESH_PROPOSAL: import('./multisig').MultisigProposalIdRequest
+  MULTISIG_CREATE_LOCAL_ACCOUNT: import('./multisig').CreateMultisigAccountParams
+  MULTISIG_GET_PENDING_INVITES: undefined
+  MULTISIG_ADD_PENDING_INVITE: import('./multisig').MultisigPendingInvite
+  MULTISIG_REMOVE_PENDING_INVITE: { token: string }
+  MULTISIG_GET_DRAFT_META: undefined
+  MULTISIG_SET_DRAFT_META: import('./multisig').MultisigDraftMeta
+  MULTISIG_CLEAR_DRAFT_META: undefined
+  MULTISIG_SYNC_LOCAL_ACCOUNTS: { activateFirstCreated?: boolean }
+  MULTISIG_GET_PROPOSALS_BANNER_DISMISSED: undefined
+  MULTISIG_DISMISS_PROPOSALS_BANNER: { accountId: string }
+  COSIGN_GET_TRANSPORT_PUBKEY: undefined
+  COSIGN_DEPLOY_ACCOUNT: import('./cosign').CosignDeployAccountRequest
+  COSIGN_POST_JOIN_RELAY: import('./cosign').CosignCompleteMemberJoinRequest
+  COSIGN_POLL_JOIN_RELAY: import('./cosign').CosignPollJoinRelayRequest
+  COSIGN_SEAL_MEMBER_WCK: import('./cosign').CosignSealMemberWckRequest
+  COSIGN_DISCOVER_MEMBERSHIPS: import('./cosign').CosignDiscoverRequest
+  COSIGN_LIST_PENDING: import('./cosign').CosignListPendingRequest
+  COSIGN_GET_REQUEST: import('./cosign').CosignGetRequestPayload
+  COSIGN_PROPOSE: import('./cosign').CosignProposeRequest
+  COSIGN_SIGN_REQUEST: import('./cosign').CosignSignRequest
+  COSIGN_EXECUTE_REQUEST: import('./cosign').CosignExecuteRequest
+  COSIGN_CANCEL_REQUEST: import('./cosign').CosignGetRequestPayload
+  COSIGN_GET_WCK_RECORD: { walletRef: string }
+  COSIGN_ENSURE_V1_AUTH: { linkedAccountId: string }
+  COSIGN_V1_AUTH_CHALLENGE: { linkedAccountId: string }
+  COSIGN_V1_AUTH_SIGN_IN: {
+    linkedAccountId: string
+    wallet: string
+    keyType: string
+    nonce: string
+    response: unknown
+  }
+  COSIGN_CREATE_LOCAL_ACCOUNT: {
+    walletRef: string
+    label: string
+    threshold: number
+    wckRecordId: string
+    linkedAccountId: string
+    cosignBlindSignerId: string
+    accountSaltHex?: string
+    membersSnapshot?: import('./cosign').CosignMemberInit[]
+  }
+  COSIGN_GET_PROPOSALS_BANNER_DISMISSED: undefined
+  COSIGN_DISMISS_PROPOSALS_BANNER: { accountId: string }
+  COSIGN_RUN_POLL: undefined
+  COSIGN_PREDICT_ACCOUNT: {
+    threshold: number
+    signers: import('./multisig').MultisigSignerInitRequest[]
+    accountSaltHex: string
+  }
+  COSIGN_PREPARE_SIGN: {
+    unsignedTxXdr: string
+    smartAccountAddress: string
+    linkedAccountId: string
+  }
+  COSIGN_ATTACH_WEBAUTHN_AUTH: {
+    unsignedTxXdr: string
+    sigDataXdrHex: string
+    keyDataHex: string
+    contextRuleId: number
+    authEntryXdr: string
+  }
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -656,14 +981,103 @@ export type BackgroundResponseDataByType = {
   RESOLVE_PENDING_DAPP_REQUEST: undefined
   DAPP_GET_PUBLIC_KEY: DappGetPublicKeyResponse
   DAPP_SIGN_TRANSACTION: DappSignTransactionResponse
+  DAPP_OPEN_SIGN_REQUEST: undefined
   MIGRATION_DISCOVER: MigrationDiscovery
   MIGRATION_SWEEP_XLM: MigrationSweepResult
   MIGRATION_SWEEP_TOKEN: MigrationSweepResult
   GET_SMART_ACCOUNT_BALANCES: GetSmartAccountBalancesResponse
   GET_SMART_ACCOUNT_TRANSACTIONS: GetSmartAccountTransactionsResponse
   GET_MARKET_PRICES: GetMarketPricesResponse
+  CREATE_DEPOSIT_INTENT: DepositIntent
+  GET_DEPOSIT_INTENT_STATUS: DepositStatus
   GET_ASSET_ICON_DATA_URLS: GetAssetIconDataUrlsResponse
   BUILD_SEND_TX: BuildSendTxResponse
   SETUP_SEND_RULES: SetupSendRulesResponse
   OPEN_WALLET_AFTER_ONBOARDING: undefined
+  OPEN_ONBOARDING_TAB: undefined
+  PREPARE_EXTERNAL_SIGN: import('./externalSign').RunExternalSignFlowPreparedResponse
+  RUN_EXTERNAL_SIGN_FLOW: import('./externalSign').ExternalSignResult
+  GET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
+  SET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
+  PING_EXTENSION: { connected: true }
+  GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogResponse
+  GET_SWAP_QUOTE: import('./swap').GetSwapQuoteResponse
+  PREPARE_SWAP_TX: import('./swap').PrepareSwapTxResponse
+  SETUP_SWAP_RULES: import('./swap').SetupSwapRulesResponse
+  RECORD_KNOWN_SAC_PROBE: undefined
+  MULTISIG_CREATE_DRAFT: import('./multisig').CreateMultisigDraftResponse
+  MULTISIG_GET_ACTIVE_DRAFT: import('./multisig').GetActiveMultisigDraftResponse
+  MULTISIG_ADD_DRAFT_MEMBER: import('./multisig').MultisigDraft
+  MULTISIG_REMOVE_DRAFT_MEMBER: import('./multisig').MultisigDraft
+  MULTISIG_UPDATE_DRAFT_THRESHOLD: import('./multisig').MultisigDraft
+  MULTISIG_PREDICT_DRAFT: import('./multisig').MultisigPredictResponse
+  MULTISIG_DEPLOY_DRAFT: import('./multisig').MultisigDeployResponse
+  MULTISIG_DRAFT_PASSKEY_REG_BEGIN: BackendWebauthnBeginResponse
+  MULTISIG_DRAFT_PASSKEY_REG_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishResponse
+  MULTISIG_DRAFT_PASSKEY_AUTH_BEGIN: BackendWebauthnBeginResponse
+  MULTISIG_DRAFT_PASSKEY_AUTH_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishResponse
+  MULTISIG_LIST_ACCOUNTS: import('./multisig').ListMultisigAccountsResponse
+  MULTISIG_REGISTER_ACCOUNT: import('./multisig').MultisigAccount
+  MULTISIG_JOIN_PREVIEW: import('./multisig').MultisigJoinPreviewResponse
+  MULTISIG_JOIN_MEMBER: import('./multisig').MultisigDraft
+  MULTISIG_JOIN_PASSKEY_REG_BEGIN: BackendWebauthnBeginResponse
+  MULTISIG_JOIN_PASSKEY_REG_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishResponse
+  MULTISIG_JOIN_PASSKEY_AUTH_BEGIN: BackendWebauthnBeginResponse
+  MULTISIG_JOIN_PASSKEY_AUTH_FINISH: import('./multisig').MultisigDraftPasskeyRegFinishResponse
+  MULTISIG_LIST_PROPOSALS: import('./multisig').ListMultisigProposalsResponse
+  MULTISIG_GET_PROPOSAL: import('./multisig').MultisigProposalDetail
+  MULTISIG_CREATE_PROPOSAL: import('./multisig').CreateMultisigProposalResponse
+  MULTISIG_APPROVE_DELEGATED_BEGIN: Record<string, unknown>
+  MULTISIG_APPROVE_DELEGATED_FINISH: import('./multisig').MultisigProposalDetail
+  MULTISIG_APPROVE_WEBAUTHN: import('./multisig').MultisigProposalDetail
+  MULTISIG_EXECUTE_PROPOSAL: import('./multisig').MultisigExecuteProposalResponse
+  MULTISIG_REFRESH_PROPOSAL: import('./multisig').MultisigProposalDetail
+  MULTISIG_CREATE_LOCAL_ACCOUNT: { account: StoredAccount; activeAccountId?: string }
+  MULTISIG_GET_PENDING_INVITES: { invites: import('./multisig').MultisigPendingInvite[] }
+  MULTISIG_ADD_PENDING_INVITE: { invites: import('./multisig').MultisigPendingInvite[] }
+  MULTISIG_REMOVE_PENDING_INVITE: { invites: import('./multisig').MultisigPendingInvite[] }
+  MULTISIG_GET_DRAFT_META: { meta: import('./multisig').MultisigDraftMeta | null }
+  MULTISIG_SET_DRAFT_META: undefined
+  MULTISIG_CLEAR_DRAFT_META: undefined
+  MULTISIG_SYNC_LOCAL_ACCOUNTS: {
+    accounts: StoredAccount[]
+    activeAccountId?: string
+    created: StoredAccount[]
+    updated: boolean
+  }
+  MULTISIG_GET_PROPOSALS_BANNER_DISMISSED: { accountIds: string[] }
+  MULTISIG_DISMISS_PROPOSALS_BANNER: { accountIds: string[] }
+  COSIGN_GET_TRANSPORT_PUBKEY: import('./cosign').CosignGetTransportPubkeyResponse
+  COSIGN_DEPLOY_ACCOUNT: import('./cosign').CosignDeployAccountResponse
+  COSIGN_POST_JOIN_RELAY: { message: string }
+  COSIGN_POLL_JOIN_RELAY: import('./cosign').JoinRelayRecord | null
+  COSIGN_SEAL_MEMBER_WCK: { message: string }
+  COSIGN_DISCOVER_MEMBERSHIPS: import('./cosign').CosignDiscoverResponse
+  COSIGN_LIST_PENDING: import('./cosign').CosignListPendingResponse
+  COSIGN_GET_REQUEST: import('./cosign').CosignRequest
+  COSIGN_PROPOSE: import('./cosign').CosignRequest
+  COSIGN_SIGN_REQUEST: import('./cosign').CosignRequest
+  COSIGN_EXECUTE_REQUEST: import('./cosign').CosignExecuteResponse
+  COSIGN_CANCEL_REQUEST: { message: string }
+  COSIGN_GET_WCK_RECORD: import('./cosign').CosignWalletRecord | null
+  COSIGN_ENSURE_V1_AUTH: { ok: true }
+  COSIGN_V1_AUTH_CHALLENGE: { wallet: string; nonce: string; keyType: string }
+  COSIGN_V1_AUTH_SIGN_IN: { ok: true }
+  COSIGN_CREATE_LOCAL_ACCOUNT: { account: StoredAccount; activeAccountId?: string }
+  COSIGN_GET_PROPOSALS_BANNER_DISMISSED: { accountIds: string[] }
+  COSIGN_DISMISS_PROPOSALS_BANNER: { accountIds: string[] }
+  COSIGN_RUN_POLL: { notified: number }
+  COSIGN_PREDICT_ACCOUNT: import('./multisig').MultisigPredictResponse
+  COSIGN_PREPARE_SIGN: import('./index').PrepareSignResponse
+  COSIGN_ATTACH_WEBAUTHN_AUTH: { signedAuthEntryBase64: string }
 } & Record<string, unknown>
+
+export interface CreateMultisigAccountResponse {
+  account: StoredAccount
+  activeAccountId?: string
+}
+
+export * from './externalSign'
+export * from './swap'
+export * from './multisig'
+export * from './cosign'

@@ -32,8 +32,7 @@ export function UnlockMnemonicScreen({
             Welcome Back
           </h1>
           <div className="text-[18px] font-normal leading-[1.36] tracking-[-0.36px] text-[#b3b3b3]">
-            <p>Your password will not gain access </p>
-            <p>to your account </p>
+            <p>Enter your password to access your account</p>
           </div>
         </div>
       </div>

@@ -4,6 +4,8 @@ import {
   buildTokenMap,
   iconFromTokenMap,
   iconFromTokenLists,
+  listJsonMatchesNetwork,
+  normalizeListJson,
   type TokenListItem,
 } from './assetTokenLists'
 
@@ -65,6 +67,36 @@ describe('iconFromTokenMap', () => {
 
   it('returns null for unknown assets', () => {
     expect(iconFromTokenMap(map, { code: 'UNKNOWN' })).toBeNull()
+  })
+})
+
+describe('listJsonMatchesNetwork', () => {
+  it('rejects mainnet-declared lists on testnet', () => {
+    expect(listJsonMatchesNetwork({ network: 'mainnet', assets: [] }, 'testnet')).toBe(false)
+    expect(listJsonMatchesNetwork({ network: 'mainnet', assets: [] }, 'mainnet')).toBe(true)
+  })
+
+  it('accepts lists without a network field', () => {
+    expect(listJsonMatchesNetwork({ assets: [] }, 'testnet')).toBe(true)
+  })
+})
+
+describe('normalizeListJson', () => {
+  it('encodes Lobstr-style hex contract ids to C-addresses', () => {
+    const hex = 'adefce59aee52968f76061d494c2525b75659fa4296a65f499ef29e56477e496'
+    const items = normalizeListJson({
+      assets: [
+        {
+          code: 'USDC',
+          issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+          contract: hex,
+          icon: 'https://example.com/usdc.png',
+        },
+      ],
+    })
+    expect(items).toHaveLength(1)
+    expect(items[0]!.contract).toMatch(/^C/)
+    expect(items[0]!.contract).not.toBe(hex)
   })
 })
 

@@ -3,12 +3,8 @@ import { loadSmartAccountPortfolioRows, STELLAR_SAC_DISPLAY_DECIMALS } from '@la
 import type { GetSmartAccountBalancesResponse, SmartAccountBalanceRow } from '@latch/types'
 
 import { resolveIconDataUrlForAsset } from './assetIcons'
-import {
-  getStellarNetworkFromEnv,
-  horizonUrlFromEnv,
-  networkPassphraseFromEnv,
-  sorobanRpcUrlFromEnv,
-} from './migration/env'
+import { getKnownSacProbes } from './knownSacProbes'
+import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from './network/config'
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
@@ -24,6 +20,11 @@ const MAX_STALE_MS = 5 * 60_000
 let memoryCacheByAccountId: Map<string, Snapshot> | null = null
 const inflightByAccountId: Map<string, Promise<GetSmartAccountBalancesResponse>> = new Map()
 
+export function clearSmartAccountBalancesMemoryCache(): void {
+  memoryCacheByAccountId = null
+  inflightByAccountId.clear()
+}
+
 function snapshotFreshEnough(s: Snapshot, now: number): boolean {
   return now - s.updatedAtMs < FRESH_TTL_MS
 }
@@ -32,15 +33,15 @@ function snapshotUsableAsStaleFallback(s: Snapshot, now: number): boolean {
   return now - s.updatedAtMs < MAX_STALE_MS
 }
 
-function storageKeyForAccount(accountId: string): string {
+async function storageKeyForAccount(accountId: string): Promise<string> {
   // Include network in cache key because the same account id could exist across testnet/mainnet.
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
   return `latch.smartAccountBalances.${network}.${accountId}.v1`
 }
 
 async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null> {
   try {
-    const key = storageKeyForAccount(accountId)
+    const key = await storageKeyForAccount(accountId)
     const r = await chrome.storage.local.get([key])
     const raw = r[key]
     if (!raw || typeof raw !== 'object') return null
@@ -55,7 +56,7 @@ async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null
 
 async function writePersistedSnapshot(accountId: string, snapshot: Snapshot): Promise<void> {
   try {
-    const key = storageKeyForAccount(accountId)
+    const key = await storageKeyForAccount(accountId)
     await chrome.storage.local.set({ [key]: snapshot })
   } catch {
     // best-effort only
@@ -85,19 +86,22 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
   if (!c) return { rows: [] }
 
   const g = acc?.gAddress?.trim()
-  const rpcUrl = sorobanRpcUrlFromEnv()
-  const horizonUrl = horizonUrlFromEnv()
-  const passphrase = networkPassphraseFromEnv()
-  const network = getStellarNetworkFromEnv()
+  const network = await getActiveNetwork()
+  const rpcUrl = sorobanRpcUrlFor(network)
+  const horizonUrl = horizonUrlFor(network)
+  const passphrase = networkPassphraseFor(network)
 
   // Hard cap for portfolio load (Horizon + Soroban RPC). Without this, cold starts can hang forever.
   const portfolioSignal = AbortSignal.timeout(12_000)
+  const knownProbes = await getKnownSacProbes(accountId)
   const core = await loadSmartAccountPortfolioRows({
     rpcUrl,
     networkPassphrase: passphrase,
+    network,
     cAddress: c,
     gAddress: g,
     horizonUrl,
+    additionalProbes: knownProbes,
     signal: portfolioSignal,
   })
 
@@ -138,6 +142,7 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
       code: row.code,
       issuer: row.issuer,
       sacContractId: row.sacContractId,
+      ...(row.code.toUpperCase() === 'XLM' && !row.issuer ? { assetId: 'native' as const } : {}),
       amount: row.amount,
       decimals: STELLAR_SAC_DISPLAY_DECIMALS,
       iconUrl,

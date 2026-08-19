@@ -51,7 +51,7 @@ packages/
 
 - All inter-context communication via `chrome.runtime.sendMessage`
 - Message types defined in `@latch/types` (`MessageType`, `BackgroundMessage`, `BackgroundResponse`)
-- Network config via `PLASMO_PUBLIC_*` env vars (including **`PLASMO_PUBLIC_LATCH_API_URL`** for the Latch HTTP API base URL in [`apps/extension/src/background/backend.ts`](apps/extension/src/background/backend.ts); defaults to `https://v0-latch-stellar.vercel.app`. Local dev: set to `http://localhost:3000` and ensure `apps/extension/package.json` `manifest.host_permissions` includes that origin.)
+- Network config via `PLASMO_PUBLIC_*` env vars. Outbound HTTP lives in [`apps/extension/src/background/api/*`](apps/extension/src/background/api/); [`backend.ts`](apps/extension/src/background/backend.ts) re-exports the public API. **`PLASMO_PUBLIC_LATCH_API_URL`** defaults to `https://latch-backend.onrender.com` (Render Go backend). **`PLASMO_PUBLIC_LATCH_MARKET_API_URL`** defaults to `{LATCH_API_URL}/v1` when unset. Local dev: set to `http://localhost:3000` and ensure `apps/extension/package.json` `manifest.host_permissions` includes that origin.
 - Stellar network: testnet by default during development
 - All icons SVGs should never be written from scratch, prefer importing icons that fit the task.
 - Use lucide icons or icon svgs if provided
@@ -128,7 +128,22 @@ The background sends **`chromeExtensionId`** (`chrome.runtime.id` in the service
 - When `chromeExtensionId` is present, set **`rp.id` / `rpId`** in issued WebAuthn options to that value (not `localhost` or a website hostname).
 - On **`verifyRegistrationResponse` / `verifyAuthenticationResponse`** (or equivalent), set **`expectedRPID`** to **`chromeExtensionId`** and **`expectedOrigin`** to **`chrome-extension://<chromeExtensionId>`** (use the same values on **finish** as on **begin**; prefer the **`chromeExtensionId` on the finish body** if session storage is unreliable).
 
-The extension merges **`chromeExtensionId`** into begin, registration finish, authentication finish, and **`submitTxWebauthn`** request bodies from [`backend.ts`](apps/extension/src/background/backend.ts). The UI asserts server-issued **`rp.id` / `rpId`** matches **`chrome.runtime.id`** before calling `startRegistration` / `startAuthentication` (see [`passkey.ts`](apps/extension/src/ui/webauthn/passkey.ts)).
+The extension merges **`chromeExtensionId`** into begin, registration finish, authentication finish, and **`submitTxWebauthn`** request bodies from [`api/webauthn.ts`](apps/extension/src/background/api/webauthn.ts) and [`api/transactions.ts`](apps/extension/src/background/api/transactions.ts). The UI asserts server-issued **`rp.id` / `rpId`** matches **`chrome.runtime.id`** before calling `startRegistration` / `startAuthentication` (see [`passkey.ts`](apps/extension/src/ui/webauthn/passkey.ts)).
+
+### Multisig wallets (`/api/multisig` — shipped)
+
+**Live product path** uses cookie-session **`/api/multisig/*`** (draft → join → deploy → proposals). Orchestrated in [`MultisigRouteViews.tsx`](apps/extension/src/ui/multisig/MultisigRouteViews.tsx) via `MULTISIG_*` messages and [`tryHandleMultisigMessage`](apps/extension/src/background/multisig/handlers.ts).
+
+- Deployed multisig wallets are **`StoredAccount`** entries with **`mode: 'multisig'`**. They reuse **`GET_SMART_ACCOUNT_BALANCES`**, history, and account switching like passkey wallets.
+- **Session fields on `StoredAccount`**: `multisigMemberId`, `multisigBackendAccountId`, `multisigThreshold` (required for approve/execute). Optional cosign fields (`cosignWckRefId`, etc.) may exist on disk but are **not used** by the live path.
+- **Routes** (popup + side panel): `createMultisig`, `addMultisigOwners`, `multisigThreshold`, `multisigReviewDeploy`, `multisigSuccess`, `joinMultisig`, `multisigWallets`, `multisigProposals`, `multisigProposalDetail`.
+- **Create flow**: `MULTISIG_CREATE_DRAFT` → co-owners (**Add my passkey**, paste `G…`, or invite link `?multisigJoin=` / legacy `?cosignJoin=`) → threshold → predict → **`POST /api/multisig/drafts/{id}/deploy`** → local account + `MULTISIG_LIST_ACCOUNTS` sync.
+- **Join flow**: deep link or Settings → Multisig Wallets; [`MultisigJoinFlow`](apps/extension/src/ui/multisig/MultisigJoinFlow.tsx) uses **`MULTISIG_JOIN_*`**, then pending invite + sync so members get `smartAccountAddress` + `multisigMemberId`.
+- **Send**: when the active account is multisig, Send creates a backend proposal via `createMultisigSendProposalWithSetup` (`MULTISIG_CREATE_PROPOSAL`). **Swap is disabled** for multisig accounts.
+- **Proposals**: list/detail; approve via [`multisigApprove.ts`](apps/extension/src/ui/lib/multisigApprove.ts); execute via **`MULTISIG_EXECUTE_PROPOSAL`** when threshold met.
+- **Side panel WebAuthn**: use **passkey-bridge** for join and proposal approve. Routes that trigger WebAuthn must stay mounted — see `routeKeepsUiMountedForWebauthn` in [`LatchRoot.tsx`](apps/extension/src/ui/LatchRoot.tsx) (`addMultisigOwners`, `joinMultisig`, `multisigProposalDetail`).
+
+**Cosign / `/v1/cosign` — superseded / not shipped.** Source under `background/cosign/*`, `ui/lib/cosign*`, and `CosignRouteViews` remains on disk but is **unwired** from `background/index.ts` and `LatchRoot`. Do not route new product work through cosign; see [`LATCH_BACKEND_COSIGN_EXTENSION.md`](LATCH_BACKEND_COSIGN_EXTENSION.md).
 
 ## Styling: TailwindCSS (extension-friendly)
 

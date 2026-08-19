@@ -21,8 +21,10 @@ export function SendFlow({
   portfolioError,
   tokenPriceUsd,
   networkLabel,
+  network = 'testnet',
   sendProgressLabel,
   sendError,
+  createProposalMode,
   onDraftChange,
   onStepChange,
   onBackFromSend,
@@ -40,8 +42,10 @@ export function SendFlow({
   portfolioError: string | null
   tokenPriceUsd: number | null
   networkLabel: string
+  network?: import('@latch/types').Network
   sendProgressLabel: string | null
   sendError: string | null
+  createProposalMode?: boolean
   onDraftChange: (patch: Partial<SendDraft>) => void
   onStepChange: (step: SendStep) => void
   onBackFromSend: () => void
@@ -106,6 +110,7 @@ export function SendFlow({
         networkLabel={networkLabel}
         sendProgressLabel={sendProgressLabel}
         sendError={sendError}
+        submitLabel={createProposalMode ? 'Create proposal' : 'Send'}
         onBack={() => onStepChange('enterAmount')}
         onSend={onSubmitSend}
         onFetchFeeEstimate={onFetchFeeEstimate}
@@ -120,6 +125,7 @@ export function SendFlow({
         draft={draft}
         result={result}
         priceUsd={tokenPriceUsd}
+        network={network}
         onContinue={onContinueHome}
         onViewReceipt={() => onStepChange('receipt')}
       />

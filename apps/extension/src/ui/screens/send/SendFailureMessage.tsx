@@ -8,6 +8,7 @@ export function SendFailureMessage({
   symbol,
   recipientName,
   recipientAddress,
+  errorDetail,
 }: {
   amount: string
   symbol: string
@@ -30,6 +31,11 @@ export function SendFailureMessage({
         <span> failed to send to </span>
         <span className="font-bold text-[#fcfcfc]">{recipientLabel}</span>
       </p>
+      {errorDetail?.trim() ? (
+        <p className="w-full break-words px-2 text-[13px] leading-[1.4] text-[#8a8a8a]">
+          {errorDetail.trim()}
+        </p>
+      ) : null}
     </div>
   )
 }

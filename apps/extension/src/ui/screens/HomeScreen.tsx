@@ -18,11 +18,13 @@ export function HomeScreen({
   onOpenSend,
   onOpenReceive,
   onOpenSwap,
+  swapDisabled,
   onOpenFund,
   onSelectActivity,
   recentActivity,
   totalBalanceUsd,
   balanceChangePercent,
+  showPendingMultisigDot,
 }: {
   accountName: string
   onOpenSettings: () => void
@@ -31,11 +33,13 @@ export function HomeScreen({
   onOpenSend?: () => void
   onOpenReceive?: () => void
   onOpenSwap: () => void
+  swapDisabled?: boolean
   onOpenFund?: () => void
   onSelectActivity?: (item: HistoryItemVm) => void
   recentActivity: HistoryItemVm[]
   totalBalanceUsd?: string | null
   balanceChangePercent?: string | null
+  showPendingMultisigDot?: boolean
 }) {
   const [hidden, setHidden] = useState(false)
 
@@ -47,7 +51,11 @@ export function HomeScreen({
       style={{ paddingBottom: MAIN_BOTTOM_NAV_CLEARANCE_PX }}
     >
       <div className="flex items-center justify-between">
-        <HomeProfileButton accountName={accountName} onClick={onOpenSettings} />
+        <HomeProfileButton
+          accountName={accountName}
+          onClick={onOpenSettings}
+          showPendingDot={showPendingMultisigDot}
+        />
         <button
           type="button"
           onClick={onOpenExplore}
@@ -69,10 +77,11 @@ export function HomeScreen({
         </div>
 
         <HomeActionButtons
-          onFund={onOpenFund ?? onOpenReceive}
+          onFund={onOpenFund}
           onSend={onOpenSend}
           onReceive={onOpenReceive}
           onSwap={onOpenSwap}
+          swapDisabled={swapDisabled}
         />
 
         <NewsCarousel className="w-full self-stretch" />

@@ -8,12 +8,8 @@ import type {
   BackendWebauthnAuthenticationFinishResponse,
   BackendWebauthnBeginResponse,
   BackendWebauthnRegistrationFinishResponse,
-  BuildDelegatedTxResponse,
   BuildSendTxRequest,
   BuildSendTxResponse,
-  BuildTxResponse,
-  SetupSendRulesRequest,
-  SetupSendRulesResponse,
   CreateOrConnectFreighterRequest,
   CreateOrConnectFreighterResponse,
   CreateOrConnectPhantomRequest,
@@ -27,22 +23,26 @@ import type {
   GetAssetIconDataUrlsResponse,
   GetMarketPricesRequest,
   GetMarketPricesResponse,
+  GetSwapTokenCatalogRequest,
+  GetSwapTokenCatalogResponse,
+  GetSwapQuoteRequest,
+  GetSwapQuoteResponse,
+  PrepareSwapTxRequest,
+  PrepareSwapTxResponse,
+  RecordKnownSacProbeRequest,
+  SetupSwapRulesRequest,
+  SetupSwapRulesResponse,
   GetSetupStateResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   ListPendingDappRequestsResponse,
+  MultisigProposal,
   PendingDappRequest,
   SerializableError,
   SetSetupStateRequest,
   SetActiveAccountRequest,
   StoredAccount,
   SmartAccountBalanceRow,
-  SignDelegatedGAuthEntryRequest,
-  SignDelegatedGAuthEntryResponse,
-  SubmitDelegatedTxRequest,
-  SubmitPhantomTxRequest,
-  SubmitTxResponse,
-  SubmitWebauthnTxRequest,
   UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
@@ -51,11 +51,7 @@ import {
   isConnected,
   setAllowed,
   getAddress,
-  signAuthEntry,
 } from '@stellar/freighter-api'
-import { Networks } from '@stellar/stellar-sdk'
-
-import { normalizeDelegatedSignatureBase64 } from '../lib/delegatedAuthSubmit'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
 import { ExternalLink } from 'lucide-react'
@@ -72,31 +68,59 @@ import { TransactionDetailScreen } from './screens/transaction-detail/Transactio
 import { MigrationScreen } from './screens/MigrationScreen'
 import { UnlockMnemonicScreen } from './screens/UnlockMnemonicScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
-import { CreateMultisigScreen } from './screens/multisig/CreateMultisigScreen'
-import { AddMultisigOwnersScreen } from './screens/multisig/AddMultisigOwnersScreen'
+import {
+  MultisigRouteViews,
+  multisigPendingApprovalCount,
+  useMultisigJoinTokenOnMount,
+} from './multisig/MultisigRouteViews'
+import { parseMultisigJoinTokenFromLocation } from './lib/multisigDeepLink'
+import {
+  apiGetMultisigProposalsBannerDismissed,
+  apiSyncLocalMultisigAccounts,
+} from './lib/multisigFlow'
+import { createMultisigSendProposalWithSetup } from './lib/multisigProposal'
 import { ExploreScreen } from './screens/explore/ExploreScreen'
-import { SwapScreen } from './screens/SwapScreen'
+import { SwapScreen, swapWalletLabel } from './screens/SwapScreen'
 import { ConfirmSwapScreen } from './screens/ConfirmSwapScreen'
+import { SwapFailureScreen } from './screens/swap/SwapFailureScreen'
+import { SwapSuccessScreen } from './screens/swap/SwapSuccessScreen'
+import { SwapCatalogLoadingOverlay } from './screens/swap/components/SwapCatalogLoadingOverlay'
+import { SwapTransactionLoadingOverlay } from './screens/swap/components/SwapTransactionLoadingOverlay'
+import { openOnboardingTab } from './onboarding/openOnboardingTab'
 import { AccountMenu } from './components/AccountMenu'
 import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay'
 import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
 import { storedAccountLabel } from './lib/storedAccountLabel'
+import { FullScreenLoaderOverlay } from './components/FullScreenLoaderOverlay'
 import {
   markMigrationHomePromoCompleted,
 } from './lib/migrationHomePrefs'
+import { GrantAccessScreen } from './screens/dapp/GrantAccessScreen'
+import { ExternalSignReviewScreen } from './screens/dapp/ExternalSignReviewScreen'
+import {
+  extractTransactionHash,
+  signAndSubmitBuiltTx,
+  signWithoutSubmitBuiltTx,
+} from './lib/signBuiltTx'
+import { debugAgentLog } from './lib/debugAgentLog'
 
 import {
   assertBeginOptionsRpIdMatchesExtension,
-  buildPasskeySigDataXdrFromAssertion,
+  assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   nextPasskeyAccountDisplayName,
-  passkeyAuthenticationOptionsForAuthDigest,
+  prepareAuthenticationOptionsForGet,
+  prepareRegistrationOptionsForCreate,
 } from './webauthn/passkey'
 import { openPasskeyBridgeAndWait } from './webauthn/passkeyBridge'
 import { bytesToHex } from './webauthn/utils'
-import type { SwapDraft, SwapQuoteVm } from './swap/swapVm'
-import { swapTokens } from './swap/swapVm'
+import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from './swap/swapVm'
+import {
+  mergeSwapTokenCatalogs,
+  pickDefaultReceiveTokenId,
+  swapQuotePayloadToVm,
+} from './swap/swapVm'
 import {
   buildTransactionDetail,
   groupHistoryItems,
@@ -108,15 +132,25 @@ import type { TransactionDetailVm } from './types/transaction-detail'
 import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from './types/send'
 import { SendFlow } from './screens/send/SendFlow'
 import { ReceiveFlow } from './screens/receive/ReceiveFlow'
+import { FundScreen } from './screens/fund/FundScreen'
 import { saveToAddressBook } from './screens/send/useAddressBook'
 import {
   buildSendRequestFromDraft,
   buildSetupRequestFromDraft,
-  contextRuleIdString,
-  isDelegatedSendBuild,
+  enrichSendFailureDetail,
+  ensureSendRulesConfigured,
+  explainSendDraftNotBuildable,
   isNoContextRuleError,
+  isBuildSendMissingSetupError,
+  isPrepareSignMissingSetupError,
+  isSwapRuleReconfigureError,
   passkeySetupPrerequisiteError,
 } from './lib/sendTx'
+import {
+  buildSetupSwapRequestFromQuote,
+  swapBuildNeedsSignerReconfigure,
+  swapSetupPrerequisiteError,
+} from './lib/swapTx'
 
 type Theme = 'dark' | 'light'
 type Surface = 'popup' | 'sidepanel'
@@ -132,6 +166,13 @@ type Route =
   | 'addAccountPasskey'
   | 'createMultisig'
   | 'addMultisigOwners'
+  | 'multisigThreshold'
+  | 'multisigReviewDeploy'
+  | 'multisigSuccess'
+  | 'joinMultisig'
+  | 'multisigProposals'
+  | 'multisigProposalDetail'
+  | 'multisigWallets'
   | 'importSeed'
   | 'importSeedEncrypt'
   | 'unlockMnemonic'
@@ -143,6 +184,7 @@ type Route =
   | 'swapConfirm'
   | 'send'
   | 'receive'
+  | 'fund'
   | 'dappApproval'
   | 'migration'
   | 'migrationSuccess'
@@ -154,7 +196,16 @@ type SignerId = 'freighter' | 'phantom' | 'passkey'
  * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.
  */
 function routeKeepsUiMountedForWebauthn(route: Route): boolean {
-  return route === 'createPasskey' || route === 'addAccountPasskey' || route === 'send'
+  return (
+    route === 'createPasskey' ||
+    route === 'addAccountPasskey' ||
+    route === 'send' ||
+    route === 'swapConfirm' ||
+    route === 'addMultisigOwners' ||
+    route === 'joinMultisig' ||
+    route === 'multisigProposalDetail' ||
+    route === 'fund'
+  )
 }
 
 const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
@@ -166,6 +217,7 @@ const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
   'swapConfirm',
   'send',
   'receive',
+  'fund',
   'migration',
   'migrationSuccess',
   'dappApproval',
@@ -185,6 +237,19 @@ function needsMnemonicUnlockFromAccounts(
   if (!activeAccountId || !hasVault || signerLoaded !== false) return false
   const active = accounts.find((a) => a.id === activeAccountId)
   return active?.mode === 'mnemonic'
+}
+
+const ONBOARDING_ONLY_ROUTES: Route[] = [
+  'welcome',
+  'chooseSigner',
+  'createPasskey',
+  'passkeyCreated',
+  'importSeed',
+  'importSeedEncrypt',
+]
+
+function isOnboardingOnlyRoute(route: Route): boolean {
+  return ONBOARDING_ONLY_ROUTES.includes(route)
 }
 
 const STORAGE_KEYS = {
@@ -310,7 +375,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
   const ENABLE_OTHER_SIGNERS = false
 
-  const [route, setRoute] = useState<Route>('welcome')
+  const [route, setRoute] = useState<Route>(() =>
+    parseMultisigJoinTokenFromLocation() ? 'joinMultisig' : 'home'
+  )
   /** True when `chooseSigner` was opened from "I Have a Wallet" (passkey should authenticate, not register). */
   const [chooseSignerForExistingWallet, setChooseSignerForExistingWallet] = useState(false)
   const [page, setPage] = useState<Page>('main')
@@ -320,9 +387,19 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [error, setError] = useState<string | null>(null)
 
   const [setupState, setSetupState] = useState<GetSetupStateResponse['setupState']>('new')
+  const [accountsHydrated, setAccountsHydrated] = useState(false)
+  const onboardingTabOpenedRef = useRef(false)
   const [accounts, setAccounts] = useState<StoredAccount[]>([])
   const [activeAccountId, setActiveAccountId] = useState<string | undefined>(undefined)
   const [pendingDappRequests, setPendingDappRequests] = useState<PendingDappRequest[]>([])
+  const [dappBusy, setDappBusy] = useState(false)
+  const [dappError, setDappError] = useState<string | null>(null)
+  const pendingDappRequestsRef = useRef(pendingDappRequests)
+  pendingDappRequestsRef.current = pendingDappRequests
+  const [dappProgressLabel, setDappProgressLabel] = useState<string | null>(null)
+  const [dappNetwork, setDappNetwork] = useState<'testnet' | 'mainnet'>('testnet')
+  const [activeNetwork, setActiveNetwork] = useState<'testnet' | 'mainnet'>('testnet')
+  const [networkLabel, setNetworkLabel] = useState('Stellar Testnet')
 
   const activeAccount = useMemo(
     () => accounts.find((a) => a.id === activeAccountId) ?? accounts[0],
@@ -337,14 +414,25 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const [renameAccountId, setRenameAccountId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
-  const [multisigDraft, setMultisigDraft] = useState<{ walletName: string; purpose: string } | null>(
-    null
+  const [multisigJoinToken, setMultisigJoinToken] = useState<string | null>(() =>
+    parseMultisigJoinTokenFromLocation()
   )
+  const [multisigDetailProposalId, setMultisigDetailProposalId] = useState<string | null>(null)
+  const [multisigProposals, setMultisigProposals] = useState<MultisigProposal[]>([])
+  const [, setMultisigBannerDismissedIds] = useState<string[]>([])
 
-  const [builtTx, setBuiltTx] = useState<BuildTxResponse | null>(null)
-  const [builtDelegatedTx, setBuiltDelegatedTx] = useState<BuildDelegatedTxResponse | null>(null)
   const [swapDraft, setSwapDraft] = useState<SwapDraft | null>(null)
   const [swapQuote, setSwapQuote] = useState<SwapQuoteVm | null>(null)
+  const [swapPayTokenCatalog, setSwapPayTokenCatalog] = useState<SwapTokenVm[]>([])
+  const [swapReceiveTokenCatalog, setSwapReceiveTokenCatalog] = useState<SwapTokenVm[]>([])
+  const [swapPreferredReceiveTokenIds, setSwapPreferredReceiveTokenIds] = useState<string[]>([])
+  const [swapCatalogLoading, setSwapCatalogLoading] = useState(false)
+  const [swapBusy, setSwapBusy] = useState(false)
+  const [swapStep, setSwapStep] = useState<'confirm' | 'success' | 'failure'>('confirm')
+  const [swapFailureDetail, setSwapFailureDetail] = useState<string | null>(null)
+  const [swapTokenPriceUsdBySymbol, setSwapTokenPriceUsdBySymbol] = useState<
+    Record<string, number>
+  >({})
 
   const [sendStep, setSendStep] = useState<SendStep>('selectToken')
   const [sendDraft, setSendDraft] = useState<SendDraft>(INITIAL_SEND_DRAFT)
@@ -393,45 +481,150 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     [historySections]
   )
 
-  const networkLabel =
-    process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet'
-
   const [swapIconByCode, setSwapIconByCode] = useState<Record<string, string | null>>({})
 
+  const mapSwapTokenVm = useCallback(
+    (t: {
+      id: string
+      symbol: string
+      name: string
+      assetId: string
+      contractId: string
+      decimals: number
+      balance: string
+      issuer?: string
+      iconUrl?: string | null
+    }): SwapTokenVm => ({
+      id: t.id,
+      symbol: t.symbol,
+      name: t.name,
+      assetId: t.assetId,
+      contractId: t.contractId,
+      decimals: t.decimals,
+      balance: t.balance,
+      issuer: t.issuer,
+      iconUrl: t.iconUrl,
+    }),
+    []
+  )
+
+  const loadSwapCatalog = useCallback(async () => {
+    if (!activeAccount?.id) return
+    setSwapCatalogLoading(true)
+    try {
+      const res = await sendToBackground<
+        GetSwapTokenCatalogRequest,
+        GetSwapTokenCatalogResponse
+      >({
+        type: 'GET_SWAP_TOKEN_CATALOG',
+        payload: { accountId: activeAccount.id },
+      })
+      if (res.ok && res.data) {
+        setSwapPayTokenCatalog(res.data.payTokens.map(mapSwapTokenVm))
+        setSwapReceiveTokenCatalog(res.data.receiveTokens.map(mapSwapTokenVm))
+        setSwapPreferredReceiveTokenIds(res.data.preferredReceiveTokenIds)
+      }
+    } finally {
+      setSwapCatalogLoading(false)
+    }
+  }, [activeAccount?.id, mapSwapTokenVm])
+
   useEffect(() => {
-    if (setupState !== 'has_account') return
+    if (route !== 'swap' && route !== 'swapConfirm') return
+    void loadSwapCatalog()
+  }, [route, loadSwapCatalog])
+
+  const swapTokensUnion = useMemo(
+    () => mergeSwapTokenCatalogs(swapPayTokenCatalog, swapReceiveTokenCatalog),
+    [swapPayTokenCatalog, swapReceiveTokenCatalog]
+  )
+
+  useEffect(() => {
+    if (route !== 'swap' && route !== 'swapConfirm') return
+    const codes = swapTokensUnion.map((t) => t.symbol).filter(Boolean)
+    if (codes.length === 0) return
+    let cancelled = false
+    void (async () => {
+      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+        type: 'GET_MARKET_PRICES',
+        payload: { tokens: codes },
+      })
+      if (cancelled || !res.ok || !res.data) return
+      const map: Record<string, number> = {}
+      for (const [code, row] of Object.entries(res.data.pricesByCodeUpper)) {
+        if (row?.priceUsd != null) map[code] = row.priceUsd
+      }
+      setSwapTokenPriceUsdBySymbol(map)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [route, swapTokensUnion])
+
+  useEffect(() => {
+    if (setupState !== 'has_account' || swapTokensUnion.length === 0) return
     let cancelled = false
     void (async () => {
       const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>(
         {
           type: 'GET_ASSET_ICON_DATA_URLS',
-          payload: { assets: swapTokens.map((t) => ({ code: t.symbol })) },
+          payload: {
+            assets: swapTokensUnion.map((t) => ({
+              code: t.symbol,
+              issuer: t.issuer,
+              sacContractId: t.contractId,
+            })),
+          },
         }
       )
       if (cancelled || !res.ok || !res.data) return
       const map: Record<string, string | null> = {}
-      swapTokens.forEach((t, i) => {
-        map[t.symbol] = res.data!.icons[i] ?? null
+      swapTokensUnion.forEach((t, i) => {
+        map[t.symbol] = res.data!.icons[i] ?? t.iconUrl ?? null
       })
       setSwapIconByCode(map)
     })()
     return () => {
       cancelled = true
     }
-  }, [setupState])
+  }, [setupState, swapTokensUnion])
 
-  const swapTokenCatalog = useMemo(() => {
-    return swapTokens.map((t) => {
-      const fromPortfolio = portfolioRows.find((r) => r.code === t.symbol)?.iconUrl
-      const fromResolver = swapIconByCode[t.symbol]
-      return {
+  const applySwapTokenIcons = useCallback(
+    (catalog: SwapTokenVm[]) =>
+      catalog.map((t) => ({
         ...t,
-        iconUrl: fromPortfolio ?? fromResolver ?? null,
-      }
-    })
-  }, [portfolioRows, swapIconByCode])
+        iconUrl: swapIconByCode[t.symbol] ?? t.iconUrl ?? null,
+      })),
+    [swapIconByCode]
+  )
 
-  /** Prefetch WebAuthn `/begin` so the Create / Continue click does not await the network before credentials (side panel + gesture timing). */
+  const swapPayTokenCatalogWithIcons = useMemo(
+    () => applySwapTokenIcons(swapPayTokenCatalog),
+    [applySwapTokenIcons, swapPayTokenCatalog]
+  )
+
+  const swapReceiveTokenCatalogWithIcons = useMemo(
+    () => applySwapTokenIcons(swapReceiveTokenCatalog),
+    [applySwapTokenIcons, swapReceiveTokenCatalog]
+  )
+
+  const swapTokenById = useMemo(() => {
+    const map = new Map<string, SwapTokenVm>()
+    for (const t of mergeSwapTokenCatalogs(
+      swapPayTokenCatalogWithIcons,
+      swapReceiveTokenCatalogWithIcons
+    )) {
+      map.set(t.id, t)
+    }
+    return map
+  }, [swapPayTokenCatalogWithIcons, swapReceiveTokenCatalogWithIcons])
+
+  const resolveSwapToken = useCallback(
+    (id: string) => swapTokenById.get(id),
+    [swapTokenById]
+  )
+
+  /** Prefetch /begin options so Create / Continue does not await the network before credentials. */
   const passkeyPrefetchRef = useRef<
     | { kind: 'registration'; optionsJSON: unknown; displayName: string }
     | { kind: 'authentication'; optionsJSON: unknown }
@@ -480,7 +673,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           })
           if (cancelled) return
           if (!begin.ok) throw new Error(friendlyError(begin.error))
-          const optionsJSON = (begin.data as BackendWebauthnBeginResponse | undefined)?.options
+          const optionsJSON = prepareRegistrationOptionsForCreate(
+            (begin.data as BackendWebauthnBeginResponse | undefined)?.options,
+            displayName
+          )
           assertBeginOptionsRpIdMatchesExtension(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         } else {
@@ -490,7 +686,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           })
           if (cancelled) return
           if (!begin.ok) throw new Error(friendlyError(begin.error))
-          const optionsJSON = begin.data?.options
+          const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
           assertBeginOptionsRpIdMatchesExtension(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
         }
@@ -506,7 +702,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     return () => {
       cancelled = true
     }
-  }, [route, accounts, passkeyPrefetchNonce])
+    // Intentionally omit `accounts` identity: a new array reference must not
+    // cancel an in-flight ceremony or re-issue /begin while the user is creating.
+    // accounts length/contents are handled via route screen.
+  }, [route, passkeyPrefetchNonce])
 
   useEffect(() => {
     void sendToBackground<undefined, GetSetupStateResponse>({
@@ -518,11 +717,32 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       })
       .catch(() => {})
 
-    void sendToBackground<undefined, GetAccountsResponse>({
-      type: 'GET_ACCOUNTS',
-      payload: undefined,
-    })
-      .then((res) => {
+    void (async () => {
+      try {
+        const netRes = await sendToBackground<
+          undefined,
+          { network: 'testnet' | 'mainnet'; networkLabel: string }
+        >({
+          type: 'GET_ACTIVE_NETWORK',
+          payload: undefined,
+        })
+        if (netRes.ok && netRes.data?.network) {
+          setActiveNetwork(netRes.data.network)
+          setDappNetwork(netRes.data.network)
+          setNetworkLabel(
+            netRes.data.networkLabel ||
+              (netRes.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
+          )
+        }
+      } catch {
+        // keep defaults
+      }
+
+      try {
+        const res = await sendToBackground<undefined, GetAccountsResponse>({
+          type: 'GET_ACCOUNTS',
+          payload: undefined,
+        })
         if (!res.ok || !res.data) return
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
@@ -535,24 +755,88 @@ export function LatchRoot({ surface }: { surface: Surface }) {
             res.data.activeAccountHasMnemonicVault,
             res.data.activeAccountMnemonicSignerLoaded
           )
-          setRoute(resolveMainRoute({ needsMnemonicUnlock: locked }))
+          setRoute((prev) =>
+            prev === 'joinMultisig'
+              ? prev
+              : isOnboardingOnlyRoute(prev)
+                ? resolveMainRoute({ needsMnemonicUnlock: locked })
+                : resolveMainRoute({
+                    needsMnemonicUnlock: locked,
+                    preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : prev,
+                  })
+          )
         }
-      })
-      .catch(() => {})
+      } catch {
+        // ignore
+      } finally {
+        setAccountsHydrated(true)
+      }
+    })()
+
+    // Safety: never leave the shell stuck on "Loading…" if the background SW is unresponsive.
+    const hydrateWatchdog = window.setTimeout(() => setAccountsHydrated(true), 8_000)
 
     void loadPendingDapp().catch(() => {})
+    void apiGetMultisigProposalsBannerDismissed()
+      .then(setMultisigBannerDismissedIds)
+      .catch(() => {})
+
+    return () => window.clearTimeout(hydrateWatchdog)
   }, [])
 
   useEffect(() => {
-    if (setupState === 'has_account' && accounts.length > 0) {
-      setRoute((prev) =>
-        resolveMainRoute({
-          needsMnemonicUnlock,
-          preferred: ROUTES_GATED_BY_MNEMONIC_UNLOCK.includes(prev) ? prev : 'home',
-        })
-      )
+    function onStorage(
+      changes: { [key: string]: chrome.storage.StorageChange },
+      area: string
+    ) {
+      if (area !== 'local') return
+      if (changes['latch.pendingDappRequests']) {
+        void loadPendingDapp().catch(() => {})
+      }
     }
-  }, [setupState, accounts.length, needsMnemonicUnlock])
+    chrome.storage.onChanged.addListener(onStorage)
+    return () => chrome.storage.onChanged.removeListener(onStorage)
+  }, [])
+
+  // Action popup / side panel close must reject pending reviews. The fallback
+  // chrome.windows.create path already does this; chrome.action.openPopup does not.
+  useEffect(() => {
+    function dismissPendingOnClose() {
+      const pending = pendingDappRequestsRef.current
+      if (pending.length === 0) return
+      for (const req of pending) {
+        void chrome.runtime.sendMessage({
+          type: 'RESOLVE_PENDING_DAPP_REQUEST',
+          payload: { requestId: req.id, approved: false },
+        } satisfies BackgroundMessage<{ requestId: string; approved: boolean }>)
+      }
+    }
+    window.addEventListener('pagehide', dismissPendingOnClose)
+    return () => window.removeEventListener('pagehide', dismissPendingOnClose)
+  }, [])
+
+  useEffect(() => {
+    if (!accountsHydrated) return
+
+    if (accounts.length > 0) {
+      onboardingTabOpenedRef.current = false
+      setRoute((prev) => {
+        if (prev === 'joinMultisig') return prev
+        if (isOnboardingOnlyRoute(prev)) {
+          return resolveMainRoute({ needsMnemonicUnlock })
+        }
+        return prev
+      })
+      return
+    }
+
+    if (route === 'joinMultisig') return
+
+    if (!onboardingTabOpenedRef.current) {
+      onboardingTabOpenedRef.current = true
+      void openOnboardingTab().catch(() => {})
+    }
+  }, [accountsHydrated, accounts.length, needsMnemonicUnlock, route])
 
   async function persistSetupHasAccount(publicKey: string) {
     const req: SetSetupStateRequest = { setupState: 'has_account', accountPublicKey: publicKey }
@@ -580,6 +864,20 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     )
     return { accounts: res.data.accounts, needsMnemonicUnlock: locked }
   }
+
+  const syncMultisigAccounts = useCallback(async () => {
+    try {
+      const res = await apiSyncLocalMultisigAccounts()
+      if (res.created.length > 0 || res.updated) await refreshAccounts()
+    } catch {
+      // best-effort
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!accountsHydrated) return
+    void syncMultisigAccounts()
+  }, [accountsHydrated, route, syncMultisigAccounts])
 
   useEffect(() => {
     portfolioHydratedRef.current = false
@@ -673,7 +971,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     // Avoid relying on `setupState` for this: on cold start we can render the Home route
     // before `setupState` finishes hydrating, which would prevent balances from fetching.
     const acc = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-    if (!acc?.smartAccountAddress?.trim()) return
+    if (!acc?.smartAccountAddress?.trim()) {
+      // Network switch / empty bucket: don't leave HomeLoadingOverlay stuck on "Loading..."
+      portfolioHydratedRef.current = true
+      setPortfolioHydrated(true)
+      setPortfolioLoading(false)
+      setPortfolioRows([])
+      setTotalBalanceUsd(null)
+      setPortfolioError(null)
+      return
+    }
 
     void loadPortfolio()
   }, [page, route, needsMnemonicUnlock, accounts, activeAccountId, loadPortfolio])
@@ -702,16 +1009,65 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     void loadHistory()
   }, [route, loadHistory])
 
+  const loadMultisigProposals = useCallback(async () => {
+    if (!activeAccount?.smartAccountAddress || activeAccount.mode !== 'multisig') {
+      setMultisigProposals([])
+      return
+    }
+    try {
+      const res = await sendToBackground<
+        { smartAccountAddress: string },
+        { proposals: MultisigProposal[] }
+      >({
+        type: 'MULTISIG_LIST_PROPOSALS',
+        payload: { smartAccountAddress: activeAccount.smartAccountAddress },
+      })
+      if (res.ok && res.data?.proposals) setMultisigProposals(res.data.proposals)
+      else setMultisigProposals([])
+    } catch {
+      // ignore — home banner is optional
+    }
+  }, [activeAccount])
+
+  useEffect(() => {
+    if (route !== 'home' || activeAccount?.mode !== 'multisig') return
+    void loadMultisigProposals()
+  }, [route, activeAccount?.id, activeAccount?.mode, loadMultisigProposals])
+
+  const multisigPendingCount = useMemo(
+    () => multisigPendingApprovalCount(multisigProposals, activeAccount?.multisigMemberId),
+    [multisigProposals, activeAccount?.multisigMemberId]
+  )
+
+  const hasPendingMultisigProposals = multisigPendingCount > 0
+
+  function resetSwapFlow() {
+    setSwapDraft(null)
+    setSwapQuote(null)
+    setSwapBusy(false)
+    setSwapStep('confirm')
+    setSwapFailureDetail(null)
+  }
+
   function openSwapFromNav() {
+    if (activeAccount?.mode === 'multisig') return
+    const payId = swapPayTokenCatalogWithIcons[0]?.id ?? 'native'
+    const receiveId = pickDefaultReceiveTokenId(
+      payId,
+      swapReceiveTokenCatalogWithIcons,
+      swapPreferredReceiveTokenIds
+    )
     setSwapDraft({
-      payTokenId: 'xlm',
-      receiveTokenId: 'usdt',
+      payTokenId: payId,
+      receiveTokenId: receiveId,
       payAmount: '',
       useExchangeBalance: false,
       approved: false,
     })
     setSwapQuote(null)
+    setSwapStep('confirm')
     setRoute('swap')
+    void loadSwapCatalog()
   }
 
   function handleMainTabSelect(tab: MainTab) {
@@ -728,7 +1084,19 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     })
     if (!res.ok || !res.data) return
     setPendingDappRequests(res.data.requests)
-    if (res.data.requests.length > 0) setRoute('dappApproval')
+    if (res.data.requests.length > 0) {
+      const netRes = await sendToBackground<undefined, { network: 'testnet' | 'mainnet' }>({
+        type: 'GET_ACTIVE_NETWORK',
+        payload: undefined,
+      })
+      if (netRes.ok && netRes.data?.network) setDappNetwork(netRes.data.network)
+      setRoute('dappApproval')
+      return
+    }
+    setDappBusy(false)
+    setDappProgressLabel(null)
+    setDappError(null)
+    setRoute((prev) => (prev === 'dappApproval' ? 'home' : prev))
   }
 
   async function connectFreighter() {
@@ -860,6 +1228,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       const reg = (await webauthnCredential('registration', optionsJSON)) as Awaited<
         ReturnType<typeof startRegistration>
       >
+      assertRegistrationCeremonyForFinish(reg)
       const res = await sendToBackground<
         { response: unknown },
         BackendWebauthnRegistrationFinishResponse & { account: StoredAccount }
@@ -931,44 +1300,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  async function buildForActiveAccount() {
-    if (!activeAccount) throw new Error('No active account')
-    if (!activeAccount.smartAccountAddress) throw new Error('Account not ready')
-
-    if (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') {
-      if (!activeAccount.gAddress) throw new Error('Missing G-address for delegated account')
-      const res = await sendToBackground<
-        { smartAccountAddress: string; gAddress: string },
-        BuildDelegatedTxResponse
-      >({
-        type: 'BUILD_DELEGATED_TX',
-        payload: {
-          smartAccountAddress: activeAccount.smartAccountAddress,
-          gAddress: activeAccount.gAddress,
-        },
-      })
-      if (!res.ok) throw new Error(friendlyError(res.error))
-      setBuiltDelegatedTx(res.data!)
-      setBuiltTx(null)
-      return res.data!
-    }
-
-    const res = await sendToBackground<
-      { smartAccountAddress: string; signerG?: string },
-      BuildTxResponse
-    >({
-      type: 'BUILD_TX',
-      payload: {
-        smartAccountAddress: activeAccount.smartAccountAddress,
-        signerG: activeAccount.gAddress,
-      },
-    })
-    if (!res.ok) throw new Error(friendlyError(res.error))
-    setBuiltTx(res.data!)
-    setBuiltDelegatedTx(null)
-    return res.data!
-  }
-
   function resetSendFlow() {
     setSendDraft(INITIAL_SEND_DRAFT)
     setSendStep('selectToken')
@@ -1012,156 +1343,193 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }, [route, sendDraft.token?.code, loadMarketPriceForToken])
 
-  function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
-    if (!data) return undefined
-    if (typeof data.transactionHash === 'string') return data.transactionHash
-    if (typeof data.hash === 'string') return data.hash
-    return undefined
-  }
-
-  async function signAndSubmitBuilt(build: BuildSendTxResponse): Promise<SubmitTxResponse> {
-    if (!activeAccount) throw new Error('No active account')
-
-    setSendProgressLabel('Signing…')
-
-    if (
-      (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
-      isDelegatedSendBuild(build)
-    ) {
-      if (activeAccount.mode === 'freighter') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
-        const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
-            ? Networks.PUBLIC
-            : Networks.TESTNET
-        if (!build.gAddressEntryTemplateXdr) {
-          throw new Error('Missing delegated auth entry template from build response.')
-        }
-        const signed = await signAuthEntry(build.gAddressEntryTemplateXdr, {
-          networkPassphrase,
-          address: activeAccount.gAddress,
-        })
-        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
-        const signerAddress = signed.signerAddress
-        const signedAuthEntryBase64 = signed.signedAuthEntry
-          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-          : undefined
-        if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
-        setSendProgressLabel('Submitting…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: build.txXdr,
-            smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        return submitRes.data ?? {}
-      }
-
-      const signRes = await sendToBackground<
-        SignDelegatedGAuthEntryRequest,
-        SignDelegatedGAuthEntryResponse
-      >({
-        type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
-        payload: {
-          accountId: activeAccount.id,
-          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-          networkPassphrase: Networks.TESTNET,
-        },
-      })
-      if (!signRes.ok) throw new Error(friendlyError(signRes.error))
-      setSendProgressLabel('Submitting…')
-      const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_DELEGATED',
-        payload: {
-          txXdr: build.txXdr,
-          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr,
-          gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
-          signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
-          signerAddress: signRes.data!.signerAddress,
-        },
-      })
-      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-      return submitRes.data ?? {}
+  async function refreshSwapQuoteForConfirm(): Promise<SwapQuoteVm> {
+    if (!activeAccount?.id || !swapDraft || !swapQuote) {
+      throw new Error('Swap session expired')
     }
+    const payToken = resolveSwapToken(swapDraft.payTokenId)
+    const receiveToken = resolveSwapToken(swapDraft.receiveTokenId)
+    if (!payToken || !receiveToken) throw new Error('Unknown swap token')
 
-    if (activeAccount.mode === 'phantom') {
-      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
-        .phantom?.solana
-      if (!provider) throw new Error('Phantom not detected.')
-      const digest = build.authDigestHex.toLowerCase()
-      const prefixedMessage = `Stellar Smart Account Auth:\n${digest}`
-      const msgBytes = new TextEncoder().encode(prefixedMessage)
-      const signed = await provider.signMessage(msgBytes)
-      const sigBytes: Uint8Array =
-        signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
-      if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
-      setSendProgressLabel('Submitting…')
-      const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_PHANTOM',
-        payload: {
-          txXdr: build.txXdr,
-          authEntryXdr: build.authEntryXdr,
-          authSignatureHex: bytesToHex(sigBytes),
-          prefixedMessage,
-          publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
-          contextRuleId: contextRuleIdString(build),
-        },
-      })
-      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-      return submitRes.data ?? {}
-    }
-
-    if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
-      throw new Error('Missing passkey data for this account.')
-    }
-    if (!build.authDigestHex?.trim()) {
-      throw new Error('Missing auth digest from transaction build.')
-    }
-    const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
-      credentialId: activeAccount.passkeyCredentialId,
-      authDigestHex: build.authDigestHex,
-    })
-    const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
-      ReturnType<typeof startAuthentication>
-    >
-    const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
-    setSendProgressLabel('Submitting…')
-    const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
-      type: 'SUBMIT_TX_WEBAUTHN',
+    const res = await sendToBackground<GetSwapQuoteRequest, GetSwapQuoteResponse>({
+      type: 'GET_SWAP_QUOTE',
       payload: {
-        txXdr: build.txXdr,
-        authEntryXdr: build.authEntryXdr,
-        sigDataXdr,
-        keyDataHex: activeAccount.passkeyKeyDataHex,
-        contextRuleId: contextRuleIdString(build),
+        accountId: activeAccount.id,
+        assetInId: payToken.id,
+        assetOutId: receiveToken.id,
+        amountIn: swapDraft.payAmount,
+        slippageBps: swapQuote.quotePayload.slippageBps,
+        providerId: swapQuote.quotePayload.providerId,
       },
     })
-    if (!submitRes.ok) {
-      const errMsg = friendlyError(submitRes.error)
-      throw new Error(
-        await enrichWebauthnRpIdHashErrorMessage(errMsg, {
-          optionsJSON,
-          credentialResponse: assertion,
-        })
+    if (!res.ok || !res.data) throw new Error(friendlyError(res.error))
+
+    const payUsd = swapTokenPriceUsdBySymbol[payToken.symbol.toUpperCase()]
+    const receiveUsd = swapTokenPriceUsdBySymbol[receiveToken.symbol.toUpperCase()]
+    const refreshed = swapQuotePayloadToVm(res.data.quote, payUsd, receiveUsd)
+    setSwapQuote(refreshed)
+    return refreshed
+  }
+
+  async function executeSwapWithSetupLoop(quoteForTx: SwapQuoteVm): Promise<PrepareSwapTxResponse> {
+    if (!activeAccount?.id) throw new Error('No active account')
+
+    const isSoroswap = quoteForTx.quotePayload.providerId === 'soroswap'
+
+    async function runSwapRuleSetup(): Promise<void> {
+      const setupPayload = await buildSetupSwapRequestFromQuote(
+        quoteForTx.quotePayload,
+        activeAccount!
       )
+      if (!setupPayload) {
+        throw new Error(
+          (await swapSetupPrerequisiteError(activeAccount!, quoteForTx.quotePayload)) ??
+            passkeySetupPrerequisiteError(activeAccount!) ??
+            'Invalid swap setup details'
+        )
+      }
+
+      // Match ensureSendRulesConfigured: keep calling until alreadyConfigured or remaining=0.
+      for (let setupAttempt = 0; setupAttempt < 5; setupAttempt++) {
+        const setupRes = await sendToBackground<SetupSwapRulesRequest, SetupSwapRulesResponse>({
+          type: 'SETUP_SWAP_RULES',
+          payload: setupPayload,
+        })
+        if (!setupRes.ok) {
+          const code = setupRes.error?.code
+          if (code === 'signer_already_exists') {
+            return
+          }
+          throw new Error(friendlyError(setupRes.error))
+        }
+        const setup = setupRes.data!
+        if (setup.alreadyConfigured) {
+          return
+        }
+        await signAndSubmitBuiltTx({
+          build: setup,
+          activeAccount,
+          surface,
+        })
+        if ((setup.remainingSetupCount ?? 0) <= 0) {
+          return
+        }
+      }
+      throw new Error('Swap setup did not complete')
     }
-    return submitRes.data ?? {}
+
+    // prepare-sign-integration-guide: setup-swap-rules must run before the first
+    // prepare-sign for that signer/network. Soroswap prepare-sign returns a generic
+    // internal_error (not NO_CONTEXT_RULE) when rules are missing — so ensure setup first.
+    if (isSoroswap) {
+      await runSwapRuleSetup()
+    }
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const prepareRes = await sendToBackground<PrepareSwapTxRequest, PrepareSwapTxResponse>({
+        type: 'PREPARE_SWAP_TX',
+        payload: {
+          accountId: activeAccount.id,
+          quote: quoteForTx.quotePayload,
+        },
+      })
+
+      if (prepareRes.ok && prepareRes.data) {
+        if (swapBuildNeedsSignerReconfigure(prepareRes.data, activeAccount)) {
+          await runSwapRuleSetup()
+          continue
+        }
+        return prepareRes.data
+      }
+
+      if (isNoContextRuleError(prepareRes.error) || isSwapRuleReconfigureError(prepareRes.error)) {
+        await runSwapRuleSetup()
+        continue
+      }
+
+      // Soroswap / prepare-sign: missing swap rules can surface as opaque 400 internal_error.
+      // Retry setup + prepare a few times (setup tx may still be landing).
+      if (isSoroswap && isPrepareSignMissingSetupError(prepareRes.error) && attempt < 4) {
+        await runSwapRuleSetup()
+        continue
+      }
+
+      throw new Error(friendlyError(prepareRes.error))
+    }
+
+    throw new Error('Swap setup did not complete')
+  }
+
+  async function handleConfirmSwap() {
+    if (!activeAccount?.id || !swapQuote) return
+    setSwapBusy(true)
+    setSwapFailureDetail(null)
+    try {
+      const quoteForTx =
+        swapQuote.quotePayload.providerId === 'soroswap' ||
+        Date.now() >= swapQuote.quotePayload.expiresAtMs - 5_000
+          ? await refreshSwapQuoteForConfirm()
+          : swapQuote
+
+      const prepared = await executeSwapWithSetupLoop(quoteForTx)
+      if (prepared.estimatedFeeXlm || prepared.feeLabel) {
+        setSwapQuote((prev) =>
+          prev
+            ? {
+                ...prev,
+                networkFeeLine: prepared.feeLabel
+                  ? prepared.feeLabel
+                  : `~ ${prepared.estimatedFeeXlm} Stellar`,
+              }
+            : prev
+        )
+      }
+
+      const submitData = await signAndSubmitBuiltTx({
+        build: prepared,
+        activeAccount,
+        surface,
+      })
+      const txHash = extractTransactionHash(submitData)
+      setSwapStep('success')
+      const assetOut = quoteForTx.quotePayload.assetOut
+      void sendToBackground<RecordKnownSacProbeRequest, undefined>({
+        type: 'RECORD_KNOWN_SAC_PROBE',
+        payload: {
+          accountId: activeAccount.id,
+          probe: {
+            code: assetOut.symbol,
+            issuer: assetOut.issuer,
+            sacContractId: assetOut.contractId,
+          },
+        },
+      })
+      void loadPortfolio()
+      if (txHash) console.info('[latch:swap] submitted', txHash)
+    } catch (e) {
+      console.error('[latch:swap]', e)
+      setSwapFailureDetail(e instanceof Error ? e.message : String(e))
+      setSwapStep('failure')
+    } finally {
+      setSwapBusy(false)
+    }
   }
 
   async function executeSendWithSetupLoop(draft: SendDraft): Promise<SendResult> {
     if (!activeAccount) throw new Error('No active account')
-    const buildBody = buildSendRequestFromDraft(draft, activeAccount, sendTokenPriceUsd)
-    const setupBody = buildSetupRequestFromDraft(draft, activeAccount)
-    if (!buildBody) throw new Error('Invalid send details')
-    if (!setupBody) {
-      throw new Error(passkeySetupPrerequisiteError(activeAccount) ?? 'Invalid send details')
+    const account = activeAccount
+
+    // Do NOT call /api/smart-account/webauthn here. With a network-specific factory,
+    // create-or-connect returns a *new* C-address and aborts before passkey signing,
+    // while build-send already works for the funded account the user is sending from.
+    const buildBody = buildSendRequestFromDraft(draft, account, sendTokenPriceUsd, activeNetwork)
+    if (!buildBody) {
+      throw new Error(
+        explainSendDraftNotBuildable(draft, account, sendTokenPriceUsd) ?? 'Invalid send details'
+      )
     }
 
+    let configuredSendRulesInLoop = false
     for (let attempt = 0; attempt < 5; attempt++) {
       setSendProgressLabel('Building…')
       const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
@@ -1170,7 +1538,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       })
 
       if (buildRes.ok && buildRes.data) {
-        const submitData = await signAndSubmitBuilt(buildRes.data)
+        const submitData = await signAndSubmitBuiltTx({
+          build: buildRes.data,
+          activeAccount: account,
+          surface,
+          onProgress: setSendProgressLabel,
+        })
         return {
           status: 'success',
           hash: extractTransactionHash(submitData),
@@ -1178,17 +1551,37 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         }
       }
 
-      if (isNoContextRuleError(buildRes.error)) {
-        setSendProgressLabel('Setting up…')
-        const setupRes = await sendToBackground<SetupSendRulesRequest, SetupSendRulesResponse>({
-          type: 'SETUP_SEND_RULES',
-          payload: setupBody,
+      // Missing CallContract send rules: API may return 409 NO_CONTEXT_RULE or opaque
+      // 400 internal_error ("failed to build transaction") — same as prepare-sign.
+      if (isBuildSendMissingSetupError(buildRes.error)) {
+        const setupBody = buildSetupRequestFromDraft(draft, account, undefined, activeNetwork)
+        if (!setupBody) {
+          throw new Error(
+            passkeySetupPrerequisiteError(account) ??
+              'Cannot set up send rules for this account. Sign in with your passkey again.'
+          )
+        }
+        const setupResult = await ensureSendRulesConfigured({
+          setupBody,
+          signAndSubmit: (build) =>
+            signAndSubmitBuiltTx({
+              build,
+              activeAccount: account,
+              surface,
+              onProgress: setSendProgressLabel,
+            }),
+          onProgress: setSendProgressLabel,
         })
-        if (!setupRes.ok) throw new Error(friendlyError(setupRes.error))
-        const setup = setupRes.data!
-        if (setup.alreadyConfigured) continue
-        await signAndSubmitBuilt(setup)
-        if ((setup.remainingSetupCount ?? 0) > 0) continue
+        if (setupResult === 'configured') configuredSendRulesInLoop = true
+        // Opaque build failure with rules already present is usually simulation (balance,
+        // etc.), not missing setup — unless we just configured and the rule may still be landing.
+        if (
+          setupResult === 'already_configured' &&
+          !configuredSendRulesInLoop &&
+          !isNoContextRuleError(buildRes.error)
+        ) {
+          throw new Error(friendlyError(buildRes.error))
+        }
         continue
       }
 
@@ -1198,9 +1591,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     throw new Error('Send setup did not complete')
   }
 
-  async function fetchSendFeeEstimate(): Promise<BuildSendTxResponse | null> {
-    if (!activeAccount) return null
-    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount, sendTokenPriceUsd)
+  const fetchSendFeeEstimate = useCallback(async (): Promise<BuildSendTxResponse | null> => {
+    if (!activeAccount || activeAccount.mode === 'multisig') return null
+    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount, sendTokenPriceUsd, activeNetwork)
     if (!buildBody) return null
     try {
       const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
@@ -1212,12 +1605,33 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     } catch {
       return null
     }
-  }
+  }, [activeAccount, sendDraft, sendTokenPriceUsd, activeNetwork])
 
   async function handleSubmitSend() {
     setSendError(null)
     setSendProgressLabel('Building…')
     try {
+      if (activeAccount?.mode === 'multisig') {
+        const proposal = await createMultisigSendProposalWithSetup({
+          draft: sendDraft,
+          multisigAccount: activeAccount,
+          accounts,
+          priceUsd: sendTokenPriceUsd,
+          surface,
+          onProgress: setSendProgressLabel,
+        })
+        setSendResult({
+          status: 'success',
+          proposalId: proposal.id,
+          submittedAt: new Date().toISOString(),
+        })
+        setMultisigDetailProposalId(proposal.id)
+        setSendStep('success')
+        void loadPortfolio()
+        void loadMultisigProposals()
+        return
+      }
+
       const result = await executeSendWithSetupLoop(sendDraft)
       setSendResult(result)
       setSendStep('success')
@@ -1231,9 +1645,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       console.error('[latch:send]', message, e)
+      const errorMessage = await enrichSendFailureDetail({
+        errorMessage: message,
+        draft: sendDraft,
+        network: activeNetwork,
+      })
       setSendResult({
         status: 'failure',
-        errorMessage: message,
+        errorMessage,
         submittedAt: new Date().toISOString(),
       })
       setSendStep('failure')
@@ -1242,234 +1661,46 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     }
   }
 
-  async function signAndSubmit(): Promise<string> {
-    if (!activeAccount) throw new Error('No active account')
-    setError(null)
-    setLoading('Building transaction…')
-    try {
-      await buildForActiveAccount()
-
-      if (activeAccount.mode === 'freighter') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
-        const b =
-          builtDelegatedTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; gAddress: string },
-              BuildDelegatedTxResponse
-            >({
-              type: 'BUILD_DELEGATED_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                gAddress: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build delegated transaction.')
-        setLoading('Awaiting Freighter signature…')
-        const networkPassphrase =
-          process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet'
-            ? Networks.PUBLIC
-            : Networks.TESTNET
-        if (!b.gAddressEntryTemplateXdr) {
-          throw new Error('Missing delegated auth entry template from build response.')
-        }
-        const signed = await signAuthEntry(b.gAddressEntryTemplateXdr, {
-          networkPassphrase,
-          address: activeAccount.gAddress,
-        })
-        if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
-        const signerAddress = signed.signerAddress
-        const signedAuthEntryBase64 = signed.signedAuthEntry
-          ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-          : undefined
-        if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: b.txXdr,
-            smartAccountAuthEntryXdr: b.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      if (activeAccount.mode === 'mnemonic') {
-        if (!activeAccount.gAddress) throw new Error('Missing G-address for mnemonic account')
-        const b =
-          builtDelegatedTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; gAddress: string },
-              BuildDelegatedTxResponse
-            >({
-              type: 'BUILD_DELEGATED_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                gAddress: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build delegated transaction.')
-        setLoading('Signing with local key…')
-        const signRes = await sendToBackground<
-          SignDelegatedGAuthEntryRequest,
-          SignDelegatedGAuthEntryResponse
-        >({
-          type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
-          payload: {
-            accountId: activeAccount.id,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            networkPassphrase: Networks.TESTNET,
-          },
-        })
-        if (!signRes.ok) throw new Error(friendlyError(signRes.error))
-        const signedAuthEntryBase64 = signRes.data!.signedAuthEntryBase64
-        const signerAddress = signRes.data!.signerAddress
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_DELEGATED',
-          payload: {
-            txXdr: b.txXdr,
-            smartAccountAuthEntryXdr: b.smartAccountAuthEntryXdr,
-            gAddressEntryTemplateXdr: b.gAddressEntryTemplateXdr,
-            signedAuthEntryBase64,
-            signerAddress,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      if (activeAccount.mode === 'phantom') {
-        const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
-          .phantom?.solana
-        if (!provider) throw new Error('Phantom not detected.')
-        const b =
-          builtTx ??
-          (
-            await sendToBackground<
-              { smartAccountAddress: string; signerG?: string },
-              BuildTxResponse
-            >({
-              type: 'BUILD_TX',
-              payload: {
-                smartAccountAddress: activeAccount.smartAccountAddress,
-                signerG: activeAccount.gAddress,
-              },
-            })
-          ).data
-        if (!b) throw new Error('Failed to build transaction.')
-
-        const prefixedMessage = `Stellar Smart Account Auth:\n${b.authDigestHex.toLowerCase()}`
-        const msgBytes = new TextEncoder().encode(prefixedMessage)
-        setLoading('Awaiting Phantom signature…')
-        const signed = await provider.signMessage(msgBytes)
-        const sigBytes: Uint8Array =
-          signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
-        if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
-        const authSignatureHex = bytesToHex(sigBytes)
-
-        setLoading('Submitting transaction…')
-        const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
-          type: 'SUBMIT_TX_PHANTOM',
-          payload: {
-            txXdr: b.txXdr,
-            authEntryXdr: b.authEntryXdr,
-            authSignatureHex,
-            prefixedMessage,
-            publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
-            contextRuleId: b.contextRuleId,
-          },
-        })
-        if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
-        setRoute('home')
-        return b.txXdr
-      }
-
-      // passkey
-      const b =
-        builtTx ??
-        (
-          await sendToBackground<
-            { smartAccountAddress: string; signerG?: string },
-            BuildTxResponse
-          >({
-            type: 'BUILD_TX',
-            payload: {
-              smartAccountAddress: activeAccount.smartAccountAddress,
-              signerG: activeAccount.gAddress,
-            },
-          })
-        ).data
-      if (!b) throw new Error('Failed to build transaction.')
-      if (!activeAccount.passkeyCredentialId || !activeAccount.passkeyKeyDataHex) {
-        throw new Error('Missing passkey data for this account.')
-      }
-
-      if (!b.authDigestHex?.trim()) {
-        throw new Error('Missing auth digest from transaction build.')
-      }
-      setLoading('Awaiting passkey authentication…')
-      const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
-        credentialId: activeAccount.passkeyCredentialId,
-        authDigestHex: b.authDigestHex,
-      })
-      const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
-        ReturnType<typeof startAuthentication>
-      >
-      const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
-
-      setLoading('Submitting transaction…')
-      const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
-        type: 'SUBMIT_TX_WEBAUTHN',
-        payload: {
-          txXdr: b.txXdr,
-          authEntryXdr: b.authEntryXdr,
-          sigDataXdr,
-          keyDataHex: activeAccount.passkeyKeyDataHex,
-          contextRuleId: b.contextRuleId,
-        },
-      })
-      if (!submitRes.ok) {
-        const errMsg = friendlyError(submitRes.error)
-        throw new Error(
-          await enrichWebauthnRpIdHashErrorMessage(errMsg, {
-            optionsJSON,
-            credentialResponse: assertion,
-          })
-        )
-      }
-      setRoute('home')
-      return b.txXdr
-    } finally {
-      setLoading(null)
-    }
-  }
-
   async function resolvePendingDapp(
     req: PendingDappRequest,
     approved: boolean,
-    signedXdr?: string
+    extra?: {
+      signedXdr?: string
+      txHash?: string
+      signedAuthEntry?: string
+      signedTxXdr?: string
+      errorMessage?: string
+      errorCode?: string
+    }
   ) {
     await sendToBackground({
       type: 'RESOLVE_PENDING_DAPP_REQUEST',
-      payload: { requestId: req.id, approved, signedXdr },
+      payload: {
+        requestId: req.id,
+        approved,
+        errorMessage: extra?.errorMessage,
+        errorCode: extra?.errorCode,
+        signedXdr: extra?.signedXdr,
+        txHash: extra?.txHash,
+        signedAuthEntry: extra?.signedAuthEntry,
+        signedTxXdr: extra?.signedTxXdr,
+      },
     })
+    setDappBusy(false)
+    setDappProgressLabel(null)
+    setDappError(null)
     await loadPendingDapp()
     if (pendingDappRequests.length <= 1) {
-      setRoute(accounts.length > 0 ? 'home' : 'welcome')
+      setRoute(accounts.length > 0 ? 'home' : 'home')
+      if (accounts.length === 0) {
+        onboardingTabOpenedRef.current = false
+        void openOnboardingTab().catch(() => {})
+      }
     }
   }
+
+  const showOnboardingTabPrompt =
+    accountsHydrated && accounts.length === 0 && route !== 'joinMultisig' && !loading
 
   async function logout() {
     setError(null)
@@ -1480,10 +1711,15 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         payload: undefined,
       })
       if (!res.ok) throw new Error(friendlyError(res.error))
-      setSetupState('new')
+      const refreshed = await refreshAccounts()
       setPendingDappRequests([])
-      setRoute('welcome')
       setPage('main')
+      if ((refreshed?.accounts.length ?? 0) > 0) {
+        setRoute(resolveMainRoute({ needsMnemonicUnlock: refreshed?.needsMnemonicUnlock ?? false }))
+      } else {
+        onboardingTabOpenedRef.current = false
+        void openOnboardingTab().catch(() => {})
+      }
     } finally {
       setLoading(null)
     }
@@ -1499,7 +1735,32 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     route === 'home' &&
     !loading &&
     ((!portfolioHydrated && portfolioLoading) || (!historyHydrated && historyLoading))
+  const showSwapCatalogLoadingOverlay =
+    (page === 'main' || page === 'settings') &&
+    route === 'swap' &&
+    !loading &&
+    swapCatalogLoading &&
+    swapPayTokenCatalogWithIcons.length === 0
+  const showSwapLoadingOverlay = swapBusy && route === 'swapConfirm' && swapStep === 'confirm'
   const routeContentMarginClass = showTopHeader ? 'mt-2' : 'mt-0'
+
+  useMultisigJoinTokenOnMount((token) => {
+    setMultisigJoinToken(token)
+    setRoute('joinMultisig')
+  })
+
+  const multisigRoutes: Route[] = [
+    'createMultisig',
+    'addMultisigOwners',
+    'multisigThreshold',
+    'multisigReviewDeploy',
+    'multisigSuccess',
+    'joinMultisig',
+    'multisigProposals',
+    'multisigProposalDetail',
+    'multisigWallets',
+  ]
+  const isMultisigRoute = multisigRoutes.includes(route as Route)
 
   const mainTabRoutes = ['home', 'swap', 'history', 'explore'] as const
   const showMainBottomNav =
@@ -1560,24 +1821,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         {page === 'main' || page === 'settings' ? (
           <>
             {loading && !routeKeepsUiMountedForWebauthn(route) ? (
-              <div
-                className={[
-                  `${routeContentMarginClass} flex flex-col items-center justify-center animate-screenIn`,
-                  flowHeightClass,
-                ].join(' ')}
-              >
-                <img src={logoUrl} alt="Latch" className="h-10 w-10 object-contain" />
-                <div className="mt-6 text-center text-lg font-extrabold">{loading}</div>
-                <div className="mt-2 text-center text-xs text-muted">
-                  Approve the request in your wallet when prompted.
-                </div>
-                <button
-                  className="mt-8 rounded-full border border-border px-4 py-2 text-sm font-bold hover:bg-surface/70"
-                  onClick={() => setLoading(null)}
-                >
-                  Cancel
-                </button>
-              </div>
+              <FullScreenLoaderOverlay
+                label={loading}
+                description="Approve the request in your wallet when prompted."
+                onCancel={() => setLoading(null)}
+              />
             ) : null}
 
             {error && (!loading || routeKeepsUiMountedForWebauthn(route)) ? (
@@ -1603,130 +1851,156 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <div className="text-center">
-                  <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />
-                  <h2 className="mt-4 text-3xl font-extrabold tracking-tight">Dapp request</h2>
-                  <p className="mt-2 text-sm text-muted">Approve access for this site</p>
-                </div>
-
-                {pendingDappRequests[0] ? (
-                  <div className="mt-6 rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
-                    <div className="text-xs font-bold text-muted">Origin</div>
-                    <div className="mt-2 break-all text-sm font-extrabold">
-                      {pendingDappRequests[0].origin}
-                    </div>
-                    <div className="mt-3 text-xs text-muted">Request</div>
-                    <div className="mt-1 text-sm font-bold">{pendingDappRequests[0].kind}</div>
-                  </div>
-                ) : null}
-
-                <div className="mt-auto space-y-3">
-                  <button
-                    onClick={() => {
+                {pendingDappRequests[0]?.kind === 'externalSignReview' &&
+                pendingDappRequests[0].prepared ? (
+                  <ExternalSignReviewScreen
+                    origin={pendingDappRequests[0].origin}
+                    prepared={pendingDappRequests[0].prepared}
+                    busy={dappBusy}
+                    progressLabel={dappProgressLabel}
+                    error={dappError}
+                    onConfirm={() => {
                       const req = pendingDappRequests[0]
-                      if (!req) return
+                      if (!req?.prepared || !activeAccount) return
                       void (async () => {
-                        if (req.kind === 'signTransaction') {
-                          const signedXdr = await signAndSubmit()
-                          await resolvePendingDapp(req, true, signedXdr)
-                          return
+                        setDappBusy(true)
+                        setDappError(null)
+                        try {
+                          // #region agent log
+                          debugAgentLog({
+                            hypothesisId: 'H3-H5',
+                            location: 'LatchRoot.tsx:dappApprovalConfirm',
+                            message: 'dapp approval confirm account vs request',
+                            data: {
+                              surface,
+                              accountId: activeAccount.id,
+                              accountMode: activeAccount.mode,
+                              activeSmartSuffix: (
+                                activeAccount.smartAccountAddress ?? ''
+                              ).slice(-8),
+                              reqSmartSuffix: (
+                                req.signRequest?.smartAccountAddress ?? ''
+                              ).slice(-8),
+                              accountsMatch:
+                                activeAccount.smartAccountAddress ===
+                                req.signRequest?.smartAccountAddress,
+                              passkeyCredSuffix: (
+                                activeAccount.passkeyCredentialId ?? ''
+                              ).slice(-12),
+                              hasPasskeyCred: Boolean(
+                                activeAccount.passkeyCredentialId?.trim()
+                              ),
+                              hasKeyData: Boolean(
+                                activeAccount.passkeyKeyDataHex?.trim()
+                              ),
+                              submit: req.signRequest?.submit,
+                              origin: req.origin,
+                            },
+                          })
+                          // #endregion
+                          if (req.signRequest?.submit === false) {
+                            const { signedTxXdr, signedAuthEntry } =
+                              await signWithoutSubmitBuiltTx({
+                                build: req.prepared!,
+                                activeAccount,
+                                surface,
+                                onProgress: setDappProgressLabel,
+                              })
+                            await resolvePendingDapp(req, true, {
+                              signedTxXdr,
+                              signedAuthEntry,
+                            })
+                            return
+                          }
+                          const submitData = await signAndSubmitBuiltTx({
+                            build: req.prepared!,
+                            activeAccount,
+                            surface,
+                            onProgress: setDappProgressLabel,
+                          })
+                          const txHash = extractTransactionHash(submitData)
+                          await resolvePendingDapp(req, true, { txHash })
+                        } catch (e) {
+                          const message = e instanceof Error ? e.message : String(e)
+                          // Clear the durable queue on failure so reopening the extension
+                          // does not resurrect a stale "Review transaction" screen.
+                          try {
+                            await resolvePendingDapp(req, false, {
+                              errorMessage: message,
+                              errorCode: 'sign_failed',
+                            })
+                            setError(message)
+                          } catch {
+                            setDappError(message)
+                            setDappBusy(false)
+                            setDappProgressLabel(null)
+                          }
                         }
-                        await resolvePendingDapp(req, true)
-                      })().catch((e) => setError(e instanceof Error ? e.message : String(e)))
+                      })()
                     }}
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => {
+                    onReject={() => {
                       const req = pendingDappRequests[0]
                       if (!req) return
                       void resolvePendingDapp(req, false).catch((e) =>
-                        setError(e instanceof Error ? e.message : String(e))
+                        setDappError(e instanceof Error ? e.message : String(e))
                       )
                     }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    Reject
-                  </button>
-                </div>
+                  />
+                ) : pendingDappRequests[0] ? (
+                  <GrantAccessScreen
+                    origin={pendingDappRequests[0].origin}
+                    kind={pendingDappRequests[0].kind}
+                    network={dappNetwork}
+                    smartAccountAddress={activeAccount?.smartAccountAddress ?? '—'}
+                    busy={dappBusy}
+                    onApprove={() => {
+                      const req = pendingDappRequests[0]
+                      if (!req) return
+                      void resolvePendingDapp(req, true).catch((e) =>
+                        setDappError(e instanceof Error ? e.message : String(e))
+                      )
+                    }}
+                    onReject={() => {
+                      const req = pendingDappRequests[0]
+                      if (!req) return
+                      void resolvePendingDapp(req, false).catch((e) =>
+                        setDappError(e instanceof Error ? e.message : String(e))
+                      )
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
 
-            {!loading && route === 'welcome' ? (
+            {!loading && showOnboardingTabPrompt ? (
               <div
                 className={[
                   `${routeContentMarginClass} flex flex-col items-center justify-between h-full pb-6 animate-screenIn`,
                   flowHeightClass,
                 ].join(' ')}
               >
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center text-center">
                   <img src={logoUrl} alt="Latch" className="mt-4 h-10 w-10 object-contain" />
-                  <h1 className="mt-8 text-center text-3xl font-extrabold tracking-tight">
-                    Welcome to Latch
-                  </h1>
-                  <p className="mt-4 max-w-[280px] text-center text-sm text-muted">
-                    Securely manage your digital assets with confidence and ease.
+                  <h1 className="mt-8 text-2xl font-extrabold tracking-tight">Set up Latch</h1>
+                  <p className="mt-4 max-w-[280px] text-sm text-muted">
+                    Wallet setup runs in a full browser tab. If it didn&apos;t open, use the button
+                    below.
                   </p>
                 </div>
-
-                <div className="mt-auto w-full space-y-3">
-                  {accounts.length > 0 ? (
-                    <button
-                      onClick={() => setRoute('home')}
-                      className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                    >
-                      Continue
-                    </button>
-                  ) : null}
-                  <button
-                    onClick={() => {
-                      setChooseSignerForExistingWallet(false)
-                      setRoute('chooseSigner')
-                    }}
-                    className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
-                  >
-                    Create a New Wallet
-                  </button>
-                  <button
-                    onClick={() => {
-                      setChooseSignerForExistingWallet(true)
-                      setRoute('chooseSigner')
-                    }}
-                    className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
-                  >
-                    I Have a Wallet
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRoute('importSeed')}
-                    className="h-11 w-full rounded-full text-sm font-extrabold text-primary hover:underline"
-                  >
-                    Import with recovery phrase
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {!loading && route === 'createMultisig' ? (
-              <div
-                className={[
-                  routeContentMarginClass,
-                  'flex min-h-0 flex-1 flex-col animate-screenIn',
-                  flowHeightClass,
-                ].join(' ')}
-              >
-                <CreateMultisigScreen
-                  onContinue={(walletName, purpose) => {
-                    setMultisigDraft({ walletName, purpose })
-                    setRoute('addMultisigOwners')
+                <button
+                  type="button"
+                  onClick={() => {
+                    onboardingTabOpenedRef.current = true
+                    void openOnboardingTab().catch(() => {})
                   }}
-                />
+                  className="h-12 w-full rounded-full bg-primary text-base font-extrabold text-black shadow-soft"
+                >
+                  Open setup tab
+                </button>
               </div>
             ) : null}
 
-            {!loading && route === 'addMultisigOwners' && activeAccount ? (
+            {!loading && !showOnboardingTabPrompt && isMultisigRoute ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -1734,17 +2008,23 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <AddMultisigOwnersScreen
-                  creatorSignerAddresses={[
-                    activeAccount.smartAccountAddress,
-                    ...(activeAccount.gAddress ? [activeAccount.gAddress] : []),
-                  ]}
+                <MultisigRouteViews
+                  route={route}
+                  surface={surface}
+                  activeAccount={activeAccount}
                   accounts={accounts}
-                  onContinue={(owners) => {
-                    if (!multisigDraft) return
-                    void owners
-                    void multisigDraft.walletName
-                    // Next multisig step — wired when that screen exists.
+                  externalJoinToken={multisigJoinToken}
+                  externalProposalId={multisigDetailProposalId}
+                  onRefreshAccounts={async () => {
+                    await refreshAccounts()
+                  }}
+                  onSetRoute={(r) => setRoute(r as Route)}
+                  onSetActiveAccountId={(id) => {
+                    setActiveAccountId(id)
+                    void sendToBackground<SetActiveAccountRequest, undefined>({
+                      type: 'SET_ACTIVE_ACCOUNT',
+                      payload: { accountId: id },
+                    }).catch(() => {})
                   }}
                 />
               </div>
@@ -1853,7 +2133,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'chooseSigner' ? (
+            {!loading && route === 'chooseSigner' && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -1952,7 +2232,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     <button
                       onClick={() => {
                         setChooseSignerForExistingWallet(false)
-                        setRoute('welcome')
+                        if (accounts.length > 0) {
+                          setRoute('home')
+                        } else {
+                          void openOnboardingTab()
+                        }
                       }}
                       className="h-12 w-full rounded-full border border-border bg-surface text-base font-bold text-fg shadow-soft"
                     >
@@ -1963,7 +2247,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {route === 'createPasskey' ? (
+            {route === 'createPasskey' && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -2058,7 +2342,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') ? (
+            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
@@ -2076,8 +2360,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     if (route === 'importSeedEncrypt') {
                       setRoute('importSeed')
                       setImportSeedStep('phrase')
+                    } else if (accounts.length > 0) {
+                      setRoute('home')
                     } else {
-                      setRoute('welcome')
+                      void openOnboardingTab()
                     }
                   }}
                   onProceedToEncrypt={() => {
@@ -2126,7 +2412,13 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && route === 'home' && !needsMnemonicUnlock ? (
+            {!loading && !accountsHydrated ? (
+              <div className={`${flowHeightClass} flex items-center justify-center text-sm text-muted`}>
+                Loading…
+              </div>
+            ) : null}
+
+            {!loading && route === 'home' && !needsMnemonicUnlock && !showOnboardingTabPrompt ? (
               <div
                 className={[
                   routeContentMarginClass,
@@ -2141,9 +2433,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   recentActivity={recentActivityItems}
                   totalBalanceUsd={totalBalanceUsd}
                   balanceChangePercent="0.00%"
-                  onOpenSwap={openSwapFromNav}
+                  showPendingMultisigDot={hasPendingMultisigProposals}
+                  onOpenSwap={
+                    activeAccount?.mode === 'multisig' ? () => {} : openSwapFromNav
+                  }
+                  swapDisabled={activeAccount?.mode === 'multisig'}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
+                  onOpenFund={() => setRoute('fund')}
                   onSelectActivity={(it) => {
                     const c = activeAccount?.smartAccountAddress ?? ''
                     setTransactionDetailReturnRoute('home')
@@ -2174,6 +2471,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           id: account.id,
                           name: storedAccountLabel(account, index),
                           address: account.smartAccountAddress,
+                          mode: account.mode,
                         }))}
                         activeAccountId={activeAccountId}
                         biometricsEnabled={false}
@@ -2213,7 +2511,47 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           setPage('main')
                           setRoute('createMultisig')
                         }}
+                        onOpenMultisigWallets={() => {
+                          setPage('main')
+                          setRoute('multisigWallets')
+                        }}
+                        onOpenMultisigProposals={
+                          activeAccount?.mode === 'multisig'
+                            ? () => {
+                                setPage('main')
+                                setRoute('multisigProposals')
+                              }
+                            : undefined
+                        }
+                        pendingMultisigProposalCount={
+                          activeAccount?.mode === 'multisig' ? multisigPendingCount : 0
+                        }
                         networkLabel={networkLabel}
+                        activeNetwork={activeNetwork}
+                        onChangeNetwork={async (network) => {
+                          const res = await sendToBackground<
+                            { network: 'testnet' | 'mainnet' },
+                            { network: 'testnet' | 'mainnet'; networkLabel: string }
+                          >({
+                            type: 'SET_ACTIVE_NETWORK',
+                            payload: { network },
+                          })
+                          if (!res.ok || !res.data) {
+                            throw new Error(res.error?.message ?? 'Failed to switch network')
+                          }
+                          setActiveNetwork(res.data.network)
+                          setDappNetwork(res.data.network)
+                          setNetworkLabel(
+                            res.data.networkLabel ||
+                              (res.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
+                          )
+                          const setupRes = await sendToBackground<undefined, GetSetupStateResponse>({
+                            type: 'GET_SETUP_STATE',
+                            payload: undefined,
+                          })
+                          if (setupRes.ok && setupRes.data) setSetupState(setupRes.data.setupState)
+                          await refreshAccounts()
+                        }}
                         onClose={() => setPage('main')}
                         onLogout={() =>
                           void logout().catch((e) =>
@@ -2260,6 +2598,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <MigrationScreen
                   surface={surface}
                   accountId={activeAccount.id}
+                  network={activeNetwork}
                   onBack={() =>
                     setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
                   }
@@ -2337,6 +2676,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 <TransactionDetailScreen
                   surface={surface}
                   detail={transactionDetail}
+                  network={activeNetwork}
                   onBack={() => setRoute(transactionDetailReturnRoute)}
                 />
               </div>
@@ -2350,17 +2690,25 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   flowHeightClass,
                 ].join(' ')}
               >
-                <SwapScreen
-                  surface={surface}
-                  initialState={swapDraft ?? undefined}
-                  swapTokenCatalog={swapTokenCatalog}
-                  onBack={() => setRoute('home')}
-                  onContinue={(q, d) => {
-                    setSwapDraft(d)
-                    setSwapQuote(q)
-                    setRoute('swapConfirm')
-                  }}
-                />
+                {!(swapCatalogLoading && swapPayTokenCatalogWithIcons.length === 0) ? (
+                  <SwapScreen
+                    surface={surface}
+                    accountId={activeAccount?.id ?? ''}
+                    walletLabel={swapWalletLabel(activeAccount?.smartAccountAddress)}
+                    initialState={swapDraft ?? undefined}
+                    payTokenCatalog={swapPayTokenCatalogWithIcons}
+                    receiveTokenCatalog={swapReceiveTokenCatalogWithIcons}
+                    preferredReceiveTokenIds={swapPreferredReceiveTokenIds}
+                    tokenPriceUsdBySymbol={swapTokenPriceUsdBySymbol}
+                    onBack={() => setRoute('home')}
+                    onContinue={(q, d) => {
+                      setSwapDraft(d)
+                      setSwapQuote(q)
+                      setSwapStep('confirm')
+                      setRoute('swapConfirm')
+                    }}
+                  />
+                ) : null}
               </div>
             ) : null}
 
@@ -2373,19 +2721,48 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 ].join(' ')}
               >
                 {swapDraft && swapQuote ? (
-                  <ConfirmSwapScreen
-                    surface={surface}
-                    draft={swapDraft}
-                    quote={swapQuote}
-                    swapTokenCatalog={swapTokenCatalog}
-                    receiveAddress={activeAccount?.smartAccountAddress}
-                    onBackOrCancel={() => setRoute('swap')}
-                    onConfirm={() => {
-                      setSwapDraft(null)
-                      setSwapQuote(null)
-                      setRoute('home')
-                    }}
-                  />
+                  swapStep === 'success' ? (
+                    <SwapSuccessScreen
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      onBackToHome={() => {
+                        resetSwapFlow()
+                        setRoute('home')
+                      }}
+                    />
+                  ) : swapStep === 'failure' ? (
+                    <SwapFailureScreen
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      errorDetail={swapFailureDetail}
+                      onBack={() => {
+                        resetSwapFlow()
+                        setRoute('swap')
+                      }}
+                      onTryAgain={() => {
+                        setSwapFailureDetail(null)
+                        setSwapStep('confirm')
+                      }}
+                    />
+                  ) : (
+                    <ConfirmSwapScreen
+                      surface={surface}
+                      draft={swapDraft}
+                      quote={swapQuote}
+                      resolveSwapToken={resolveSwapToken}
+                      receiveAddress={activeAccount?.smartAccountAddress}
+                      busy={swapBusy}
+                      onBackOrCancel={() => {
+                        if (swapBusy) return
+                        setRoute('swap')
+                      }}
+                      onConfirm={() => {
+                        void handleConfirmSwap()
+                      }}
+                    />
+                  )
                 ) : (
                   <div className="rounded-2xl border border-border bg-surface/60 p-4 text-sm shadow-soft">
                     <div className="font-extrabold">Swap session expired</div>
@@ -2418,8 +2795,10 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   portfolioError={portfolioError}
                   tokenPriceUsd={sendTokenPriceUsd}
                   networkLabel={networkLabel}
+                  network={activeNetwork}
                   sendProgressLabel={sendProgressLabel}
                   sendError={sendError}
+                  createProposalMode={activeAccount?.mode === 'multisig'}
                   onDraftChange={(patch) => setSendDraft((d) => ({ ...d, ...patch }))}
                   onStepChange={setSendStep}
                   onBackFromSend={() => {
@@ -2429,6 +2808,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   onFetchFeeEstimate={fetchSendFeeEstimate}
                   onSubmitSend={() => void handleSubmitSend()}
                   onContinueHome={() => {
+                    if (sendResult?.proposalId && activeAccount?.mode === 'multisig') {
+                      setMultisigDetailProposalId(sendResult.proposalId)
+                      resetSendFlow()
+                      setRoute('multisigProposalDetail')
+                      return
+                    }
                     resetSendFlow()
                     setRoute('home')
                   }}
@@ -2453,6 +2838,24 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   portfolioLoading={portfolioLoading}
                   portfolioError={portfolioError}
                   onBackToHome={() => setRoute('home')}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'fund' ? (
+              <div
+                className={[
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <FundScreen
+                  accountId={activeAccount?.id || ''}
+                  accountMode={activeAccount?.mode || ''}
+                  passkeyCredentialId={activeAccount?.passkeyCredentialId}
+                  surface={surface}
+                  onBack={() => setRoute('home')}
+                  onOpenReceive={() => setRoute('receive')}
                 />
               </div>
             ) : null}
@@ -2521,6 +2924,28 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       {showHomeLoadingOverlay ? (
         <div className="absolute inset-0 z-40">
           <HomeLoadingOverlay />
+        </div>
+      ) : null}
+
+      {showSwapCatalogLoadingOverlay ? (
+        <div
+          className="absolute inset-0 z-40"
+          role="status"
+          aria-live="polite"
+          aria-label="Loading tokens"
+        >
+          <SwapCatalogLoadingOverlay />
+        </div>
+      ) : null}
+
+      {showSwapLoadingOverlay ? (
+        <div
+          className="absolute inset-0 z-50"
+          role="status"
+          aria-live="polite"
+          aria-label="Swapping"
+        >
+          <SwapTransactionLoadingOverlay />
         </div>
       ) : null}
 

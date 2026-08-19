@@ -64,7 +64,10 @@ describe('background/backend', () => {
   })
 
   it('passkey begin routes send chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'extid-abc' } })
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'extid-abc' },
+    })
 
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
@@ -95,7 +98,20 @@ describe('background/backend', () => {
   })
 
   it('passkey finish routes send chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'extid-xyz' } })
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'extid-xyz' },
+    })
+
+    const mockCredential = {
+      id: 'Y2g',
+      rawId: 'Y2g',
+      type: 'public-key',
+      response: {
+        clientDataJSON: 'Y2Q',
+        attestationObject: 'Y28',
+      },
+    }
 
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
@@ -117,23 +133,40 @@ describe('background/backend', () => {
       })
     )
 
-    await passkeyRegistrationFinish({ response: { id: 'cred' } })
-    await passkeyAuthenticationFinish({ response: { id: 'cred' } })
+    await passkeyRegistrationFinish({ response: mockCredential })
+    await passkeyAuthenticationFinish({
+      response: {
+        ...mockCredential,
+        response: {
+          clientDataJSON: 'Y2Q',
+          authenticatorData: 'YQ',
+          signature: 'c2ln',
+        },
+      },
+    })
 
     expect(bodies[0]).toMatchObject({
-      response: { id: 'cred' },
+      response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
     expect(bodies[1]).toMatchObject({
-      response: { id: 'cred' },
+      response: expect.objectContaining({ id: 'Y2g' }),
       chromeExtensionId: 'extid-xyz',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
 
     vi.unstubAllGlobals()
   })
 
-  it('submitTxWebauthn sends chromeExtensionId when chrome.runtime.id is set', async () => {
-    vi.stubGlobal('chrome', { runtime: { id: 'ext-submit' } })
+  it('submitTxWebauthn sends chromeExtensionId and active network', async () => {
+    const { clearCachedActiveNetwork, setCachedActiveNetwork } = await import('./network/config')
+    setCachedActiveNetwork('mainnet')
+
+    vi.stubGlobal('chrome', {
+      ...globalThis.chrome,
+      runtime: { ...globalThis.chrome.runtime, id: 'ext-submit' },
+    })
 
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal(
@@ -154,14 +187,16 @@ describe('background/backend', () => {
       authEntryXdr: 'y',
       sigDataXdr: 'z',
       keyDataHex: '00',
-      contextRuleId: 'ctx',
+      contextRuleId: 0,
     })
 
     expect(bodies[0]).toMatchObject({
       txXdr: 'x',
       chromeExtensionId: 'ext-submit',
+      network: 'mainnet',
     })
 
+    clearCachedActiveNetwork()
     vi.unstubAllGlobals()
   })
 
@@ -235,6 +270,7 @@ describe('background/backend', () => {
       amount: '2.5',
       assetId: 'usdc',
       signerG: 'G123',
+      network: expect.stringMatching(/^(testnet|mainnet)$/),
     })
 
     vi.unstubAllGlobals()

@@ -35,6 +35,11 @@ export default {
           '0%': { opacity: '0', transform: 'translateY(10px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        pulseDot: {
+          '0%': { transform: 'scale(1)', opacity: '1' },
+          '50%': { transform: 'scale(1.35)', opacity: '0.65' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
+        },
         pop: {
           '0%': { opacity: '0', transform: 'scale(0.92)' },
           '70%': { opacity: '1', transform: 'scale(1.03)' },
@@ -43,6 +48,7 @@ export default {
       },
       animation: {
         screenIn: 'screenIn 220ms ease-out',
+        pulseDot: 'pulseDot 1.25s ease-in-out infinite',
         pop: 'pop 380ms cubic-bezier(0.2, 0.9, 0.2, 1)',
       },
       borderRadius: {

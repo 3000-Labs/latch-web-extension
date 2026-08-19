@@ -7,11 +7,19 @@ import {
   enrichWebauthnRpIdHashErrorMessage,
   extractRegistrationKeyData,
   formatWebauthnBrowserError,
+  getWebauthnCeremonyTypeFromCredential,
   getWebauthnRpIdFromBeginOptions,
   nextPasskeyAccountDisplayName,
+  nextPasskeyRegistrationDisplayName,
+  prepareRegistrationOptionsForCreate,
+  prepareAuthenticationOptionsForGet,
   readAuthenticatorRpIdHashHexFromCredentialJSON,
   buildWebauthnSigDataXdrHex,
   passkeyAuthenticationOptionsForAuthDigest,
+  passkeyAuthenticationOptionsForV1Challenge,
+  assertPasskeyAssertionMatchesV1Challenge,
+  assertPasskeyAssertionMatchesAuthDigest,
+  authDigestChallengeBase64Url,
   toLowSCompactSignatureP256,
 } from './passkey'
 import { base64UrlToBytes, bytesToBase64Url, hexToBytes } from './utils'
@@ -95,7 +103,78 @@ describe('webauthn/passkey', () => {
     expect(opts.rpId).toBe('ghpalnblflhpeggnlilhhmohbdinlfne')
     expect(opts.challenge).toBe(bytesToBase64Url(hexToBytes(digest)))
     expect(base64UrlToBytes(opts.challenge)).toEqual(hexToBytes(digest))
+    // No transports filter so synced/hybrid (Google Password Manager) passkeys
+    // are not hidden from the signing prompt.
     expect(opts.allowCredentials).toEqual([{ id: 'cred-id', type: 'public-key' }])
+    expect(opts).not.toHaveProperty('hints')
+  })
+
+  it('passkeyAuthenticationOptionsForV1Challenge uses server nonce as WebAuthn challenge', () => {
+    const nonce = '6-UhiL-7gcPsGJ_f0I14haC6vjezQUb7YvSKt-gKyAE'
+    const opts = passkeyAuthenticationOptionsForV1Challenge({
+      credentialId: 'cred-id',
+      challengeBase64Url: nonce,
+      rpId: 'ghpalnblflhpeggnlilhhmohbdinlfne',
+    })
+    expect(opts.challenge).toBe(nonce)
+    expect(opts.rpId).toBe('ghpalnblflhpeggnlilhhmohbdinlfne')
+  })
+
+  it('assertPasskeyAssertionMatchesV1Challenge accepts matching nonce', () => {
+    const nonce = '6-UhiL-7gcPsGJ_f0I14haC6vjezQUb7YvSKt-gKyAE'
+    const clientDataJSON = bytesToBase64Url(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: 'webauthn.get',
+          challenge: nonce,
+          origin: 'chrome-extension://ghpalnblflhpeggnlilhhmohbdinlfne',
+        })
+      )
+    )
+    expect(() =>
+      assertPasskeyAssertionMatchesV1Challenge(
+        { response: { clientDataJSON, authenticatorData: 'aQ', signature: 'c2ln' } },
+        nonce
+      )
+    ).not.toThrow()
+  })
+
+  it('assertPasskeyAssertionMatchesAuthDigest rejects login/session challenges', () => {
+    const digest = '33b7c86db346aaccdfc355fe37089ba59275211092d85a8253b9a4d22ba7f805'
+    const clientDataJSON = bytesToBase64Url(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: 'webauthn.get',
+          challenge: 'HhoYhoVSBAB0rQ-xSAQ4viG_w9jx_5nKiGUqZeXhtAlA',
+          origin: 'chrome-extension://ghpalnblflhpeggnlilhhmohbdinlfne',
+        })
+      )
+    )
+    expect(() =>
+      assertPasskeyAssertionMatchesAuthDigest(
+        { response: { clientDataJSON, authenticatorData: 'aQ', signature: 'c2ln' } },
+        digest
+      )
+    ).toThrow(/wrong challenge/)
+  })
+
+  it('assertPasskeyAssertionMatchesAuthDigest accepts matching auth digest challenge', () => {
+    const digest = '33b7c86db346aaccdfc355fe37089ba59275211092d85a8253b9a4d22ba7f805'
+    const clientDataJSON = bytesToBase64Url(
+      new TextEncoder().encode(
+        JSON.stringify({
+          type: 'webauthn.get',
+          challenge: authDigestChallengeBase64Url(digest),
+          origin: 'chrome-extension://ghpalnblflhpeggnlilhhmohbdinlfne',
+        })
+      )
+    )
+    expect(() =>
+      assertPasskeyAssertionMatchesAuthDigest(
+        { response: { clientDataJSON, authenticatorData: 'aQ', signature: 'c2ln' } },
+        digest
+      )
+    ).not.toThrow()
   })
 
   it('buildWebauthnSigDataXdrHex returns hex XDR', () => {
@@ -213,5 +292,74 @@ describe('webauthn/passkey', () => {
     expect(msg).toContain(`"test-extension-id"`)
     expect(msg).toContain(expectedHex)
     expect(msg).toContain(bytesToHex(authRpIdHash))
+  })
+
+  it('getWebauthnCeremonyTypeFromCredential reads create vs get from clientDataJSON', () => {
+    const createClientData = bytesToBase64Url(
+      new TextEncoder().encode(JSON.stringify({ type: 'webauthn.create', challenge: 'x' }))
+    )
+    const getClientData = bytesToBase64Url(
+      new TextEncoder().encode(JSON.stringify({ type: 'webauthn.get', challenge: 'y' }))
+    )
+    expect(
+      getWebauthnCeremonyTypeFromCredential({
+        response: { clientDataJSON: createClientData, attestationObject: 'x' },
+      })
+    ).toBe('webauthn.create')
+    expect(
+      getWebauthnCeremonyTypeFromCredential({
+        response: { clientDataJSON: getClientData, authenticatorData: 'a', signature: 's' },
+      })
+    ).toBe('webauthn.get')
+  })
+
+  it('nextPasskeyRegistrationDisplayName adds optional context', () => {
+    expect(nextPasskeyRegistrationDisplayName([], 'Team vault')).toBe('Latch account 1 · Team vault')
+  })
+
+  it('prepareRegistrationOptionsForCreate requires registration options and preserves server authenticatorSelection', () => {
+    const prepared = prepareRegistrationOptionsForCreate({
+      challenge: 'c',
+      rp: { id: 'ext', name: 'Latch' },
+      user: { id: 'u', name: 'n', displayName: 'n' },
+      pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+      excludeCredentials: [{ id: 'already-there', type: 'public-key' }],
+    }) as Record<string, unknown>
+    expect(prepared.rp).toEqual({ id: 'ext', name: 'Latch' })
+    const authSel = prepared.authenticatorSelection as {
+      residentKey?: string
+      authenticatorAttachment?: string
+      userVerification?: string
+    }
+    expect(authSel.residentKey).toBe('preferred')
+    expect(authSel.userVerification).toBe('preferred')
+    expect(authSel.authenticatorAttachment).toBeUndefined()
+    expect(prepared).not.toHaveProperty('excludeCredentials')
+    expect(prepared).not.toHaveProperty('hints')
+    expect(() => prepareRegistrationOptionsForCreate({ challenge: 'c', rpId: 'ext' })).toThrow(
+      /authentication options/
+    )
+  })
+
+  it('prepareAuthenticationOptionsForGet preserves server transports and does not restrict to internal', () => {
+    const prepared = prepareAuthenticationOptionsForGet({
+      challenge: 'c',
+      rpId: 'ext',
+      allowCredentials: [{ id: 'cred-1', type: 'public-key', transports: ['hybrid', 'internal'] }],
+    }) as Record<string, unknown>
+    expect(prepared).not.toHaveProperty('hints')
+    expect(prepared.allowCredentials).toEqual([
+      { id: 'cred-1', type: 'public-key', transports: ['hybrid', 'internal'] },
+    ])
+  })
+
+  it('prepareAuthenticationOptionsForGet omits transports when the server provides none', () => {
+    const prepared = prepareAuthenticationOptionsForGet({
+      challenge: 'c',
+      rpId: 'ext',
+      allowCredentials: [{ id: 'cred-1', type: 'public-key' }],
+    }) as Record<string, unknown>
+    expect(prepared.allowCredentials).toEqual([{ id: 'cred-1', type: 'public-key' }])
   })
 })

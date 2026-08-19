@@ -1,169 +1,95 @@
-import React, { useMemo, useState } from 'react'
+import React, { useState } from 'react'
 import { Plus } from 'lucide-react'
 
-import type { StoredAccount } from '@latch/types'
+import type { MultisigDraftMember } from '@latch/types'
 
-import closeIconUrl from 'url:../../../../assets/home/icon-close.svg'
-import myProfileIconUrl from 'url:../../../../assets/home/settings-my-profile.svg'
+import biometricsIconUrl from 'url:../../../../assets/icons/biometrics.svg'
 
 import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingCardButtons'
 import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSmallEmblem'
 
+import { AddOwnerFlowModals, type AddOwnerModalStep } from './AddOwnerFlowModals'
+import { ConfirmRemoveOwnerModal } from './ConfirmRemoveOwnerModal'
+import { MultisigInviteShareCard } from './MultisigWalletsScreen'
+import { MultisigMembersSection } from './MultisigMembersSection'
+import { MultisigBackHeader } from './MultisigBackHeader'
 import {
-  AddOwnerFlowModals,
-  type AddOwnerMethod,
-  type AddOwnerModalStep,
-} from './AddOwnerFlowModals'
-
-export type MultisigOwner = {
-  id: string
-  name: string
-  isDefault?: boolean
-  accountId?: string
-  address?: string
-  email?: string
-  method?: AddOwnerMethod
-}
-
-function findAccountByAddress(
-  accounts: StoredAccount[],
-  address: string
-): StoredAccount | undefined {
-  const trimmed = address.trim()
-  return accounts.find(
-    (account) =>
-      account.smartAccountAddress === trimmed ||
-      (account.gAddress != null && account.gAddress === trimmed)
-  )
-}
-
-function isCreatorSignerAddress(creatorSignerAddresses: string[], address: string): boolean {
-  const trimmed = address.trim()
-  return creatorSignerAddresses.some((candidate) => candidate === trimmed)
-}
-
-function MultisigOwnerRow({
-  owner,
-  onRemove,
-}: {
-  owner: MultisigOwner
-  onRemove: () => void
-}) {
-  return (
-    <div className="flex w-full items-center gap-2 rounded-[14px] bg-[#2a2928] p-3">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#1e1e1e] p-1">
-          <img src={myProfileIconUrl} alt="" className="h-5 w-5 object-contain" />
-        </div>
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="truncate text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">
-            {owner.name}
-          </span>
-          {owner.isDefault ? (
-            <span className="shrink-0 rounded-lg bg-[rgba(255,173,0,0.08)] px-2 py-1 text-xs font-medium leading-[1.3] tracking-[-0.12px] text-primary">
-              Default Owner
-            </span>
-          ) : (
-            <span className="shrink-0 rounded-lg bg-[rgba(62,233,107,0.08)] px-2 py-1 text-xs font-medium leading-[1.3] tracking-[-0.12px] text-[#3ee96b]">
-              Added
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="relative size-6 shrink-0"
-        aria-label={`Remove ${owner.name}`}
-      >
-        <img
-          src={closeIconUrl}
-          alt=""
-          className="pointer-events-none absolute left-1/2 top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2"
-        />
-      </button>
-    </div>
-  )
-}
+  MultisigPasskeyPicker,
+  type MultisigPasskeyOption,
+} from '../../multisig/MultisigPasskeyPicker'
 
 export function AddMultisigOwnersScreen({
-  creatorSignerAddresses,
-  accounts,
+  walletName,
+  members,
+  inviteUrl,
+  inviteToken,
+  youMemberId,
+  passkeyAdding,
+  passkeyError,
+  passkeyOptions,
+  selectedPasskeyAccountId,
+  selectedPasskeyInOwners,
+  onSelectPasskeyAccountId,
+  canReusePasskey,
+  addBusy,
+  addError,
+  refreshBusy,
+  ownersLiveUpdating,
+  onBack,
+  onAddSelectedPasskeyOwner,
+  onAddNewPasskeyOwner,
+  onAddOwnerByAddress,
+  onRemoveMember,
+  onRefreshMembers,
   onContinue,
 }: {
-  /** Addresses belonging to the account creating this multisig (G or smart account). */
-  creatorSignerAddresses: string[]
-  accounts: StoredAccount[]
-  onContinue: (owners: MultisigOwner[]) => void
+  walletName: string
+  members: MultisigDraftMember[]
+  inviteUrl: string
+  inviteToken: string
+  youMemberId?: string
+  passkeyAdding?: boolean
+  passkeyError?: string | null
+  passkeyOptions?: MultisigPasskeyOption[]
+  selectedPasskeyAccountId?: string
+  selectedPasskeyInOwners?: boolean
+  onSelectPasskeyAccountId?: (accountId: string) => void
+  canReusePasskey?: boolean
+  addBusy?: boolean
+  addError?: string | null
+  refreshBusy?: boolean
+  ownersLiveUpdating?: boolean
+  onBack: () => void
+  onAddSelectedPasskeyOwner: () => void
+  onAddNewPasskeyOwner: () => void
+  onAddOwnerByAddress: (ownerName: string, address: string) => void
+  onRemoveMember: (memberId: string) => void
+  onRefreshMembers: () => void
+  onContinue: () => void
 }) {
-  const [owners, setOwners] = useState<MultisigOwner[]>([])
   const [modalStep, setModalStep] = useState<AddOwnerModalStep>('none')
+  const [pendingRemoveMemberId, setPendingRemoveMemberId] = useState<string | null>(null)
+  const hasYourPasskey = Boolean(youMemberId)
+  const canContinue = members.length >= 2 && !passkeyAdding && !addBusy
 
-  const existingAddresses = useMemo(
-    () => new Set(owners.map((owner) => owner.address?.trim()).filter(Boolean) as string[]),
-    [owners]
-  )
-
-  const existingEmails = useMemo(
-    () =>
-      new Set(
-        owners.map((owner) => owner.email?.trim().toLowerCase()).filter(Boolean) as string[]
-      ),
-    [owners]
-  )
-
-  const hasCreatorSigner = owners.some((owner) => owner.isDefault)
-  const canContinue = owners.length >= 2 && hasCreatorSigner
-
-  const removeOwner = (ownerId: string) => {
-    setOwners((current) => current.filter((owner) => owner.id !== ownerId))
+  const handleRequestRemoveMember = (memberId: string) => {
+    setPendingRemoveMemberId(memberId)
   }
 
-  const closeModal = () => {
-    setModalStep('none')
+  const handleCancelRemoveMember = () => {
+    setPendingRemoveMemberId(null)
   }
 
-  const handleAddOwner = (ownerName: string, method: AddOwnerMethod, detail: string) => {
-    if (method === 'pasteAddress') {
-      const address = detail.trim()
-      if (!address || existingAddresses.has(address)) return
-
-      const matchedAccount = findAccountByAddress(accounts, address)
-      const isDefault =
-        isCreatorSignerAddress(creatorSignerAddresses, address) &&
-        !owners.some((owner) => owner.isDefault)
-
-      setOwners((current) => [
-        ...current,
-        {
-          id: matchedAccount?.id ?? `address-${Date.now()}`,
-          accountId: matchedAccount?.id,
-          name: ownerName,
-          address,
-          isDefault,
-          method,
-        },
-      ])
-    } else {
-      const email = detail.trim()
-      if (!email || existingEmails.has(email.toLowerCase())) return
-
-      setOwners((current) => [
-        ...current,
-        {
-          id: `invite-${Date.now()}`,
-          name: ownerName,
-          email,
-          method,
-        },
-      ])
-    }
-    setModalStep('none')
+  const handleConfirmRemoveMember = () => {
+    if (!pendingRemoveMemberId) return
+    onRemoveMember(pendingRemoveMemberId)
+    setPendingRemoveMemberId(null)
   }
 
   return (
     <>
       <div className="flex h-full min-h-0 w-full flex-col gap-6">
+        <MultisigBackHeader onBack={onBack} />
         <div className="flex w-full shrink-0 flex-col items-center gap-2">
           <OnboardingSmallEmblem />
           <div className="flex w-full flex-col gap-2 text-center">
@@ -171,64 +97,129 @@ export function AddMultisigOwnersScreen({
               Add Wallet Owners
             </h1>
             <p className="text-[18px] font-normal leading-[1.36] tracking-[-0.36px] text-[#b3b3b3]">
-              Add people who can approve transactions
+              Add owners by passkey, address, or invite link
             </p>
           </div>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col justify-between">
+        <div className="flex min-h-0 flex-1 flex-col justify-between gap-4 overflow-y-auto">
           <div className="flex w-full flex-col gap-3">
+            {passkeyError ? <p className="text-sm text-red-400">{passkeyError}</p> : null}
+            {addError ? <p className="text-sm text-red-400">{addError}</p> : null}
+
+            <MultisigInviteShareCard inviteUrl={inviteUrl} inviteToken={inviteToken} />
+
+            <MultisigMembersSection
+              title="Owners"
+              members={members}
+              youMemberId={youMemberId}
+              emptyLabel="No owners added yet."
+              onRemoveMember={handleRequestRemoveMember}
+            />
+
+            {ownersLiveUpdating ? (
+              <p className="text-xs text-[#b3b3b3]">
+                Owner list updates automatically when someone joins via your invite link.
+              </p>
+            ) : null}
+
+            {!hasYourPasskey && canReusePasskey ? (
+              <div className="flex flex-col gap-3">
+                <MultisigPasskeyPicker
+                  options={passkeyOptions ?? []}
+                  selectedAccountId={selectedPasskeyAccountId}
+                  onSelect={(id) => onSelectPasskeyAccountId?.(id)}
+                  disabled={passkeyAdding || addBusy}
+                />
+                <button
+                  type="button"
+                  onClick={onAddSelectedPasskeyOwner}
+                  disabled={passkeyAdding || addBusy || selectedPasskeyInOwners || !selectedPasskeyAccountId}
+                  className="flex h-[52px] w-full items-center justify-center rounded-[14px] bg-primary text-base font-semibold text-[#121212] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {selectedPasskeyInOwners ? 'Passkey already added' : 'Add selected passkey'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onAddNewPasskeyOwner}
+                  disabled={passkeyAdding || addBusy}
+                  className="self-start text-sm font-medium text-primary disabled:opacity-50"
+                >
+                  Create a new device passkey instead
+                </button>
+              </div>
+            ) : hasYourPasskey ? (
+              <p className="text-sm text-[#b3b3b3]">Your passkey is listed in Owners above.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={onAddNewPasskeyOwner}
+                  disabled={passkeyAdding || addBusy}
+                  className="flex h-[92px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-[#383838] bg-[#2a2928] p-3 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <img src={biometricsIconUrl} alt="" className="size-6 object-contain" aria-hidden />
+                  <span className="text-base font-semibold text-[#fcfcfc]">Create device passkey</span>
+                </button>
+                <p className="text-xs text-[#b3b3b3]">
+                  Creates a passkey on this computer — not a phone QR code.
+                </p>
+              </div>
+            )}
+
             <button
               type="button"
-              onClick={() => setModalStep('chooseMethod')}
-              className="flex h-[92px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-[#383838] bg-[#2a2928] p-3"
+              onClick={() => setModalStep('pasteAddress')}
+              disabled={addBusy || passkeyAdding}
+              className="flex h-[92px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-[#383838] bg-[#2a2928] p-3 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="size-6 text-[#fcfcfc]" strokeWidth={1.5} aria-hidden />
-              <span className="text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">
-                Add Owner
-              </span>
+              <span className="text-base font-semibold text-[#fcfcfc]">Add owner by address</span>
             </button>
 
-            <div className="flex w-full flex-col gap-3">
-              {owners.map((owner) => (
-                <MultisigOwnerRow
-                  key={owner.id}
-                  owner={owner}
-                  onRemove={() => {
-                    removeOwner(owner.id)
-                  }}
-                />
-              ))}
-            </div>
+            <button
+              type="button"
+              onClick={onRefreshMembers}
+              disabled={refreshBusy || passkeyAdding || addBusy}
+              className="self-start text-sm font-medium text-primary disabled:opacity-50"
+            >
+              {refreshBusy ? 'Refreshing…' : 'Refresh owner list'}
+            </button>
           </div>
 
           {canContinue ? (
-            <OnboardingPrimaryButton onClick={() => onContinue(owners)}>Continue</OnboardingPrimaryButton>
+            <OnboardingPrimaryButton onClick={onContinue}>Continue</OnboardingPrimaryButton>
           ) : (
-            <button
-              type="button"
-              disabled
-              className="relative flex h-[50px] w-full cursor-not-allowed items-center justify-center overflow-hidden rounded-[32px] border border-[#2b2a29] px-5 py-3 text-[18px] font-semibold leading-[1.31] tracking-[-0.18px] text-[#d7d7d7] shadow-[0px_12px_13.1px_-8px_rgba(56,56,56,0.1)]"
-            >
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-[32px] bg-[#383838]"
-              />
-              <span className="relative">Continue</span>
-              <span
-                aria-hidden
-                className="pointer-events-none absolute inset-0 rounded-[32px] shadow-[inset_0px_2px_4px_0px_rgba(255,255,255,0.26)]"
-              />
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                disabled
+                className="relative flex h-[50px] w-full cursor-not-allowed items-center justify-center rounded-[32px] border border-[#2b2a29] bg-[#383838] text-[18px] font-semibold text-[#d7d7d7]"
+              >
+                Continue
+              </button>
+              <p className="text-center text-xs text-[#b3b3b3]">
+                Add at least 2 owners to continue — by passkey, pasted address, or invite link.
+              </p>
+            </div>
           )}
         </div>
       </div>
 
       <AddOwnerFlowModals
         step={modalStep}
-        onClose={closeModal}
-        onSelectMethod={(method) => setModalStep(method)}
-        onAddOwner={handleAddOwner}
+        onClose={() => setModalStep('none')}
+        onAddOwner={(ownerName, address) => {
+          onAddOwnerByAddress(ownerName, address)
+          setModalStep('none')
+        }}
+      />
+
+      <ConfirmRemoveOwnerModal
+        isOpen={pendingRemoveMemberId != null}
+        walletName={walletName}
+        onCancel={handleCancelRemoveMember}
+        onConfirm={handleConfirmRemoveMember}
       />
     </>
   )

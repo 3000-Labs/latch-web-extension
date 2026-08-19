@@ -1,13 +1,17 @@
 import type { MigrationDiscovery } from '@latch/types'
 
-import { getStellarNetworkFromEnv } from './env'
+import { getActiveNetwork, peekCachedActiveNetwork, getStellarNetworkFromEnv } from '../network/config'
 
 const TTL_MS = 60_000
 
 const cache = new Map<string, { at: number; value: MigrationDiscovery }>()
 
+function networkForCacheKey(): string {
+  return peekCachedActiveNetwork() ?? getStellarNetworkFromEnv()
+}
+
 function key(accountId: string, gAddress: string) {
-  return `${getStellarNetworkFromEnv()}:${accountId}:${gAddress}`
+  return `${networkForCacheKey()}:${accountId}:${gAddress}`
 }
 
 export function getCachedDiscovery(
@@ -29,8 +33,16 @@ export function setCachedDiscovery(accountId: string, gAddress: string, value: M
 }
 
 export function invalidateDiscoveryCacheForAccount(accountId: string) {
-  const prefix = `${getStellarNetworkFromEnv()}:${accountId}:`
+  const prefix = `${networkForCacheKey()}:${accountId}:`
   for (const k of [...cache.keys()]) {
     if (k.startsWith(prefix)) cache.delete(k)
   }
 }
+
+/** Drop all discovery cache entries (e.g. on network switch). */
+export function clearDiscoveryCache(): void {
+  cache.clear()
+}
+
+// Warm cache key with async active network when possible.
+void getActiveNetwork().catch(() => {})

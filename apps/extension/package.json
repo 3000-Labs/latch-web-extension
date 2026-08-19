@@ -1,5 +1,6 @@
 {
   "name": "@latch/extension",
+  "displayName": "Latch Wallet",
   "version": "0.0.1",
   "private": true,
   "scripts": {
@@ -13,6 +14,7 @@
   "dependencies": {
     "@latch/crypto": "workspace:*",
     "@latch/stellar": "workspace:*",
+    "@latch/swap": "workspace:*",
     "@latch/types": "workspace:*",
     "@latch/ui": "workspace:*",
     "@noble/curves": "^2.2.0",
@@ -49,13 +51,14 @@
   "manifest": {
     "name": "Latch Wallet",
     "description": "Stellar smart account wallet",
-    "version": "0.0.4",
+    "version": "0.0.8",
     "permissions": [
       "storage",
       "scripting",
       "sidePanel",
       "tabs",
-      "windows"
+      "windows",
+      "cookies"
     ],
     "host_permissions": [
       "https://v0-latch-stellar.vercel.app/*",
@@ -63,9 +66,13 @@
       "https://horizon.stellar.org/*",
       "https://soroban-testnet.stellar.org/*",
       "https://soroban-rpc.mainnet.stellar.org/*",
+      "https://amm-api-testnet.aqua.network/*",
+      "https://amm-api.aqua.network/*",
+      "https://api.soroswap.finance/*",
       "https://*/*",
       "http://localhost:3000/*",
       "http://localhost:8000/*",
+      "http://127.0.0.1:7938/*",
       "https://latch-backend.onrender.com/*"
     ],
     "content_security_policy": {

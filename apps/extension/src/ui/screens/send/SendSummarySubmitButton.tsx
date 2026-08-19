@@ -3,9 +3,11 @@ import React from 'react'
 export function SendSummarySubmitButton({
   loading,
   onSend,
+  label = 'Send',
 }: {
   loading: boolean
   onSend: () => void
+  label?: string
 }) {
   return (
     <button
@@ -18,7 +20,7 @@ export function SendSummarySubmitButton({
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[32px] bg-[#ffad00]"
       />
-      <span className="relative">Send</span>
+      <span className="relative">{label}</span>
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0 rounded-[32px] shadow-[inset_0px_2px_4px_0px_rgba(255,255,255,0.26)]"

@@ -3,12 +3,28 @@ import { p256 } from '@noble/curves/nist.js'
 import { decodeMultiple } from 'cbor-x'
 import { xdr } from '@stellar/stellar-sdk'
 
-import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from './utils'
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  bytesToHex,
+  concatBytes,
+  hexToBytes,
+} from './utils'
 
 /** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
 export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
   const passkeyCount = accounts.reduce((n, a) => n + (a.mode === 'passkey' ? 1 : 0), 0)
   return `Latch account ${passkeyCount + 1}`
+}
+
+/** Unique WebAuthn display name for a new passkey in a specific flow (e.g. multisig). */
+export function nextPasskeyRegistrationDisplayName(
+  accounts: StoredAccount[],
+  context?: string
+): string {
+  const base = nextPasskeyAccountDisplayName(accounts)
+  const ctx = context?.trim()
+  return ctx ? `${base} · ${ctx}` : base
 }
 
 export type PasskeyRegistrationResult = {
@@ -169,25 +185,29 @@ export function buildWebauthnSigDataXdrHex(args: {
   return bytesToHex(raw instanceof Uint8Array ? raw : new Uint8Array(raw as any))
 }
 
-export function createLocalRegistrationOptions(rpId: string) {
-  const challenge = crypto.getRandomValues(new Uint8Array(32))
-  const userId = crypto.getRandomValues(new Uint8Array(32))
-  return {
-    challenge: bytesToBase64Url(challenge),
-    rp: { name: 'Latch', id: rpId },
-    user: {
-      id: bytesToBase64Url(userId),
-      name: `user@${rpId}`,
-      displayName: 'Latch user',
-    },
-    pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
-    authenticatorSelection: {
-      residentKey: 'required',
-      userVerification: 'required',
-    },
-    timeout: 60_000,
-    attestation: 'none',
-  } as const
+/**
+ * Normalize an `allowCredentials` list without restricting which transports the
+ * browser may use.
+ *
+ * We intentionally do NOT force `transports: ['internal']` here. Latch passkeys
+ * are frequently stored in Google Password Manager and sync across devices, so
+ * they advertise `hybrid` (and other) transports. Forcing `internal` made Chrome
+ * filter those out and report "no passkey available" even though the user has
+ * Latch passkeys. Server-provided transports are preserved as-is; when none are
+ * provided we omit the field so the browser can surface every matching credential
+ * for this RP (platform AND synced/hybrid).
+ */
+function normalizeAllowCredentials(allow: unknown): unknown[] {
+  if (!Array.isArray(allow) || allow.length === 0) return []
+  return allow.map((cred) => {
+    if (!cred || typeof cred !== 'object') return cred
+    const c = cred as Record<string, unknown>
+    const out: Record<string, unknown> = { ...c, type: c.type ?? 'public-key' }
+    if (!Array.isArray(c.transports) || (c.transports as unknown[]).length === 0) {
+      delete out.transports
+    }
+    return out
+  })
 }
 
 export function createLocalAuthenticationOptions(args: {
@@ -199,7 +219,14 @@ export function createLocalAuthenticationOptions(args: {
   return {
     rpId: args.rpId,
     challenge: bytesToBase64Url(challenge),
-    allowCredentials: [{ id: args.credentialId, type: 'public-key' }],
+    // No `transports` filter: allow platform + synced/hybrid (Google Password
+    // Manager) credentials so signing finds the passkey wherever it is stored.
+    allowCredentials: [
+      {
+        id: args.credentialId,
+        type: 'public-key',
+      },
+    ],
     timeout: 60_000,
     userVerification: 'required',
   } as const
@@ -223,20 +250,104 @@ export function extensionWebauthnRpId(): string {
  * WebAuthn options for signing a smart-account auth entry.
  * Challenge must be the build response `authDigestHex` (not PASSKEY_AUTH_BEGIN session challenge).
  */
+export function normalizeAuthDigestHex(authDigestHex: string): string {
+  const hex = authDigestHex.trim().replace(/^0x/i, '')
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
+    throw new Error('Invalid auth digest from transaction build.')
+  }
+  return hex
+}
+
+export function authDigestChallengeBase64Url(authDigestHex: string): string {
+  return bytesToBase64Url(hexToBytes(normalizeAuthDigestHex(authDigestHex)))
+}
+
+export function challengeBase64UrlFromWebauthnAssertion(assertion: unknown): string | undefined {
+  const resp = (assertion as { response?: { clientDataJSON?: unknown } } | null)?.response
+  if (!resp || typeof resp !== 'object') return undefined
+  const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
+  if (typeof clientDataJSON !== 'string' || !clientDataJSON) return undefined
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
+    ) as { challenge?: unknown }
+    return typeof parsed.challenge === 'string' ? parsed.challenge : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Ensures the passkey signed this transaction's auth digest (not a login/session challenge).
+ */
+export function assertPasskeyAssertionMatchesAuthDigest(
+  assertion: unknown,
+  authDigestHex: string
+): void {
+  const expected = authDigestChallengeBase64Url(authDigestHex)
+  const signed = challengeBase64UrlFromWebauthnAssertion(assertion)
+  if (!signed) {
+    throw new Error('Passkey response did not include a WebAuthn challenge.')
+  }
+  if (signed !== expected) {
+    throw new Error(
+      'Passkey signed the wrong challenge for this transaction. ' +
+        'Complete only the passkey prompt opened from Send or Swap, then try again.'
+    )
+  }
+  const ceremony = getWebauthnCeremonyTypeFromCredential(assertion)
+  if (ceremony === 'webauthn.create') {
+    throw new Error('Passkey registration was used instead of signing this transaction.')
+  }
+}
+
 export function passkeyAuthenticationOptionsForAuthDigest(args: {
   credentialId: string
   authDigestHex: string
   rpId?: string
 }) {
-  const hex = args.authDigestHex.trim().replace(/^0x/i, '')
-  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) {
-    throw new Error('Invalid auth digest from transaction build.')
-  }
+  const hex = normalizeAuthDigestHex(args.authDigestHex)
   return createLocalAuthenticationOptions({
     rpId: args.rpId ?? extensionWebauthnRpId(),
     credentialId: args.credentialId,
     authDigestHex: hex,
   })
+}
+
+/** WebAuthn options for `/v1/auth/challenge` wallet sign-in (nonce is already base64url). */
+export function passkeyAuthenticationOptionsForV1Challenge(args: {
+  credentialId: string
+  challengeBase64Url: string
+  rpId?: string
+}) {
+  const challenge = args.challengeBase64Url.trim()
+  if (!challenge) throw new Error('V1 auth challenge missing nonce')
+  return {
+    rpId: args.rpId ?? extensionWebauthnRpId(),
+    challenge,
+    allowCredentials: [
+      {
+        id: args.credentialId,
+        type: 'public-key',
+      },
+    ],
+    timeout: 60_000,
+    userVerification: 'required',
+  } as const
+}
+
+export function assertPasskeyAssertionMatchesV1Challenge(
+  assertion: unknown,
+  challengeBase64Url: string
+): void {
+  const expected = challengeBase64Url.trim()
+  const signed = challengeBase64UrlFromWebauthnAssertion(assertion)
+  if (!signed) {
+    throw new Error('Passkey response did not include a WebAuthn challenge.')
+  }
+  if (signed !== expected) {
+    throw new Error('Passkey signed the wrong V1 auth challenge. Try again.')
+  }
 }
 
 export function buildPasskeySigDataXdrFromAssertion(assertion: unknown): string {
@@ -301,8 +412,8 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
   const o = webauthnBeginOptionsToObject(options)
   if (!o) return undefined
   const rp = o.rp as { id?: unknown } | undefined
-  if (rp && typeof rp.id === 'string') return rp.id
-  if (typeof o.rpId === 'string') return o.rpId
+  if (rp && typeof rp.id === 'string' && rp.id.trim() !== '') return rp.id
+  if (typeof o.rpId === 'string' && o.rpId.trim() !== '') return o.rpId
   return undefined
 }
 
@@ -335,7 +446,9 @@ export function narrowAuthenticationOptionsToCredential(
   return {
     ...o,
     allowCredentials:
-      narrowed.length > 0 ? narrowed : [{ id: credentialId, type: 'public-key' }],
+      narrowed.length > 0
+        ? normalizeAllowCredentials(narrowed)
+        : [{ id: credentialId, type: 'public-key' }],
   }
 }
 
@@ -386,6 +499,18 @@ export function formatWebauthnBrowserError(err: unknown): string {
       `The server must receive chromeExtensionId and set WebAuthn rp.id to "${extId}" (same as chrome.runtime.id).`,
     ].filter(Boolean)
     return parts.join(' ')
+  }
+
+  const combined = `${err.message} ${causeMsg ?? ''}`.toLowerCase()
+  if (
+    code === 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED' ||
+    combined.includes('previously registered') ||
+    combined.includes('excludecredentials')
+  ) {
+    return (
+      'This device already has a Latch passkey registered. ' +
+      'Try again to create another account passkey, or use “Existing passkey” to sign in with one you already have.'
+    )
   }
 
   if (causeMsg) return `${err.message} (${causeMsg})`
@@ -470,4 +595,137 @@ export async function enrichWebauthnRpIdHashErrorMessage(
   }
 
   return parts.join(' ')
+}
+
+export type WebauthnCeremonyType = 'webauthn.create' | 'webauthn.get' | 'unknown'
+
+/** Reads `type` from credential `clientDataJSON` (create vs get). */
+export function getWebauthnCeremonyTypeFromCredential(credential: unknown): WebauthnCeremonyType {
+  const resp = (credential as { response?: unknown } | null)?.response
+  if (!resp || typeof resp !== 'object') return 'unknown'
+  const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
+  if (typeof clientDataJSON !== 'string' || !clientDataJSON) return 'unknown'
+  try {
+    const parsed = JSON.parse(
+      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
+    ) as { type?: unknown }
+    if (parsed.type === 'webauthn.create' || parsed.type === 'webauthn.get') {
+      return parsed.type
+    }
+  } catch {
+    // ignore
+  }
+  return 'unknown'
+}
+
+export function isRegistrationBeginOptions(options: unknown): boolean {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return false
+  return Array.isArray(o.pubKeyCredParams) && o.user != null && typeof o.user === 'object'
+}
+
+/**
+ * Surface (non-fatally) when server-issued registration options ignore the
+ * unique display name we requested.
+ *
+ * Google Password Manager and other authenticators label a passkey using
+ * `user.displayName` / `user.name`. If the Latch API ignores the `displayName`
+ * we send on begin and hardcodes something like "Latch User", every passkey
+ * collapses to the same label and becomes impossible to tell apart. We warn
+ * loudly (instead of silently mislabeling) rather than throwing, because the
+ * name is cosmetic and blocking passkey creation over it would be worse UX. The
+ * real fix is server-side (see the WebAuthn backend contract): map the requested
+ * `displayName` onto `user.displayName` and a unique `user.name`.
+ */
+export function warnIfBeginOptionsIgnoreDisplayName(
+  options: unknown,
+  requestedDisplayName: string | undefined
+): void {
+  const requested = requestedDisplayName?.trim()
+  if (!requested) return
+  const o = webauthnBeginOptionsToObject(options)
+  const user = o?.user as { displayName?: unknown; name?: unknown } | undefined
+  if (!user || typeof user !== 'object') return
+  const serverDisplayName = typeof user.displayName === 'string' ? user.displayName : undefined
+  if (serverDisplayName !== undefined && serverDisplayName !== requested) {
+    console.warn(
+      `[latch/passkey] The Latch API ignored the requested passkey display name. ` +
+        `Requested "${requested}" but options carry user.displayName "${serverDisplayName}". ` +
+        `New passkeys may all show the same label in Google Password Manager until the API maps ` +
+        `displayName -> user.displayName / user.name.`
+    )
+  }
+}
+
+/**
+ * Validate server begin options for `startRegistration` (do not mutate RP/user/challenge).
+ *
+ * Do NOT force `authenticatorAttachment: 'platform'` or `residentKey: 'required'`.
+ * Those overrides caused Chrome to hang / show no passkey UI for Google Password
+ * Manager and other non-platform authenticators — same class of bug as forcing
+ * `transports: ['internal']` on authentication. Preserve server
+ * `authenticatorSelection` and only fill missing `userVerification`.
+ *
+ * Strip `excludeCredentials`: when the Latch API lists existing session credentials
+ * here, Chrome/platform authenticators throw InvalidStateError
+ * ("authenticator was previously registered") and refuse to create another passkey
+ * on the same device. Latch intentionally supports multiple passkeys per install
+ * (unique WebAuthn user.id per enrollment); excludeCredentials blocks that.
+ */
+export function prepareRegistrationOptionsForCreate(
+  options: unknown,
+  requestedDisplayName?: string
+): unknown {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return options
+  if (!isRegistrationBeginOptions(o)) {
+    throw new Error(
+      'Server returned authentication options instead of registration options. Try again or use “I have a wallet” → Existing passkey.'
+    )
+  }
+  warnIfBeginOptionsIgnoreDisplayName(o, requestedDisplayName)
+  const authSel =
+    o.authenticatorSelection != null && typeof o.authenticatorSelection === 'object'
+      ? (o.authenticatorSelection as Record<string, unknown>)
+      : {}
+  const rest = { ...o }
+  delete rest.excludeCredentials
+  return {
+    ...rest,
+    authenticatorSelection: {
+      ...authSel,
+      userVerification: authSel.userVerification ?? 'preferred',
+    },
+  }
+}
+
+export function assertRegistrationCeremonyForFinish(credential: unknown): void {
+  const ceremony = getWebauthnCeremonyTypeFromCredential(credential)
+  if (ceremony === 'webauthn.get') {
+    throw new Error(
+      'You signed in with an existing passkey instead of creating a new one. Use “I have a wallet” → Existing passkey.'
+    )
+  }
+  const inner = (credential as { response?: Record<string, unknown> } | null)?.response
+  if (!inner || typeof inner.attestationObject !== 'string' || !inner.attestationObject) {
+    throw new Error(
+      'Passkey creation did not return a registration attestation. Try again or use “I have a wallet” → Existing passkey.'
+    )
+  }
+}
+
+/** Normalize server begin options for `startAuthentication`. */
+export function prepareAuthenticationOptionsForGet(options: unknown): unknown {
+  const o = webauthnBeginOptionsToObject(options)
+  if (!o) return options
+  const rpId = getWebauthnRpIdFromBeginOptions(o)
+  const out: Record<string, unknown> = {
+    ...o,
+    userVerification: o.userVerification ?? 'required',
+  }
+  if (rpId) out.rpId = rpId
+  if (Array.isArray(o.allowCredentials) && o.allowCredentials.length > 0) {
+    out.allowCredentials = normalizeAllowCredentials(o.allowCredentials)
+  }
+  return out
 }

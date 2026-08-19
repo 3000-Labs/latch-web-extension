@@ -5,7 +5,7 @@ import {
 import { OnboardingSmallEmblem } from '../../../onboarding/components/OnboardingSmallEmblem'
 import { AddAccountBackHeader } from './AddAccountBackHeader'
 
-export type AddAccountMethod = 'passkey' | 'recoveryPhrase'
+export type AddAccountMethod = 'passkey' | 'createPasskey' | 'recoveryPhrase'
 
 function MethodOptionCard({
   title,
@@ -69,10 +69,16 @@ export function AddAccountChooseMethodScreen({
       <div className="flex min-h-0 flex-1 flex-col justify-between">
         <div className="flex w-full flex-col gap-3">
           <MethodOptionCard
-            title="Passkey"
-            description="Log in with an existing passkey"
+            title="Existing passkey"
+            description="Log in with a passkey you already use"
             selected={selected === 'passkey'}
             onClick={() => onSelect('passkey')}
+          />
+          <MethodOptionCard
+            title="Create passkey"
+            description="Register a new passkey account"
+            selected={selected === 'createPasskey'}
+            onClick={() => onSelect('createPasskey')}
           />
           <MethodOptionCard
             title="Recovery phrase"

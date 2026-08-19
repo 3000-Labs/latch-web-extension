@@ -1,20 +1,14 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Pencil } from 'lucide-react'
 
 import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from '../swap/swapVm'
-import {
-  swapTokens as defaultSwapTokens,
-  toPositiveNumberOrNull,
-  truncateAddress,
-} from '../swap/swapVm'
+import { formatQuoteRemainingMs, truncateAddress } from '../swap/swapVm'
 import { ExchangeBalanceToggle } from './swap/components/ExchangeBalanceToggle'
 import { ConfirmSwapAssetCard } from './swap/components/confirm/ConfirmSwapAssetCard'
 import { ConfirmSwapDetailRow } from './swap/components/confirm/ConfirmSwapDetailRow'
 import { ConfirmSwapFooter } from './swap/components/confirm/ConfirmSwapFooter'
 import { ConfirmSwapHeader } from './swap/components/confirm/ConfirmSwapHeader'
-import { ConfirmSwapQuoteSpinner } from './swap/components/confirm/ConfirmSwapQuoteSpinner'
 import { ConfirmSwapSection } from './swap/components/confirm/ConfirmSwapSection'
-import liquidMeshLogo from 'url:../../../assets/brand/LiquidMesh.png'
 
 function formatReceiveAmountLine(amount: number, symbol: string) {
   const trimmed = amount
@@ -28,42 +22,52 @@ export function ConfirmSwapScreen({
   surface,
   draft,
   quote,
-  swapTokenCatalog = defaultSwapTokens,
+  resolveSwapToken,
   receiveAddress,
+  busy = false,
   onBackOrCancel,
   onConfirm,
 }: {
   surface: 'popup' | 'sidepanel'
   draft: SwapDraft
   quote: SwapQuoteVm
-  swapTokenCatalog?: SwapTokenVm[]
+  resolveSwapToken: (id: string) => SwapTokenVm | undefined
   receiveAddress?: string
+  busy?: boolean
   onBackOrCancel: () => void
   onConfirm: () => void
 }) {
   const [mevProtection, setMevProtection] = useState(false)
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const quoteRemainingMs = quote.quotePayload.expiresAtMs - nowMs
+  const quoteExpired = quoteRemainingMs <= 0
+  const quoteExpiryLine = quoteExpired
+    ? 'Quote expired — confirm will refresh price'
+    : `Quote refreshes in ${formatQuoteRemainingMs(quoteRemainingMs)}`
 
   const payToken = useMemo(
-    () => swapTokenCatalog.find((t) => t.id === draft.payTokenId) ?? swapTokenCatalog[0],
-    [draft.payTokenId, swapTokenCatalog]
+    () => resolveSwapToken(draft.payTokenId) ?? quote.quotePayload.assetIn,
+    [draft.payTokenId, quote.quotePayload.assetIn, resolveSwapToken]
   )
   const receiveToken = useMemo(
-    () => swapTokenCatalog.find((t) => t.id === draft.receiveTokenId) ?? swapTokenCatalog[1],
-    [draft.receiveTokenId, swapTokenCatalog]
+    () => resolveSwapToken(draft.receiveTokenId) ?? quote.quotePayload.assetOut,
+    [draft.receiveTokenId, quote.quotePayload.assetOut, resolveSwapToken]
   )
 
-  const payN = toPositiveNumberOrNull(draft.payAmount) ?? 0
-  const gasAccount = receiveAddress?.trim() || '0x6A4A95670d95670d'
-  const fromAddr = '0xb3008e9f0b2c7028d'
-  const shortFromAddr = truncateAddress(fromAddr, 6, 6)
-  const shortGasAddr = truncateAddress(gasAccount, 6, 6)
-  const shortReceiveAddr = truncateAddress(gasAccount, 6, 6)
+  const accountAddr = receiveAddress?.trim() || ''
+  const shortAccountAddr = accountAddr ? truncateAddress(accountAddr, 6, 4) : '—'
 
   const spendLine = `-${draft.payAmount || '0'} ${payToken.symbol}`
-  const spendUsd = `≈$${(payN * 1.00056).toFixed(5)}`
+  const spendUsd = quote.receiveUsdApproxLine ? quote.receiveUsdApprox.replace('≈ ', '≈') : '≈--'
   const receiveLine = formatReceiveAmountLine(quote.receiveAmount, receiveToken.symbol)
   const receiveUsd =
-    quote.receiveUsdApproxLine.replace('≈ ', '≈') || `≈$${(payN * 1.00306).toFixed(5)} (+0.25%)`
+    quote.receiveUsdApproxLine.replace('≈ ', '≈') || quote.receiveUsdApprox
 
   return (
     <div
@@ -80,13 +84,14 @@ export function ConfirmSwapScreen({
             <ConfirmSwapSection label="From">
               <ConfirmSwapAssetCard
                 token={payToken}
-                title={`Unlimited ${payToken.name}`}
-                subtitle={`To: ${shortFromAddr}`}
+                title={`${payToken.name}`}
+                subtitle={accountAddr ? `Account: ${shortAccountAddr}` : undefined}
                 trailing={
                   <button
                     type="button"
                     onClick={onBackOrCancel}
-                    className="text-[#b3b3b3] transition-colors hover:text-[#fcfcfc]"
+                    disabled={busy}
+                    className="text-[#b3b3b3] transition-colors hover:text-[#fcfcfc] disabled:opacity-50"
                     aria-label="Edit"
                   >
                     <Pencil className="size-5" strokeWidth={2} />
@@ -96,11 +101,7 @@ export function ConfirmSwapScreen({
             </ConfirmSwapSection>
 
             <ConfirmSwapSection label="Spend">
-              <ConfirmSwapAssetCard
-                token={payToken}
-                title={spendLine}
-                subtitle={spendUsd}
-              />
+              <ConfirmSwapAssetCard token={payToken} title={spendLine} subtitle={spendUsd} />
             </ConfirmSwapSection>
 
             <ConfirmSwapSection label="Receive (Estimated)">
@@ -108,7 +109,7 @@ export function ConfirmSwapScreen({
                 token={receiveToken}
                 title={receiveLine}
                 subtitle={receiveUsd}
-                trailing={<ConfirmSwapQuoteSpinner />}
+                trailing={null}
               />
             </ConfirmSwapSection>
           </div>
@@ -119,41 +120,28 @@ export function ConfirmSwapScreen({
               <ExchangeBalanceToggle checked={mevProtection} onChange={setMevProtection} />
             </div>
 
-            <ConfirmSwapDetailRow
-              label="Gas Account"
-              value={shortGasAddr}
-              onClick={() => {}}
-              showChevron
-            />
-
-            <ConfirmSwapDetailRow
-              label="Network Fee"
-              value={`Fast | ${quote.networkFeeLine.replace('~ ', '')}`}
-              onClick={() => {}}
-              showChevron
-            />
+            <ConfirmSwapDetailRow label="Network Fee" value={quote.networkFeeLine.replace('~ ', '')} />
 
             <ConfirmSwapDetailRow label="Min. Received" value={quote.minReceivedLine.trim()} />
 
+            <ConfirmSwapDetailRow
+              label="Quote"
+              value={quoteExpiryLine}
+            />
+
             <div className="flex items-center justify-between">
               <span className="text-xs tracking-[-0.24px] text-[#b3b3b3]">Provider</span>
-              <div className="flex items-center gap-1.5">
-                <img
-                  src={liquidMeshLogo}
-                  alt=""
-                  className="h-6 w-[25px] shrink-0 rounded object-cover"
-                />
-                <span className="text-xs font-medium tracking-[-0.12px] text-[#fcfcfc]">
-                  {quote.provider}
-                </span>
-              </div>
+              <span className="text-xs font-medium tracking-[-0.12px] text-[#fcfcfc]">
+                {quote.provider}
+              </span>
             </div>
 
-            <ConfirmSwapDetailRow label="Receive Address" value={shortReceiveAddr} />
+            <ConfirmSwapDetailRow label="Receive Address" value={shortAccountAddr} />
           </div>
+
         </div>
 
-        <ConfirmSwapFooter onCancel={onBackOrCancel} onConfirm={onConfirm} />
+        <ConfirmSwapFooter busy={busy} onCancel={onBackOrCancel} onConfirm={onConfirm} />
       </div>
     </div>
   )

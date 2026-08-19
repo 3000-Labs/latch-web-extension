@@ -1,6 +1,7 @@
 type StorageArea = {
   get: (keys?: string[] | Record<string, any>) => Promise<Record<string, any>>
   set: (items: Record<string, any>) => Promise<void>
+  remove: (keys: string | string[]) => Promise<void>
 }
 
 export function createChromeMock() {
@@ -29,6 +30,10 @@ export function createChromeMock() {
     },
     async set(items) {
       for (const [k, v] of Object.entries(items)) store.set(k, v)
+    },
+    async remove(keys) {
+      const list = Array.isArray(keys) ? keys : [keys]
+      for (const k of list) store.delete(k)
     },
   }
 

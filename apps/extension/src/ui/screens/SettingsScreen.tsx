@@ -18,16 +18,20 @@ import signersIconUrl from 'url:../../../assets/home/settings-signers.svg'
 
 import { AccountInformationScreen } from './settings/AccountInformationScreen'
 import { AddressBookScreen } from './settings/AddressBookScreen'
+import { NetworkSettingsScreen } from './settings/NetworkSettingsScreen'
 import { PermissionsFlow } from './settings/PermissionsFlow'
 import { ProfileCard } from './settings/ProfileCard'
 import { SettingItem } from './settings/SettingItem'
 import { SettingsSection } from './settings/SettingsSection'
 import { SettingsToggle } from './settings/SettingsToggle'
 import { ViewAccountsScreen, type ViewAccountItem } from './settings/ViewAccountsScreen'
+import { PulsingDot } from '../components/PulsingDot'
+
+import type { Network } from '@latch/types'
 
 const rowIconClass = 'h-5 w-5 object-contain'
 
-type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions'
+type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions' | 'network'
 
 export function SettingsScreen({
   surface,
@@ -43,7 +47,12 @@ export function SettingsScreen({
   onSelectAccount,
   onAccountsChanged,
   onCreateMultisig,
+  onOpenMultisigWallets,
+  onOpenMultisigProposals,
+  pendingMultisigProposalCount,
   networkLabel,
+  activeNetwork,
+  onChangeNetwork,
   onClose,
   onLogout,
 }: {
@@ -60,7 +69,12 @@ export function SettingsScreen({
   onSelectAccount?: (accountId: string) => void
   onAccountsChanged?: () => void
   onCreateMultisig?: () => void
+  onOpenMultisigWallets?: () => void
+  onOpenMultisigProposals?: () => void
+  pendingMultisigProposalCount?: number
   networkLabel: string
+  activeNetwork: Network
+  onChangeNetwork: (network: Network) => Promise<void>
   onClose: () => void
   onLogout: () => void
 }) {
@@ -69,6 +83,19 @@ export function SettingsScreen({
   const handleClose = () => {
     setView('menu')
     onClose()
+  }
+
+  if (view === 'network') {
+    return (
+      <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
+        <NetworkSettingsScreen
+          currentNetwork={activeNetwork}
+          networkLabel={networkLabel}
+          onBack={() => setView('menu')}
+          onSelectNetwork={onChangeNetwork}
+        />
+      </div>
+    )
   }
 
   if (view === 'addressBook') {
@@ -163,7 +190,20 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
               label="Multisig Wallets"
+              onClick={() => onOpenMultisigWallets?.()}
             />
+            {onOpenMultisigProposals ? (
+              <SettingItem
+                icon={<img src={multisigIconUrl} alt="" className={rowIconClass} />}
+                label="Multisig Proposals"
+                onClick={() => onOpenMultisigProposals()}
+                rightElement={
+                  pendingMultisigProposalCount && pendingMultisigProposalCount > 0 ? (
+                    <PulsingDot pulsing className="ml-2" />
+                  ) : undefined
+                }
+              />
+            ) : null}
             <SettingItem
               icon={<img src={recoveryPhraseIconUrl} alt="" className={rowIconClass} />}
               label="Recovery Phrase"
@@ -202,6 +242,10 @@ export function SettingsScreen({
             <SettingItem
               icon={<img src={networkIconUrl} alt="" className={rowIconClass} />}
               label="Network"
+              onClick={() => setView('network')}
+              rightElement={
+                <span className="mr-2 truncate text-sm text-[#fcfcfc]/opacity-60">{networkLabel}</span>
+              }
             />
             <SettingItem
               icon={<img src={notificationsIconUrl} alt="" className={rowIconClass} />}

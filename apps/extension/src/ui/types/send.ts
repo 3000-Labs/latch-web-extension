@@ -23,6 +23,7 @@ export type SendDraft = {
 export type SendResult = {
   status: 'success' | 'failure'
   hash?: string
+  proposalId?: string
   errorMessage?: string
   submittedAt?: string
 }

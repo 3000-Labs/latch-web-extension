@@ -16,6 +16,7 @@ export function SendSummaryScreen({
   networkLabel,
   sendProgressLabel,
   sendError,
+  submitLabel,
   onBack,
   onSend,
   onFetchFeeEstimate,
@@ -26,6 +27,7 @@ export function SendSummaryScreen({
   networkLabel: string
   sendProgressLabel: string | null
   sendError: string | null
+  submitLabel?: string
   onBack: () => void
   onSend: () => void
   onFetchFeeEstimate: () => Promise<BuildSendTxResponse | null>
@@ -73,7 +75,7 @@ export function SendSummaryScreen({
           ) : null}
         </div>
 
-        <SendSummarySubmitButton loading={isSending} onSend={onSend} />
+        <SendSummarySubmitButton loading={isSending} onSend={onSend} label={submitLabel} />
       </div>
 
       {isSending ? (

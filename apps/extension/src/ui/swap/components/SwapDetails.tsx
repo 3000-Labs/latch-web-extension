@@ -2,7 +2,6 @@ import React from 'react'
 
 import chevronRightIconUrl from 'url:../../../../assets/home/icon-chevron-right.svg'
 import swapIconUrl from 'url:../../../../assets/home/icon-swap-action.svg'
-import liquidMeshLogo from 'url:../../../../assets/brand/LiquidMesh.png'
 import type { SwapQuoteVm } from '../swapVm'
 
 function DetailLabel({ children }: { children: React.ReactNode }) {
@@ -34,14 +33,7 @@ export function SwapDetails({ quote }: { quote: SwapQuoteVm }) {
           type="button"
           className="flex items-center gap-1 transition-opacity hover:opacity-80"
         >
-          <span className="flex items-center gap-1.5">
-            <img
-              src={liquidMeshLogo}
-              alt=""
-              className="h-6 w-[25px] shrink-0 rounded object-cover"
-            />
-            <DetailValue>{quote.provider}</DetailValue>
-          </span>
+          <DetailValue>{quote.provider}</DetailValue>
           <RecommendPill />
           <img src={chevronRightIconUrl} alt="" className="size-4 shrink-0" aria-hidden />
         </button>

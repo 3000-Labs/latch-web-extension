@@ -1,0 +1,323 @@
+import type {
+  BuildSendTxResponse,
+  SignDelegatedGAuthEntryRequest,
+  SignDelegatedGAuthEntryResponse,
+  StoredAccount,
+  SubmitDelegatedTxRequest,
+  SubmitPhantomTxRequest,
+  SubmitTxResponse,
+  SubmitWebauthnTxRequest,
+} from '@latch/types'
+
+import { signAuthEntry } from '@stellar/freighter-api'
+import { startAuthentication } from '@simplewebauthn/browser'
+
+import { normalizeDelegatedSignatureBase64, resolveDelegatedAuthEntryForSigner } from '../../lib/delegatedAuthSubmit'
+import {
+  assertPasskeyAssertionMatchesAuthDigest,
+  buildPasskeySigDataXdrFromAssertion,
+  enrichWebauthnRpIdHashErrorMessage,
+  passkeyAuthenticationOptionsForAuthDigest,
+  prepareAuthenticationOptionsForGet,
+} from '../webauthn/passkey'
+import { openPasskeyBridgeAndWait } from '../webauthn/passkeyBridge'
+import { bytesToHex } from '../webauthn/utils'
+import {
+  contextRuleIdForSubmit,
+  delegatedSubmitFields,
+  isDelegatedSendBuild,
+  multiAuthSubmitFields,
+  normalizeDelegatedBuildFields,
+  resolvePasskeyAuthEntryXdr,
+} from './sendTx'
+import { friendlyError, sendToBackground } from './backgroundClient'
+import { debugAgentLog } from './debugAgentLog'
+import { fetchActiveNetwork, networkPassphraseFor } from './activeNetwork'
+
+type PhantomSolanaProvider = {
+  signMessage(message: Uint8Array): Promise<Uint8Array | { signature: Uint8Array }>
+}
+
+export function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
+  if (!data) return undefined
+  if (typeof data.transactionHash === 'string') return data.transactionHash
+  if (typeof data.hash === 'string') return data.hash
+  return undefined
+}
+
+export function extractSignedTxXdr(data: SubmitTxResponse | null | undefined): string | undefined {
+  if (!data) return undefined
+  if (typeof data.signedTxXdr === 'string') return data.signedTxXdr
+  return undefined
+}
+
+async function runPasskeyAuth(
+  surface: 'popup' | 'sidepanel',
+  optionsJSON: unknown
+): Promise<Awaited<ReturnType<typeof startAuthentication>>> {
+  const prepared = prepareAuthenticationOptionsForGet(optionsJSON) as {
+    allowCredentials?: Array<{ id?: string; transports?: string[] }>
+    hints?: string[]
+    rpId?: string
+  }
+  // #region agent log
+  debugAgentLog({
+    hypothesisId: 'H2-H4-H5',
+    location: 'signBuiltTx.ts:runPasskeyAuth',
+    message: 'prepared WebAuthn get() options before ceremony',
+    data: {
+      surface,
+      viaBridge: surface === 'sidepanel',
+      rpId: prepared.rpId ?? null,
+      allowCredCount: prepared.allowCredentials?.length ?? 0,
+      allowCredIdsSuffix: (prepared.allowCredentials ?? []).map((c) =>
+        typeof c.id === 'string' ? c.id.slice(-12) : null
+      ),
+      allowTransports: (prepared.allowCredentials ?? []).map((c) => c.transports ?? null),
+      hints: prepared.hints ?? null,
+    },
+  })
+  // #endregion
+  if (surface === 'sidepanel') {
+    return (await openPasskeyBridgeAndWait({
+      mode: 'authentication',
+      optionsJSON,
+    })) as Awaited<ReturnType<typeof startAuthentication>>
+  }
+  return await startAuthentication({
+    optionsJSON: prepared,
+  } as Parameters<typeof startAuthentication>[0])
+}
+
+export async function signAndSubmitBuiltTx(args: {
+  build: BuildSendTxResponse
+  activeAccount: StoredAccount
+  /** When `activeAccount.mode === 'multisig'`, passkey credentials from this account. */
+  signingAccount?: StoredAccount
+  surface?: 'popup' | 'sidepanel'
+  onProgress?: (label: string) => void
+  /**
+   * When false, the backend signs + assembles but does not broadcast; the
+   * response carries `signedTxXdr` so the caller can submit via RPC itself.
+   * Defaults to true.
+   */
+  submit?: boolean
+}): Promise<SubmitTxResponse> {
+  const { build: rawBuild, activeAccount } = args
+  const build = normalizeDelegatedBuildFields(rawBuild)
+  const surface = args.surface ?? 'popup'
+  const progress = args.onProgress ?? (() => {})
+  const submit = args.submit
+  const passkeySource =
+    activeAccount.mode === 'multisig' ? (args.signingAccount ?? activeAccount) : activeAccount
+  const { network } = await fetchActiveNetwork()
+  const networkPassphrase = networkPassphraseFor(network)
+
+  if (
+    (activeAccount.mode === 'freighter' || activeAccount.mode === 'mnemonic') &&
+    isDelegatedSendBuild(build)
+  ) {
+    if (activeAccount.mode === 'freighter') {
+      if (!activeAccount.gAddress) throw new Error('Missing G-address for freighter account')
+      const delegated = resolveDelegatedAuthEntryForSigner({
+        authEntriesXdr: build.authEntriesXdr,
+        delegatedNativeAuthEntryIndices: build.delegatedNativeAuthEntryIndices,
+        gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+        signerG: activeAccount.gAddress,
+      })
+      if (!delegated) {
+        throw new Error('Could not find delegated auth entry for your G-address in this transaction.')
+      }
+      const signed = await signAuthEntry(delegated.templateXdr, {
+        networkPassphrase,
+        address: activeAccount.gAddress,
+      })
+      if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed.')
+      const signerAddress = signed.signerAddress
+      const signedAuthEntryBase64 = signed.signedAuthEntry
+        ? normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
+        : undefined
+      if (!signedAuthEntryBase64 || !signerAddress) throw new Error('Freighter signing failed.')
+      progress(submit === false ? 'Preparing…' : 'Submitting…')
+      const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
+        type: 'SUBMIT_TX_DELEGATED',
+        payload: {
+          txXdr: build.txXdr,
+          smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr!,
+          gAddressEntryTemplateXdr: delegated.templateXdr,
+          signedAuthEntryBase64,
+          signerAddress,
+          contextRuleId: contextRuleIdForSubmit(build),
+          submit,
+          ...delegatedSubmitFields(build, delegated.entryIndex),
+        },
+      })
+      if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+      return submitRes.data ?? {}
+    }
+
+    const delegated = resolveDelegatedAuthEntryForSigner({
+      authEntriesXdr: build.authEntriesXdr,
+      delegatedNativeAuthEntryIndices: build.delegatedNativeAuthEntryIndices,
+      gAddressEntryTemplateXdr: build.gAddressEntryTemplateXdr,
+      signerG: activeAccount.gAddress ?? '',
+    })
+    if (!delegated) {
+      throw new Error('Could not find delegated auth entry for this account in the transaction.')
+    }
+
+    const signRes = await sendToBackground<
+      SignDelegatedGAuthEntryRequest,
+      SignDelegatedGAuthEntryResponse
+    >({
+      type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
+      payload: {
+        accountId: activeAccount.id,
+        gAddressEntryTemplateXdr: delegated.templateXdr,
+        networkPassphrase,
+      },
+    })
+    if (!signRes.ok) throw new Error(friendlyError(signRes.error))
+    progress(submit === false ? 'Preparing…' : 'Submitting…')
+    const submitRes = await sendToBackground<SubmitDelegatedTxRequest, SubmitTxResponse>({
+      type: 'SUBMIT_TX_DELEGATED',
+      payload: {
+        txXdr: build.txXdr,
+        smartAccountAuthEntryXdr: build.smartAccountAuthEntryXdr!,
+        gAddressEntryTemplateXdr: delegated.templateXdr,
+        signedAuthEntryBase64: signRes.data!.signedAuthEntryBase64,
+        signerAddress: signRes.data!.signerAddress,
+        contextRuleId: contextRuleIdForSubmit(build),
+        submit,
+        ...delegatedSubmitFields(build, delegated.entryIndex),
+      },
+    })
+    if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+    return submitRes.data ?? {}
+  }
+
+  if (activeAccount.mode === 'phantom') {
+    const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } }).phantom
+      ?.solana
+    if (!provider) throw new Error('Phantom not detected.')
+    const digest = build.authDigestHex.toLowerCase()
+    const prefixedMessage = `Stellar Smart Account Auth:\n${digest}`
+    const msgBytes = new TextEncoder().encode(prefixedMessage)
+    const signed = await provider.signMessage(msgBytes)
+    const sigBytes: Uint8Array =
+      signed instanceof Uint8Array ? signed : (signed.signature ?? new Uint8Array())
+    if (sigBytes.length === 0) throw new Error('Phantom signing failed.')
+    progress(submit === false ? 'Preparing…' : 'Submitting…')
+    const submitRes = await sendToBackground<SubmitPhantomTxRequest, SubmitTxResponse>({
+      type: 'SUBMIT_TX_PHANTOM',
+      payload: {
+        txXdr: build.txXdr,
+        authEntryXdr: build.authEntryXdr,
+        authSignatureHex: bytesToHex(sigBytes),
+        prefixedMessage,
+        publicKeyHex: activeAccount.phantomPublicKeyHex ?? '',
+        contextRuleId: contextRuleIdForSubmit(build),
+        submit,
+      },
+    })
+    if (!submitRes.ok) throw new Error(friendlyError(submitRes.error))
+    return submitRes.data ?? {}
+  }
+
+  if (!passkeySource.passkeyCredentialId || !passkeySource.passkeyKeyDataHex) {
+    throw new Error(
+      activeAccount.mode === 'multisig'
+        ? 'No passkey account is available to sign for this multisig wallet. Sign in with your Latch passkey, then try again.'
+        : 'This account is missing its passkey signing data on this device. Log out and sign in again with your Latch passkey to restore it, then retry.'
+    )
+  }
+  if (
+    isDelegatedSendBuild(build) &&
+    (build.submitMethod === 'delegated' || build.submitMethod === 'bundler-delegated')
+  ) {
+    throw new Error(
+      'This smart account authorizes swaps via a delegated G-address, not your passkey. ' +
+        'Reconnect with Freighter using the delegated signer G-address, or log out and sign in with passkey to run one-time swap setup.'
+    )
+  }
+  if (!build.authDigestHex?.trim()) {
+    throw new Error('Missing auth digest from transaction build.')
+  }
+  const optionsJSON = passkeyAuthenticationOptionsForAuthDigest({
+    credentialId: passkeySource.passkeyCredentialId,
+    authDigestHex: build.authDigestHex,
+  })
+  // #region agent log
+  {
+    const o = optionsJSON as {
+      rpId?: string
+      allowCredentials?: Array<{ id?: string; type?: string; transports?: string[] }>
+      hints?: string[]
+    }
+    debugAgentLog({
+      hypothesisId: 'H1-H2-H4',
+      location: 'signBuiltTx.ts:beforePasskeyAuth',
+      message: 'dapp/tx sign WebAuthn options about to run',
+      data: {
+        surface,
+        accountMode: activeAccount.mode,
+        accountId: activeAccount.id,
+        smartAccountSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
+        passkeyCredSuffix: (passkeySource.passkeyCredentialId ?? '').slice(-12),
+        hasKeyData: Boolean(passkeySource.passkeyKeyDataHex),
+        signingAccountId: args.signingAccount?.id ?? null,
+        rpId: o.rpId ?? null,
+        allowCredCount: o.allowCredentials?.length ?? 0,
+        allowCredIdsSuffix: (o.allowCredentials ?? []).map((c) =>
+          typeof c.id === 'string' ? c.id.slice(-12) : null
+        ),
+        allowTransports: (o.allowCredentials ?? []).map((c) => c.transports ?? null),
+        hints: o.hints ?? null,
+        authDigestLen: (build.authDigestHex ?? '').length,
+      },
+    })
+  }
+  // #endregion
+  progress('Signing…')
+  const assertion = await runPasskeyAuth(surface, optionsJSON)
+  assertPasskeyAssertionMatchesAuthDigest(assertion, build.authDigestHex)
+  const sigDataXdr = buildPasskeySigDataXdrFromAssertion(assertion)
+  progress(submit === false ? 'Preparing…' : 'Submitting…')
+  const submitRes = await sendToBackground<SubmitWebauthnTxRequest, SubmitTxResponse>({
+    type: 'SUBMIT_TX_WEBAUTHN',
+    payload: {
+      txXdr: build.txXdr,
+      authEntryXdr: resolvePasskeyAuthEntryXdr(build),
+      sigDataXdr,
+      keyDataHex: passkeySource.passkeyKeyDataHex,
+      contextRuleId: contextRuleIdForSubmit(build),
+      submit,
+      ...multiAuthSubmitFields(build),
+    },
+  })
+  if (!submitRes.ok) {
+    const errMsg = friendlyError(submitRes.error)
+    throw new Error(
+      await enrichWebauthnRpIdHashErrorMessage(errMsg, {
+        optionsJSON,
+        credentialResponse: assertion,
+      })
+    )
+  }
+  return submitRes.data ?? {}
+}
+
+/**
+ * Sign a built transaction without broadcasting it. Runs the same signer flow
+ * as {@link signAndSubmitBuiltTx} but asks the backend for a submit-ready
+ * `signedTxXdr` (submit=false), so the caller (e.g. a dApp) can submit via RPC.
+ */
+export async function signWithoutSubmitBuiltTx(
+  args: Omit<Parameters<typeof signAndSubmitBuiltTx>[0], 'submit'>
+): Promise<{ signedTxXdr?: string; signedAuthEntry?: string }> {
+  const res = await signAndSubmitBuiltTx({ ...args, submit: false })
+  const signedTxXdr = extractSignedTxXdr(res)
+  const signedAuthEntry =
+    typeof res.signedAuthEntry === 'string' ? res.signedAuthEntry : undefined
+  return { signedTxXdr, signedAuthEntry }
+}

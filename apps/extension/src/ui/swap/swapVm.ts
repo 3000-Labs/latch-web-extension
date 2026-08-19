@@ -1,8 +1,16 @@
+import type { SwapQuotePayload } from '@latch/types'
+
+import { rawToHuman, rawToNumber } from '@latch/swap'
+
 export type SwapTokenVm = {
   id: string
   symbol: string
   name: string
-  /** Optional data URL from background (portfolio / icon resolver). */
+  assetId: string
+  contractId: string
+  decimals: number
+  balance: string
+  issuer?: string
   iconUrl?: string | null
 }
 
@@ -11,7 +19,6 @@ export type SwapDraft = {
   receiveTokenId: string
   payAmount: string
   useExchangeBalance: boolean
-  /** UI-only: when true, show the “approved” expanded details view. */
   approved: boolean
 }
 
@@ -25,12 +32,10 @@ export type SwapQuoteVm = {
   receiveUsdApprox: string
   receiveAmountLine: string
   receiveUsdApproxLine: string
+  quotePayload: SwapQuotePayload
 }
 
-export const swapTokens: SwapTokenVm[] = [
-  { id: 'usdt', symbol: 'USDT', name: 'Tether' },
-  { id: 'xlm', symbol: 'XLM', name: 'Stellar' },
-]
+export const DEFAULT_SLIPPAGE_BPS = 50
 
 export function truncateAddress(addr: string, left = 6, right = 4) {
   if (addr.length <= left + right + 3) return addr
@@ -60,30 +65,88 @@ export function formatUsdApprox(amountUsd: number) {
   return `≈ $${amountUsd.toFixed(2)}`
 }
 
-export function mockQuote(
-  draft: SwapDraft,
-  payToken: SwapTokenVm,
-  receiveToken: SwapTokenVm
+export function swapQuotePayloadToVm(
+  payload: SwapQuotePayload,
+  payTokenPriceUsd?: number | null,
+  receiveTokenPriceUsd?: number | null
 ): SwapQuoteVm {
-  const pay = toPositiveNumberOrNull(draft.payAmount) ?? 0
+  const receiveAmount = rawToNumber(payload.amountOutRaw, payload.assetOut.decimals)
+  const minReceived = rawToHuman(payload.amountOutMinRaw, payload.assetOut.decimals)
+  const payHuman = rawToHuman(payload.amountInRaw, payload.assetIn.decimals)
+  const payN = Number.parseFloat(payHuman)
+  const rate =
+    payN > 0 && receiveAmount > 0
+      ? receiveAmount / payN
+      : 0
 
-  // UI-only deterministic mock values (small “edge” so it looks realistic).
-  const slippagePct = 0.5
-  const feeXlm = 0.00001
-  const receive = pay === 0 ? 0 : pay * 0.00084221
-  const minReceived = receive * (1 - slippagePct / 100)
+  const payUsd = payTokenPriceUsd != null && Number.isFinite(payTokenPriceUsd) ? payN * payTokenPriceUsd : NaN
+  const receiveUsd =
+    receiveTokenPriceUsd != null && Number.isFinite(receiveTokenPriceUsd)
+      ? receiveAmount * receiveTokenPriceUsd
+      : payUsd
 
-  const receiveUsd = pay === 0 ? NaN : pay * 1.00306
+  const slippagePct = (payload.slippageBps / 100).toFixed(1)
 
   return {
-    provider: 'LiquidMesh',
-    rateLine: `1 ${payToken.symbol} ≈ 0.00084221 ${receiveToken.symbol}`,
+    provider: payload.providerName,
+    rateLine:
+      rate > 0
+        ? `1 ${payload.assetIn.symbol} ≈ ${rate.toFixed(6)} ${payload.assetOut.symbol}`
+        : `—`,
     slippageLine: `Auto | ${slippagePct}%`,
-    minReceivedLine: `${minReceived.toFixed(6)}  ${receiveToken.symbol}`,
-    networkFeeLine: `~ ${feeXlm.toFixed(5)} Stellar`,
-    receiveAmount: receive,
-    receiveUsdApprox: pay === 0 ? '≈--' : `≈$${receiveUsd.toFixed(5)}`,
-    receiveAmountLine: pay === 0 ? '--' : `+${receive.toFixed(2)} ${receiveToken.symbol}`,
-    receiveUsdApproxLine: pay === 0 ? '' : `≈ $${receiveUsd.toFixed(2)} (+0.25%)`,
+    minReceivedLine: `${minReceived} ${payload.assetOut.symbol}`,
+    networkFeeLine: '~ — Stellar',
+    receiveAmount,
+    receiveUsdApprox: Number.isFinite(receiveUsd) ? formatUsdApprox(receiveUsd) : '≈--',
+    receiveAmountLine: `+${formatCompactAmount(receiveAmount, 6)} ${payload.assetOut.symbol}`,
+    receiveUsdApproxLine: Number.isFinite(receiveUsd) ? `≈ $${receiveUsd.toFixed(2)}` : '',
+    quotePayload: payload,
   }
+}
+
+export function parseBalanceAmount(balance: string): number {
+  const n = Number.parseFloat(balance.replace(/,/g, ''))
+  return Number.isFinite(n) ? n : 0
+}
+
+export function pickDefaultReceiveTokenId(
+  payTokenId: string,
+  receiveCatalog: SwapTokenVm[],
+  preferredIds?: string[]
+): string {
+  if (preferredIds) {
+    for (const id of preferredIds) {
+      if (id !== payTokenId && receiveCatalog.some((t) => t.id === id)) return id
+    }
+  }
+  for (const sym of ['USDC', 'EURC']) {
+    const hit = receiveCatalog.find(
+      (t) => t.symbol.toUpperCase() === sym && t.id !== payTokenId
+    )
+    if (hit) return hit.id
+  }
+  return (
+    receiveCatalog.find((t) => t.id !== payTokenId)?.id ??
+    receiveCatalog[0]?.id ??
+    payTokenId
+  )
+}
+
+export function mergeSwapTokenCatalogs(
+  payCatalog: SwapTokenVm[],
+  receiveCatalog: SwapTokenVm[]
+): SwapTokenVm[] {
+  const byId = new Map<string, SwapTokenVm>()
+  for (const t of [...payCatalog, ...receiveCatalog]) {
+    if (!byId.has(t.id)) byId.set(t.id, t)
+  }
+  return [...byId.values()]
+}
+
+export function formatQuoteRemainingMs(remainingMs: number): string {
+  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000))
+  const min = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  if (min > 0) return `${min}:${String(sec).padStart(2, '0')}`
+  return `${sec}s`
 }

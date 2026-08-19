@@ -23,6 +23,8 @@ function signerLabel(mode: StoredAccount['mode']): string {
       return 'Freighter'
     case 'phantom':
       return 'Phantom'
+    case 'multisig':
+      return 'Multisig'
     default:
       return 'Account'
   }
@@ -37,6 +39,9 @@ function signerDetailLine(a: StoredAccount): string {
   const g = a.gAddress
   if (a.mode === 'freighter' || a.mode === 'mnemonic' || a.mode === 'phantom') {
     return g ? `${signerLabel(a.mode)} • ${shortAddr(g)}` : signerLabel(a.mode)
+  }
+  if (a.mode === 'multisig') {
+    return a.multisigThreshold ? `Multisig • ${a.multisigThreshold} approvals` : 'Multisig'
   }
   return signerLabel(a.mode)
 }

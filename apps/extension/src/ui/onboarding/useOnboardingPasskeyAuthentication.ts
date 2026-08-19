@@ -17,6 +17,7 @@ import {
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   narrowAuthenticationOptionsToCredential,
+  prepareAuthenticationOptionsForGet,
   webauthnBeginOptionsToObject,
 } from '../webauthn/passkey'
 
@@ -90,7 +91,7 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
 
     void (async () => {
       try {
-        const [backendRes, localRes] = await Promise.all([
+        const [backendRes, localRes, beginRes] = await Promise.all([
           sendToBackground<undefined, BackendAccountsResponse>({
             type: 'GET_BACKEND_ACCOUNTS',
             payload: undefined,
@@ -99,8 +100,17 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
             type: 'GET_ACCOUNTS',
             payload: undefined,
           }),
+          sendToBackground<undefined, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_AUTH_BEGIN',
+            payload: undefined,
+          }),
         ])
         if (cancelled) return
+
+        if (!beginRes.ok) throw new Error(friendlyError(beginRes.error))
+
+        const optionsJSON = prepareAuthenticationOptionsForGet(beginRes.data?.options)
+        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
         const mergedAccounts: BackendSessionAccount[] = [
           ...(backendRes.ok ? (backendRes.data?.accounts ?? []) : []),
@@ -112,15 +122,6 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
             })),
         ]
 
-        const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-          type: 'PASSKEY_AUTH_BEGIN',
-          payload: undefined,
-        })
-        if (cancelled) return
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
-
-        const optionsJSON = begin.data?.options
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
         prefetchRef.current = { kind: 'authentication', optionsJSON }
 
         const listed = mergePasskeyOptions(mergedAccounts, optionsJSON)
@@ -154,9 +155,11 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
               : 'Still preparing passkey…')
         )
       }
-      const optionsJSON = selectedCredentialId
+
+      const narrowed = selectedCredentialId
         ? narrowAuthenticationOptionsToCredential(pre.optionsJSON, selectedCredentialId)
         : pre.optionsJSON
+      const optionsJSON = prepareAuthenticationOptionsForGet(narrowed)
       assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
       let assertion: Awaited<ReturnType<typeof startAuthentication>>

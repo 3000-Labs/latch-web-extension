@@ -1,10 +1,16 @@
 import { authorizeEntry, Keypair, Networks, xdr } from '@stellar/stellar-sdk'
 import { describe, expect, it } from 'vitest'
 
-import { normalizeDelegatedSignatureBase64 } from './delegatedAuthSubmit'
+import {
+  authEntrySignerPublicKey,
+  normalizeDelegatedSignatureBase64,
+  resolveDelegatedAuthEntryForSigner,
+} from './delegatedAuthSubmit'
 
-async function signedTemplateEntryBase64(): Promise<string> {
-  const signer = Keypair.random()
+async function signedTemplateEntryBase64(signer: Keypair = Keypair.random()): Promise<{
+  signer: Keypair
+  xdr: string
+}> {
   const template = new xdr.SorobanAuthorizationEntry({
     credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
       new xdr.SorobanAddressCredentials({
@@ -28,7 +34,7 @@ async function signedTemplateEntryBase64(): Promise<string> {
     }),
   })
   const signed = await authorizeEntry(template, signer, 9_999_999, Networks.TESTNET)
-  return signed.toXDR('base64')
+  return { signer, xdr: signed.toXDR('base64') }
 }
 
 describe('normalizeDelegatedSignatureBase64', () => {
@@ -39,7 +45,7 @@ describe('normalizeDelegatedSignatureBase64', () => {
   })
 
   it('extracts 64-byte signature from ScVal-wrapped signed auth entry', async () => {
-    const fullXdr = await signedTemplateEntryBase64()
+    const { xdr: fullXdr } = await signedTemplateEntryBase64()
     const normalized = normalizeDelegatedSignatureBase64(fullXdr)
     expect(Buffer.from(normalized, 'base64').length).toBe(64)
     expect(normalized).not.toBe(fullXdr)
@@ -53,5 +59,24 @@ describe('normalizeDelegatedSignatureBase64', () => {
 
   it('rejects invalid xdr', () => {
     expect(() => normalizeDelegatedSignatureBase64('not-valid-xdr!!')).toThrow()
+  })
+})
+
+describe('resolveDelegatedAuthEntryForSigner', () => {
+  it('picks the auth entry row matching the user G-address', async () => {
+    const user = Keypair.random()
+    const bundler = Keypair.random()
+    const { xdr: userEntry } = await signedTemplateEntryBase64(user)
+    const { xdr: bundlerEntry } = await signedTemplateEntryBase64(bundler)
+
+    const resolved = resolveDelegatedAuthEntryForSigner({
+      authEntriesXdr: ['smart-entry', userEntry, bundlerEntry],
+      delegatedNativeAuthEntryIndices: [2],
+      signerG: user.publicKey(),
+    })
+
+    expect(resolved?.entryIndex).toBe(1)
+    expect(resolved?.templateXdr).toBe(userEntry)
+    expect(authEntrySignerPublicKey(userEntry)).toBe(user.publicKey())
   })
 })

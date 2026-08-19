@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { startAuthentication } from '@simplewebauthn/browser'
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
 import type {
   BackendWebauthnAuthenticationFinishResponse,
   BackendWebauthnBeginResponse,
+  BackendWebauthnRegistrationFinishResponse,
+  GetAccountsResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   SetActiveAccountRequest,
@@ -14,14 +16,19 @@ import { friendlyError, sendToBackground } from '../../../lib/backgroundClient'
 import { useSeedPhraseWords } from '../../import-seed/useSeedPhraseWords'
 import {
   assertBeginOptionsRpIdMatchesExtension,
+  assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
+  nextPasskeyAccountDisplayName,
+  prepareAuthenticationOptionsForGet,
+  prepareRegistrationOptionsForCreate,
 } from '../../../webauthn/passkey'
 import { openPasskeyBridgeAndWait } from '../../../webauthn/passkeyBridge'
 import {
   AddAccountChooseMethodScreen,
   type AddAccountMethod,
 } from './AddAccountChooseMethodScreen'
+import { AddAccountCreatePasskeyScreen } from './AddAccountCreatePasskeyScreen'
 import { AddAccountCreateScreen } from './AddAccountCreateScreen'
 import { AddAccountPasskeyScreen } from './AddAccountPasskeyScreen'
 import { AddAccountRecoveryPhraseScreen } from './AddAccountRecoveryPhraseScreen'
@@ -30,14 +37,14 @@ import { AddAccountSuccessScreen } from './AddAccountSuccessScreen'
 type AddAccountStep =
   | 'chooseMethod'
   | 'passkey'
+  | 'createPasskey'
   | 'recoveryPhrase'
   | 'createAccount'
   | 'success'
 
-type PendingPasskey = {
-  optionsJSON: unknown
-  assertion: unknown
-}
+type PendingPasskey =
+  | { kind: 'authentication'; optionsJSON: unknown; assertion: unknown }
+  | { kind: 'registration'; account: StoredAccount }
 
 type PendingRecovery = {
   mnemonic: string
@@ -66,8 +73,12 @@ export function AddAccountFlow({
   const [passkeyPrefetchError, setPasskeyPrefetchError] = useState<string | null>(null)
   const [passkeyActionError, setPasskeyActionError] = useState<string | null>(null)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
-  const passkeyOptionsRef = useRef<unknown>(null)
   const [passkeyPrefetchNonce, setPasskeyPrefetchNonce] = useState(0)
+  const passkeyPrefetchRef = useRef<
+    | { kind: 'registration'; optionsJSON: unknown; displayName: string }
+    | { kind: 'authentication'; optionsJSON: unknown }
+    | null
+  >(null)
 
   const pendingPasskeyRef = useRef<PendingPasskey | null>(null)
   const pendingRecoveryRef = useRef<PendingRecovery | null>(null)
@@ -75,37 +86,62 @@ export function AddAccountFlow({
   const seedWords = useSeedPhraseWords()
 
   useEffect(() => {
-    if (step !== 'passkey') {
-      passkeyOptionsRef.current = null
+    if (step !== 'passkey' && step !== 'createPasskey') {
       setPasskeyPrefetchReady(false)
       setPasskeyPrefetchError(null)
       setPasskeyActionError(null)
       setPasskeyBusy(false)
+      passkeyPrefetchRef.current = null
       return
     }
 
     let cancelled = false
     setPasskeyPrefetchReady(false)
     setPasskeyPrefetchError(null)
-    passkeyOptionsRef.current = null
+    setPasskeyActionError(null)
+    passkeyPrefetchRef.current = null
 
     void (async () => {
       try {
-        const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
-          type: 'PASSKEY_AUTH_BEGIN',
-          payload: undefined,
-        })
-        if (cancelled) return
-        if (!begin.ok) throw new Error(friendlyError(begin.error))
+        if (step === 'createPasskey') {
+          const accountsRes = await sendToBackground<undefined, GetAccountsResponse>({
+            type: 'GET_ACCOUNTS',
+            payload: undefined,
+          })
+          if (cancelled) return
+          if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
 
-        const optionsJSON = begin.data?.options
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
-        passkeyOptionsRef.current = optionsJSON
+          const displayName = nextPasskeyAccountDisplayName(accountsRes.data?.accounts ?? [])
+          const begin = await sendToBackground<
+            { displayName?: string },
+            BackendWebauthnBeginResponse
+          >({
+            type: 'PASSKEY_REG_BEGIN',
+            payload: { displayName },
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+          const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
+        } else {
+          const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
+            type: 'PASSKEY_AUTH_BEGIN',
+            payload: undefined,
+          })
+          if (cancelled) return
+          if (!begin.ok) throw new Error(friendlyError(begin.error))
+
+          const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
+          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
+        }
         if (!cancelled) setPasskeyPrefetchReady(true)
       } catch (e) {
         if (!cancelled) {
           setPasskeyPrefetchError(e instanceof Error ? e.message : String(e))
-          passkeyOptionsRef.current = null
+          passkeyPrefetchRef.current = null
         }
       }
     })()
@@ -115,17 +151,7 @@ export function AddAccountFlow({
     }
   }, [step, passkeyPrefetchNonce])
 
-  const runPasskeyAuthentication = useCallback(async () => {
-    const optionsJSON = passkeyOptionsRef.current
-    if (!optionsJSON) {
-      throw new Error(
-        passkeyPrefetchError ??
-          (passkeyPrefetchReady
-            ? 'Passkey session is stale. Go back and try again.'
-            : 'Still preparing passkey…')
-      )
-    }
-
+  const runPasskeyAuthentication = useCallback(async (optionsJSON: unknown) => {
     assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
     if (surface === 'sidepanel') {
@@ -139,16 +165,42 @@ export function AddAccountFlow({
     } catch (e) {
       throw new Error(formatWebauthnBrowserError(e))
     }
-  }, [passkeyPrefetchError, passkeyPrefetchReady, surface])
+  }, [surface])
+
+  const runPasskeyRegistration = useCallback(async (optionsJSON: unknown) => {
+    assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+
+    if (surface === 'sidepanel') {
+      return await openPasskeyBridgeAndWait({ mode: 'registration', optionsJSON })
+    }
+
+    try {
+      return await startRegistration({
+        optionsJSON,
+      } as Parameters<typeof startRegistration>[0])
+    } catch (e) {
+      throw new Error(formatWebauthnBrowserError(e))
+    }
+  }, [surface])
 
   const handleAuthenticatePasskey = useCallback(() => {
     setPasskeyActionError(null)
     setPasskeyBusy(true)
     void (async () => {
       try {
-        const optionsJSON = passkeyOptionsRef.current
-        const assertion = await runPasskeyAuthentication()
-        pendingPasskeyRef.current = { optionsJSON, assertion }
+        const pre = passkeyPrefetchRef.current
+        if (!pre || pre.kind !== 'authentication') {
+          throw new Error(
+            passkeyPrefetchError ??
+              (passkeyPrefetchReady
+                ? 'Passkey session is stale. Go back and try again.'
+                : 'Still preparing passkey…')
+          )
+        }
+
+        const optionsJSON = pre.optionsJSON
+        const assertion = await runPasskeyAuthentication(optionsJSON)
+        pendingPasskeyRef.current = { kind: 'authentication', optionsJSON, assertion }
         pendingRecoveryRef.current = null
         setStep('createAccount')
       } catch (e) {
@@ -158,7 +210,55 @@ export function AddAccountFlow({
         setPasskeyBusy(false)
       }
     })()
-  }, [runPasskeyAuthentication])
+  }, [passkeyPrefetchError, passkeyPrefetchReady, runPasskeyAuthentication])
+
+  const handleCreatePasskey = useCallback(() => {
+    setPasskeyActionError(null)
+    setPasskeyBusy(true)
+    void (async () => {
+      try {
+        const pre = passkeyPrefetchRef.current
+        if (!pre || pre.kind !== 'registration') {
+          throw new Error(
+            passkeyPrefetchError ??
+              (passkeyPrefetchReady
+                ? 'Passkey session is stale. Go back and try again.'
+                : 'Still preparing passkey…')
+          )
+        }
+
+        const optionsJSON = pre.optionsJSON
+        const registration = await runPasskeyRegistration(optionsJSON)
+        assertRegistrationCeremonyForFinish(registration)
+
+        const finish = await sendToBackground<
+          { response: unknown },
+          BackendWebauthnRegistrationFinishResponse & { account: StoredAccount }
+        >({
+          type: 'PASSKEY_REG_FINISH',
+          payload: { response: registration },
+        })
+        if (!finish.ok) {
+          const errMsg = friendlyError(finish.error)
+          throw new Error(
+            await enrichWebauthnRpIdHashErrorMessage(errMsg, {
+              optionsJSON,
+              credentialResponse: registration,
+            })
+          )
+        }
+
+        pendingPasskeyRef.current = { kind: 'registration', account: finish.data!.account }
+        pendingRecoveryRef.current = null
+        setStep('createAccount')
+      } catch (e) {
+        setPasskeyPrefetchNonce((n) => n + 1)
+        setPasskeyActionError(e instanceof Error ? e.message : String(e))
+      } finally {
+        setPasskeyBusy(false)
+      }
+    })()
+  }, [passkeyPrefetchError, passkeyPrefetchReady, runPasskeyRegistration])
 
   const handleImportRecoveryPhrase = useCallback(() => {
     if (!seedWords.isValid) return
@@ -177,9 +277,10 @@ export function AddAccountFlow({
 
     try {
       let account: StoredAccount | undefined
+      const pending = pendingPasskeyRef.current
 
-      if (pendingPasskeyRef.current) {
-        const { assertion } = pendingPasskeyRef.current
+      if (pending?.kind === 'authentication') {
+        const { assertion, optionsJSON } = pending
         const res = await sendToBackground<
           { response: unknown },
           BackendWebauthnAuthenticationFinishResponse & { account: StoredAccount }
@@ -191,12 +292,14 @@ export function AddAccountFlow({
           const errMsg = friendlyError(res.error)
           throw new Error(
             await enrichWebauthnRpIdHashErrorMessage(errMsg, {
-              optionsJSON: pendingPasskeyRef.current.optionsJSON,
+              optionsJSON,
               credentialResponse: assertion,
             })
           )
         }
         account = res.data!.account
+      } else if (pending?.kind === 'registration') {
+        account = pending.account
       } else if (pendingRecoveryRef.current) {
         const req: ImportMnemonicAccountRequest = {
           mnemonic: pendingRecoveryRef.current.mnemonic,
@@ -243,12 +346,24 @@ export function AddAccountFlow({
   const handleCreateBack = useCallback(() => {
     if (creating) return
     setCreateError(null)
-    setStep(selectedMethod === 'recoveryPhrase' ? 'recoveryPhrase' : 'passkey')
+    if (selectedMethod === 'recoveryPhrase') {
+      setStep('recoveryPhrase')
+      return
+    }
+    if (selectedMethod === 'createPasskey') {
+      setStep('createPasskey')
+      return
+    }
+    setStep('passkey')
   }, [creating, selectedMethod])
 
   const handleContinueFromChoose = useCallback(() => {
     if (selectedMethod === 'passkey') {
       setStep('passkey')
+      return
+    }
+    if (selectedMethod === 'createPasskey') {
+      setStep('createPasskey')
       return
     }
     if (selectedMethod === 'recoveryPhrase') {
@@ -306,6 +421,17 @@ export function AddAccountFlow({
           actionError={passkeyActionError}
           busy={passkeyBusy}
           onAuthenticate={handleAuthenticatePasskey}
+          onBack={handleBackFromPasskeyOrRecovery}
+        />
+      ) : null}
+
+      {step === 'createPasskey' ? (
+        <AddAccountCreatePasskeyScreen
+          prefetchReady={passkeyPrefetchReady}
+          prefetchError={passkeyPrefetchError}
+          actionError={passkeyActionError}
+          busy={passkeyBusy}
+          onCreatePasskey={handleCreatePasskey}
           onBack={handleBackFromPasskeyOrRecovery}
         />
       ) : null}

@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Plus } from 'lucide-react'
 
 import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
+import multisigIconUrl from 'url:../../../../assets/home/settings-multisig.svg'
 import userAvatarUrl from 'url:../../../../assets/icons/user.png'
 
 import { AccountRadio } from './AccountRadio'
@@ -13,6 +14,7 @@ export type ViewAccountItem = {
   id: string
   name: string
   address: string
+  mode?: 'passkey' | 'mnemonic' | 'freighter' | 'phantom' | 'multisig'
 }
 
 function truncateAddress(address: string) {
@@ -23,11 +25,13 @@ function truncateAddress(address: string) {
 function AccountListRow({
   name,
   address,
+  mode,
   selected,
   onSelect,
 }: {
   name: string
   address: string
+  mode?: ViewAccountItem['mode']
   selected: boolean
   onSelect: () => void
 }) {
@@ -49,7 +53,11 @@ function AccountListRow({
     >
       <div className="flex min-w-0 items-center gap-2">
         <div className="size-10 shrink-0 overflow-hidden rounded-[32px]">
-          <img src={userAvatarUrl} alt="" className="size-full object-cover" />
+          <img
+            src={mode === 'multisig' ? multisigIconUrl : userAvatarUrl}
+            alt=""
+            className="size-full object-cover"
+          />
         </div>
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-xl font-semibold tracking-[-0.4px] text-[#fcfcfc]">
@@ -144,6 +152,7 @@ export function ViewAccountsScreen({
               key={account.id}
               name={account.name}
               address={account.address}
+              mode={account.mode}
               selected={account.id === selectedAccountId}
               onSelect={() => setSelectedAccountId(account.id)}
             />
