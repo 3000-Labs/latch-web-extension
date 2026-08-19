@@ -4,7 +4,12 @@ import type { GetSmartAccountBalancesResponse, SmartAccountBalanceRow } from '@l
 
 import { resolveIconDataUrlForAsset } from './assetIcons'
 import { getKnownSacProbes } from './knownSacProbes'
-import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from './network/config'
+import {
+  getActiveNetwork,
+  horizonUrlFor,
+  networkPassphraseFor,
+  sorobanRpcUrlFor,
+} from './network/config'
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
@@ -153,7 +158,9 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
   const totalBalanceUsd =
     computeTotalBalanceUsd(
       rows,
-      Object.fromEntries(Object.entries(pricesByCodeUpper).map(([k, v]) => [k, v.priceUsd] as const))
+      Object.fromEntries(
+        Object.entries(pricesByCodeUpper).map(([k, v]) => [k, v.priceUsd] as const)
+      )
     ) ?? undefined
 
   return { rows, totalBalanceUsd }

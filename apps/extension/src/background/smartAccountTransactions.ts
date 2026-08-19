@@ -9,7 +9,12 @@ import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } 
 import type { Network } from '@latch/types'
 
 import { getKnownSacProbes, recordKnownSacProbes } from './knownSacProbes'
-import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from './network/config'
+import {
+  getActiveNetwork,
+  horizonUrlFor,
+  networkPassphraseFor,
+  sorobanRpcUrlFor,
+} from './network/config'
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd } from './tokenPrices'
@@ -96,7 +101,9 @@ function classifyKind(
   return 'received'
 }
 
-async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccountTransactionsResponse> {
+async function computeTransactionsOnce(
+  accountId: string
+): Promise<GetSmartAccountTransactionsResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
   const c = acc?.smartAccountAddress?.trim()

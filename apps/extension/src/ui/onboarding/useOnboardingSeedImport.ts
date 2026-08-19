@@ -1,6 +1,10 @@
 import { useCallback, useState } from 'react'
 
-import type { ImportMnemonicAccountRequest, ImportMnemonicAccountResponse, SetSetupStateRequest } from '@latch/types'
+import type {
+  ImportMnemonicAccountRequest,
+  ImportMnemonicAccountResponse,
+  SetSetupStateRequest,
+} from '@latch/types'
 
 import { useSeedPhraseWords } from '../screens/import-seed/useSeedPhraseWords'
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'

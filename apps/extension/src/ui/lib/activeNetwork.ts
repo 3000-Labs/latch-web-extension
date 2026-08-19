@@ -34,9 +34,7 @@ export async function fetchActiveNetwork(): Promise<ActiveNetworkInfo> {
   return { network: 'testnet', networkLabel: networkLabelFor('testnet') }
 }
 
-export async function setActiveNetworkInBackground(
-  network: Network
-): Promise<ActiveNetworkInfo> {
+export async function setActiveNetworkInBackground(network: Network): Promise<ActiveNetworkInfo> {
   const res = await sendToBackground<{ network: Network }, ActiveNetworkInfo>({
     type: 'SET_ACTIVE_NETWORK',
     payload: { network },

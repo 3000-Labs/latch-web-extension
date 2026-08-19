@@ -80,14 +80,16 @@ import {
   submitTxWebauthn,
 } from './backend'
 
-import { getActiveNetwork, getNetworkConfig, networkLabelFor, setActiveNetwork } from './network/config'
+import {
+  getActiveNetwork,
+  getNetworkConfig,
+  networkLabelFor,
+  setActiveNetwork,
+} from './network/config'
 import { clearNetworkScopedMemoryCaches } from './network/clearCaches'
 import { broadcastActiveAccountChanged, broadcastNetworkChanged } from './dappProviderEvents'
 import { buildSignRequestSearchParams } from './externalSign/parseSignRequest'
-import {
-  runExternalSignFlow,
-  type ExternalSignDecision,
-} from './externalSign/orchestrator'
+import { runExternalSignFlow, type ExternalSignDecision } from './externalSign/orchestrator'
 
 import { signDelegatedGAddressEntry } from './delegatedLocalSign'
 import {
@@ -106,11 +108,7 @@ import { runMigrationDiscover } from './migration/discover'
 import { runMigrationSweepToken, runMigrationSweepXlm } from './migration/sweep'
 import { runGetSmartAccountBalances } from './smartAccountBalances'
 import { recordKnownSacProbe } from './knownSacProbes'
-import {
-  runGetSwapQuote,
-  runGetSwapTokenCatalog,
-  runPrepareSwapTx,
-} from './swap/handlers'
+import { runGetSwapQuote, runGetSwapTokenCatalog, runPrepareSwapTx } from './swap/handlers'
 import { runGetSmartAccountTransactions } from './smartAccountTransactions'
 import { deriveStellarKeypairFromMnemonic } from './stellarMnemonic'
 import { getMarketPrices } from './marketPrices'
@@ -147,8 +145,7 @@ type UiSurfacePreference = 'popup' | 'sidepanel'
 
 async function getSetupState(): Promise<GetSetupStateResponse> {
   const network = await getActiveNetwork()
-  const setupState =
-    ((await getSetupStateForNetwork(network)) as SetupState | undefined) ?? 'new'
+  const setupState = ((await getSetupStateForNetwork(network)) as SetupState | undefined) ?? 'new'
   const result = await chrome.storage.local.get([STORAGE_KEYS.accountPublicKey])
 
   return {
@@ -517,9 +514,8 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
         await ensureSetupStateMatchesAccounts()
         let repairedCount = 0
         try {
-          const { repairDisplacedPasskeySmartAccountAddresses } = await import(
-            './api/repairPasskeyAddress'
-          )
+          const { repairDisplacedPasskeySmartAccountAddresses } =
+            await import('./api/repairPasskeyAddress')
           const repaired = await repairDisplacedPasskeySmartAccountAddresses()
           repairedCount = repaired.repairedCount
           if (repairedCount > 0) {

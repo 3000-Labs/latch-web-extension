@@ -6,11 +6,7 @@ import { announceMemberForWallet } from './membership'
 import { ensureDeviceTransportKeyPair } from './keyStorage'
 import { exportRawPublicKey, deriveBlindSignerId, deriveMemberBlindId, toBase64 } from './crypto'
 import { signerPublicKeyBytesForAccount } from './signerBytes'
-import {
-  newCosignWalletRecordId,
-  saveCosignWalletRecord,
-  wckHexFromBytes,
-} from './wckStorage'
+import { newCosignWalletRecordId, saveCosignWalletRecord, wckHexFromBytes } from './wckStorage'
 import { createAccount } from '../storage'
 
 export async function deployCosignMultisigWallet(args: {

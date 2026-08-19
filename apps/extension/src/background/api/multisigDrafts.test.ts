@@ -48,7 +48,9 @@ describe('api/multisigDrafts', () => {
           return JSON.stringify({
             draft: {
               id: 'draft-1',
-              members: [{ id: 'm1', label: 'Levi', memberType: 'delegated', gAddress: body.gAddress }],
+              members: [
+                { id: 'm1', label: 'Levi', memberType: 'delegated', gAddress: body.gAddress },
+              ],
               validMemberCount: 1,
             },
           })

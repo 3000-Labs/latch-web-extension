@@ -9,15 +9,8 @@ import {
 import { CURATED_PORTFOLIO_ASSETS } from '@latch/stellar'
 import type { SmartAccountBalanceRow, SwapTokenRow } from '@latch/types'
 
-import {
-  fetchCombinedTokenLists,
-  type TokenListItem,
-} from '../assetTokenLists'
-import {
-  getActiveNetwork,
-  getStellarNetworkFromEnv,
-  networkPassphraseFor,
-} from '../network/config'
+import { fetchCombinedTokenLists, type TokenListItem } from '../assetTokenLists'
+import { getActiveNetwork, getStellarNetworkFromEnv, networkPassphraseFor } from '../network/config'
 import { runGetSmartAccountBalances } from '../smartAccountBalances'
 import { loadSwapProviderRegistry } from './providerRegistry'
 
@@ -52,7 +45,10 @@ function isAssetKeyLabel(label: string): boolean {
   if (trimmed === 'native') return true
   const colon = trimmed.indexOf(':')
   if (colon <= 0) return false
-  return trimmed.slice(colon + 1).trim().startsWith('G')
+  return trimmed
+    .slice(colon + 1)
+    .trim()
+    .startsWith('G')
 }
 
 export function resolveSwapTokenDisplayName(
@@ -90,11 +86,7 @@ function findListMetadataForEntry(
   return sameCode.find((item) => item.name?.trim()) ?? sameCode[0]
 }
 
-export function swapTokenIdFromParts(
-  code: string,
-  issuer?: string,
-  assetId?: string
-): string {
+export function swapTokenIdFromParts(code: string, issuer?: string, assetId?: string): string {
   return swapAssetKeyFromParts(code, issuer, assetId)
 }
 
@@ -159,9 +151,7 @@ export function resolveListItemContractId(
   return resolveTokenListContractId(item, networkPassphrase)
 }
 
-export function curatedSwapReceiveListItems(
-  network: 'testnet' | 'mainnet'
-): TokenListItem[] {
+export function curatedSwapReceiveListItems(network: 'testnet' | 'mainnet'): TokenListItem[] {
   return CURATED_PORTFOLIO_ASSETS[network].map((asset) => {
     const meta = SWAP_CURATED_META[asset.code.toUpperCase()]
     return {
@@ -277,9 +267,7 @@ function registryEntryToSwapToken(
     providerLabel: entry.label,
   })
   const iconUrl =
-    listItem?.icon ??
-    balanceRow?.iconUrl ??
-    SWAP_CURATED_META[entry.symbol.toUpperCase()]?.icon
+    listItem?.icon ?? balanceRow?.iconUrl ?? SWAP_CURATED_META[entry.symbol.toUpperCase()]?.icon
 
   if (balanceRow) {
     const fromBalance = balanceRowToSwapToken(balanceRow)

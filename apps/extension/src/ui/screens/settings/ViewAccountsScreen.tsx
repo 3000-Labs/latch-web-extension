@@ -112,7 +112,9 @@ export function ViewAccountsScreen({
   onAccountsChanged: () => void
   onCreateMultisig: () => void
 }) {
-  const [selectedAccountId, setSelectedAccountId] = useState(activeAccountId ?? accounts[0]?.id ?? '')
+  const [selectedAccountId, setSelectedAccountId] = useState(
+    activeAccountId ?? accounts[0]?.id ?? ''
+  )
   const [addAccountModalOpen, setAddAccountModalOpen] = useState(false)
   const [addAccountFlowOpen, setAddAccountFlowOpen] = useState(false)
   const canSave = selectedAccountId !== activeAccountId && selectedAccountId.length > 0

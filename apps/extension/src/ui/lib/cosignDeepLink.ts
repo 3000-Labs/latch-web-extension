@@ -16,8 +16,7 @@ export function parseInviteTokenFromInput(input: string): string | null {
   if (trimmed.includes('cosignJoin=') || trimmed.includes('multisigJoin=')) {
     const query = trimmed.includes('?') ? trimmed.slice(trimmed.indexOf('?')) : `?${trimmed}`
     const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query)
-    const fromQuery =
-      params.get('cosignJoin')?.trim() ?? params.get('multisigJoin')?.trim()
+    const fromQuery = params.get('cosignJoin')?.trim() ?? params.get('multisigJoin')?.trim()
     if (fromQuery) return fromQuery
   }
 
@@ -25,8 +24,7 @@ export function parseInviteTokenFromInput(input: string): string | null {
     try {
       const url = new URL(trimmed)
       const fromUrl =
-        url.searchParams.get('cosignJoin')?.trim() ??
-        url.searchParams.get('multisigJoin')?.trim()
+        url.searchParams.get('cosignJoin')?.trim() ?? url.searchParams.get('multisigJoin')?.trim()
       if (fromUrl) return fromUrl
     } catch {
       // fall through to raw token

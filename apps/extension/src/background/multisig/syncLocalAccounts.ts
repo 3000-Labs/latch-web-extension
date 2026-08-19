@@ -147,7 +147,8 @@ export async function ensureMultisigAccountRegisteredForSession(
 
   const threshold = invite?.threshold ?? local?.multisigThreshold
   const membersRaw =
-    (invite?.membersSnapshot?.length ? invite.membersSnapshot : local?.multisigMembersSnapshot) ?? []
+    (invite?.membersSnapshot?.length ? invite.membersSnapshot : local?.multisigMembersSnapshot) ??
+    []
   const members = coerceMembersSnapshotToDraftMembers(membersRaw)
   const cachedSaltHex = invite?.accountSaltHex?.trim() ?? local?.multisigAccountSaltHex?.trim()
 
@@ -203,7 +204,9 @@ async function ensureLocalMultisigAccount(
   const addr = args.smartAccountAddress.trim()
   if (!addr) return
 
-  const existing = ctx.localAccounts.find((a) => a.mode === 'multisig' && a.smartAccountAddress === addr)
+  const existing = ctx.localAccounts.find(
+    (a) => a.mode === 'multisig' && a.smartAccountAddress === addr
+  )
   // Remote list responses may omit `label` (or older deployments might not have one),
   // but we still want to preserve any local user-assigned label.
   const desiredLabel = args.label.trim()
@@ -228,7 +231,8 @@ async function ensureLocalMultisigAccount(
       multisigBackendAccountId: args.backendAccountId ?? existing.multisigBackendAccountId,
       multisigAccountSaltHex: args.accountSaltHex ?? existing.multisigAccountSaltHex,
       multisigMembersSnapshot:
-        args.membersSnapshot ?? coerceMembersSnapshotToDraftMembers(existing.multisigMembersSnapshot),
+        args.membersSnapshot ??
+        coerceMembersSnapshotToDraftMembers(existing.multisigMembersSnapshot),
     })
     ctx.localAccounts = ctx.localAccounts.map((a) => (a.id === account.id ? account : a))
     ctx.updated = true
@@ -426,7 +430,10 @@ async function syncFromMembershipDraft(
   return true
 }
 
-async function syncFromPendingInvite(ctx: SyncContext, invite: MultisigPendingInvite): Promise<void> {
+async function syncFromPendingInvite(
+  ctx: SyncContext,
+  invite: MultisigPendingInvite
+): Promise<void> {
   const inviteAddr = invite.smartAccountAddress?.trim()
   if (inviteAddr && localMultisigExists(ctx, inviteAddr)) {
     // Local wallet exists but this session may still be unknown to the backend — register it.

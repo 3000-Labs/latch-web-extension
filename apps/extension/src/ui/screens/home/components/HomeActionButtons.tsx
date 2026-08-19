@@ -40,37 +40,37 @@ export function HomeActionButtons({
       {actions.map((action) => {
         const disabled = action.label === 'Swap' && swapDisabled
         return (
-        <button
-          key={action.label}
-          type="button"
-          disabled={disabled}
-          onClick={action.onClick}
-          className={[
-            'flex w-[70.6px] shrink-0 flex-col items-center gap-2',
-            disabled ? 'cursor-not-allowed opacity-40' : '',
-          ].join(' ')}
-          title={disabled ? 'Swap not available for multisig wallets yet' : undefined}
-        >
-          <span className="flex size-16 shrink-0 items-center justify-center rounded-[36px] bg-[rgb(var(--latch-surface-2))]">
-            {action.label === 'Fund' ? (
-              <span className="relative size-6 shrink-0">
-                <span className="absolute inset-[18.75%] flex items-center justify-center">
-                  <img
-                    src={action.iconUrl}
-                    alt=""
-                    className="block size-full object-contain"
-                    aria-hidden
-                  />
+          <button
+            key={action.label}
+            type="button"
+            disabled={disabled}
+            onClick={action.onClick}
+            className={[
+              'flex w-[70.6px] shrink-0 flex-col items-center gap-2',
+              disabled ? 'cursor-not-allowed opacity-40' : '',
+            ].join(' ')}
+            title={disabled ? 'Swap not available for multisig wallets yet' : undefined}
+          >
+            <span className="flex size-16 shrink-0 items-center justify-center rounded-[36px] bg-[rgb(var(--latch-surface-2))]">
+              {action.label === 'Fund' ? (
+                <span className="relative size-6 shrink-0">
+                  <span className="absolute inset-[18.75%] flex items-center justify-center">
+                    <img
+                      src={action.iconUrl}
+                      alt=""
+                      className="block size-full object-contain"
+                      aria-hidden
+                    />
+                  </span>
                 </span>
-              </span>
-            ) : (
-              <img src={action.iconUrl} alt="" className="size-6 shrink-0" aria-hidden />
-            )}
-          </span>
-          <span className="w-full text-center text-sm font-normal leading-[1.34] tracking-[-0.28px] text-muted">
-            {action.label}
-          </span>
-        </button>
+              ) : (
+                <img src={action.iconUrl} alt="" className="size-6 shrink-0" aria-hidden />
+              )}
+            </span>
+            <span className="w-full text-center text-sm font-normal leading-[1.34] tracking-[-0.28px] text-muted">
+              {action.label}
+            </span>
+          </button>
         )
       })}
     </div>

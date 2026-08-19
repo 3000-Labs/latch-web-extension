@@ -35,7 +35,10 @@ export function ExternalSignReviewScreen({
   const [expandedOp, setExpandedOp] = useState<number | null>(null)
   const hostname = hostnameFromOrigin(origin)
   const operations = prepared.operations ?? []
-  const feeLine = [prepared.feeLabel ?? 'Fee', prepared.estimatedFeeXlm ? `${prepared.estimatedFeeXlm} XLM` : null]
+  const feeLine = [
+    prepared.feeLabel ?? 'Fee',
+    prepared.estimatedFeeXlm ? `${prepared.estimatedFeeXlm} XLM` : null,
+  ]
     .filter(Boolean)
     .join(' · ')
 
@@ -79,7 +82,9 @@ export function ExternalSignReviewScreen({
         <div className="rounded-2xl border border-border bg-surface/60 p-4 shadow-soft">
           <div className="text-xs font-bold text-muted">Operations</div>
           {operations.length === 0 ? (
-            <p className="mt-2 text-sm text-muted">No operation details were provided for this request.</p>
+            <p className="mt-2 text-sm text-muted">
+              No operation details were provided for this request.
+            </p>
           ) : (
             <ul className="mt-2 space-y-2">
               {operations.map((op, idx) => (
@@ -108,9 +113,7 @@ export function ExternalSignReviewScreen({
         </div>
       </div>
 
-      {error && !busy ? (
-        <p className="mt-3 text-center text-sm text-red-300">{error}</p>
-      ) : null}
+      {error && !busy ? <p className="mt-3 text-center text-sm text-red-300">{error}</p> : null}
 
       <div className="mt-4 space-y-3 shrink-0">
         <button

@@ -84,11 +84,7 @@ export default function SignRequestTab() {
     return () => window.removeEventListener('pagehide', dismissPendingOnClose)
   }, [session?.requestId, phase])
 
-  function redirectWithResult(
-    callback: string,
-    result: ExternalSignResult,
-    submit?: boolean
-  ) {
+  function redirectWithResult(callback: string, result: ExternalSignResult, submit?: boolean) {
     setPhase('redirecting')
     const url = externalResultToCallback(callback, result, submit)
     window.location.replace(url)

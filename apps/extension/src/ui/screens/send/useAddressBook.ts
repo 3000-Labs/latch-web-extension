@@ -19,13 +19,10 @@ function fallbackNameForAddress(address: string): string {
   return `Recipient (${trimmed.slice(-4)})`
 }
 
-export async function saveToAddressBook(args: {
-  address: string
-  name?: string
-}): Promise<void> {
+export async function saveToAddressBook(args: { address: string; name?: string }): Promise<void> {
   const address = normalizeAddress(args.address)
   if (!address) return
-  const name = (args.name?.trim() || '') || fallbackNameForAddress(address)
+  const name = args.name?.trim() || '' || fallbackNameForAddress(address)
 
   const res = await chrome.storage.local.get([STORAGE_KEY])
   const raw = res[STORAGE_KEY]

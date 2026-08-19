@@ -233,10 +233,7 @@ export async function apiExecuteCosignRequest(args: {
   requestId: string
   smartAccountAddress: string
 }) {
-  const res = await sendToBackground<
-    typeof args,
-    import('@latch/types').CosignExecuteResponse
-  >({
+  const res = await sendToBackground<typeof args, import('@latch/types').CosignExecuteResponse>({
     type: 'COSIGN_EXECUTE_REQUEST',
     payload: args,
   })

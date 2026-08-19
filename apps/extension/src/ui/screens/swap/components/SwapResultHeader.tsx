@@ -8,7 +8,10 @@ export function SwapResultHeader({ onBack }: { onBack: () => void }) {
       <button type="button" onClick={onBack} className="h-5 w-5 shrink-0" aria-label="Back">
         <img src={backIconUrl} alt="" className="h-5 w-5" aria-hidden />
       </button>
-      <p className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb] opacity-0" aria-hidden>
+      <p
+        className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb] opacity-0"
+        aria-hidden
+      >
         Confirm Swap
       </p>
       <div aria-hidden />

@@ -56,9 +56,7 @@ function normalizeAssetEntry(raw: unknown): TokenListItem | null {
         ? o.contract_id.trim()
         : undefined
   // Lobstr curated lists ship 32-byte hex; normalize to C-address for SAC APIs.
-  const contract = rawContract
-    ? (normalizeStellarContractId(rawContract) ?? undefined)
-    : undefined
+  const contract = rawContract ? (normalizeStellarContractId(rawContract) ?? undefined) : undefined
   const name = typeof o.name === 'string' ? o.name.trim() : undefined
   const decimalsRaw = o.decimals
   const decimals =
@@ -141,10 +139,7 @@ export function iconFromTokenLists(
   return iconFromTokenMap(buildTokenMap(lists), params)
 }
 
-export function listJsonMatchesNetwork(
-  json: unknown,
-  network: 'mainnet' | 'testnet'
-): boolean {
+export function listJsonMatchesNetwork(json: unknown, network: 'mainnet' | 'testnet'): boolean {
   if (!json || typeof json !== 'object') return true
   const declared = (json as Record<string, unknown>).network
   if (typeof declared !== 'string') return true
@@ -154,10 +149,7 @@ export function listJsonMatchesNetwork(
   return true
 }
 
-async function fetchListUrl(
-  url: string,
-  network: 'mainnet' | 'testnet'
-): Promise<TokenListItem[]> {
+async function fetchListUrl(url: string, network: 'mainnet' | 'testnet'): Promise<TokenListItem[]> {
   try {
     const res = await fetch(url, {
       headers: { Accept: 'application/json' },

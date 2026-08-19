@@ -2,10 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { BuildSendTxResponse, StoredAccount, SwapQuotePayload } from '@latch/types'
 
-import {
-  resolveSwapRouterContractId,
-  swapBuildNeedsSignerReconfigure,
-} from './swapTx'
+import { resolveSwapRouterContractId, swapBuildNeedsSignerReconfigure } from './swapTx'
 
 vi.mock('./activeNetwork', () => ({
   fetchActiveNetwork: vi.fn(async () => ({ network: 'mainnet' as const })),

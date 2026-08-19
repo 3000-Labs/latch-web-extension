@@ -33,10 +33,7 @@ function accountModeToSignerType(account: StoredAccount): SendSignerType {
   return 'freighter'
 }
 
-function resolveOrigin(
-  request: ExternalSignRequest,
-  senderUrl?: string
-): string {
+function resolveOrigin(request: ExternalSignRequest, senderUrl?: string): string {
   if (request.origin?.trim()) return request.origin.trim()
   if (senderUrl) {
     try {
@@ -67,10 +64,7 @@ async function resolveUnsignedXdr(
   if (request.network && stored.network !== request.network) {
     throw new BackendError('Network mismatch for payload reference', { code: 'validation_error' })
   }
-  if (
-    request.smartAccountAddress &&
-    stored.smartAccountAddress !== request.smartAccountAddress
-  ) {
+  if (request.smartAccountAddress && stored.smartAccountAddress !== request.smartAccountAddress) {
     throw new BackendError('Account mismatch for payload reference', { code: 'account_mismatch' })
   }
 

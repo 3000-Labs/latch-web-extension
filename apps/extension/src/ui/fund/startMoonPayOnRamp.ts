@@ -1,8 +1,4 @@
-import type {
-  CreateDepositIntentRequest,
-  DepositIntent,
-  DepositOnRampCrypto,
-} from '@latch/types'
+import type { CreateDepositIntentRequest, DepositIntent, DepositOnRampCrypto } from '@latch/types'
 
 import { formatFundError } from './fundErrors'
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'

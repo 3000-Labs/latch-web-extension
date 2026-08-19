@@ -16,8 +16,7 @@ export function ExploreScreen({ onBack }: { onBack: () => void }) {
     const q = query.trim().toLowerCase()
     if (!q) return RECOMMENDED_DAPPS
     return RECOMMENDED_DAPPS.filter(
-      (dapp) =>
-        dapp.name.toLowerCase().includes(q) || dapp.description.toLowerCase().includes(q)
+      (dapp) => dapp.name.toLowerCase().includes(q) || dapp.description.toLowerCase().includes(q)
     )
   }, [query])
 
@@ -62,7 +61,9 @@ export function ExploreScreen({ onBack }: { onBack: () => void }) {
           <NewsCarousel className="w-full shrink-0 self-stretch" />
 
           <div className="flex w-full flex-col gap-4">
-            <p className="text-sm leading-[1.34] tracking-[-0.28px] text-muted">Recommended dApps</p>
+            <p className="text-sm leading-[1.34] tracking-[-0.28px] text-muted">
+              Recommended dApps
+            </p>
             <div className="flex flex-col gap-2">
               {filteredDapps.map((dapp) => (
                 <RecommendedDappCard key={dapp.id} dapp={dapp} onOpen={openDapp} />

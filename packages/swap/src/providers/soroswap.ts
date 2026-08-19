@@ -52,13 +52,11 @@ function parseSoroswapQuote(data: SoroswapQuoteResponse, req: SwapQuoteRequest):
   }
 
   // Prefer API threshold when present; still clamp client-side for UI consistency.
-  const apiMin =
-    data.otherAmountThreshold != null ? String(data.otherAmountThreshold) : null
+  const apiMin = data.otherAmountThreshold != null ? String(data.otherAmountThreshold) : null
   const clientMin = applySlippageMin(amountOutRaw, req.slippageBps)
   let amountOutMinRaw = clientMin
   if (apiMin && /^\d+$/.test(apiMin)) {
-    amountOutMinRaw =
-      BigInt(apiMin) < BigInt(clientMin) ? apiMin : clientMin
+    amountOutMinRaw = BigInt(apiMin) < BigInt(clientMin) ? apiMin : clientMin
   }
 
   const buildPayload: SoroswapBuildPayload = {

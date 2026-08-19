@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { MultisigAccount, MultisigDraftMember, MultisigPendingInvite, StoredAccount } from '@latch/types'
+import type {
+  MultisigAccount,
+  MultisigDraftMember,
+  MultisigPendingInvite,
+  StoredAccount,
+} from '@latch/types'
 
 import {
   draftMembersToSigners,

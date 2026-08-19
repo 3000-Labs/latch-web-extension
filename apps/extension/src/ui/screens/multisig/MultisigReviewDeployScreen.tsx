@@ -90,7 +90,10 @@ export function MultisigReviewDeployScreen({
 
         {deployError ? <p className="text-sm text-red-400">{deployError}</p> : null}
 
-        <OnboardingPrimaryButton disabled={deployBusy || predictLoading || !address} onClick={onDeploy}>
+        <OnboardingPrimaryButton
+          disabled={deployBusy || predictLoading || !address}
+          onClick={onDeploy}
+        >
           {deployBusy ? 'Deploying…' : 'Deploy multisig wallet'}
         </OnboardingPrimaryButton>
       </div>

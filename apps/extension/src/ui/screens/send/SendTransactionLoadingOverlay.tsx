@@ -17,15 +17,9 @@ export function SendTransactionLoadingOverlay({
 }) {
   const amountLabel = formatSummaryAmountLine(amount, symbol)
   const addressLabel = `{${truncateMiddle(recipientAddress, 6, 4)}}`
-  const recipient =
-    recipientName?.trim()
-      ? `${recipientName.trim()} ${addressLabel}`
-      : addressLabel
+  const recipient = recipientName?.trim() ? `${recipientName.trim()} ${addressLabel}` : addressLabel
 
   return (
-    <FullScreenLoaderOverlay
-      label="Sending..."
-      description={`${amountLabel} to ${recipient}`}
-    />
+    <FullScreenLoaderOverlay label="Sending..." description={`${amountLabel} to ${recipient}`} />
   )
 }

@@ -70,7 +70,9 @@ export async function removeMultisigDraftMember(args: {
   return unwrapMultisigDraft(raw) ?? raw
 }
 
-export async function predictMultisigDraftAddress(draftId: string): Promise<MultisigPredictResponse> {
+export async function predictMultisigDraftAddress(
+  draftId: string
+): Promise<MultisigPredictResponse> {
   return await latchFetch<MultisigPredictResponse>(
     `/api/multisig/drafts/${encodeURIComponent(draftId)}/predict`,
     { method: 'POST' }

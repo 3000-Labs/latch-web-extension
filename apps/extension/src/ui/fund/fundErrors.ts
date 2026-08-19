@@ -1,8 +1,7 @@
 import type { SerializableError } from '@latch/types'
 
 /** Known empty factory C-address (diagnostic note only — no repair/rewrite here). */
-const KNOWN_DISPLACED_FACTORY =
-  'CCATLEKRXNV7OXJ2OD3BHFVAZG4A2KRS6VPSD7BO6KTBL6YHX5MESRJ5'
+const KNOWN_DISPLACED_FACTORY = 'CCATLEKRXNV7OXJ2OD3BHFVAZG4A2KRS6VPSD7BO6KTBL6YHX5MESRJ5'
 
 function isKnownDisplacedFactoryAddress(address: string): boolean {
   return address.trim() === KNOWN_DISPLACED_FACTORY
@@ -17,16 +16,16 @@ export type FormatFundErrorOptions = {
  * Cause-specific Fund / V1-auth error copy. Prefer this over attributing every
  * UNAUTHORIZED to WEBAUTHN_ALLOWED_ORIGINS alone.
  */
-export function formatFundError(
-  e?: SerializableError,
-  opts?: FormatFundErrorOptions
-): string {
+export function formatFundError(e?: SerializableError, opts?: FormatFundErrorOptions): string {
   if (!e) return 'Unknown error'
 
   const code = (e.code ?? '').trim()
   const message = typeof e.message === 'string' ? e.message.trim() : ''
 
-  if (code === 'network_mismatch' || /issued a .+ challenge while the wallet is on/i.test(message)) {
+  if (
+    code === 'network_mismatch' ||
+    /issued a .+ challenge while the wallet is on/i.test(message)
+  ) {
     return (
       message ||
       'The Latch API challenge network does not match your active wallet network. Switch network or try again.'

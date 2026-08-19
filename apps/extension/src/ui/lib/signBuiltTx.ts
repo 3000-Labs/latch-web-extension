@@ -12,7 +12,10 @@ import type {
 import { signAuthEntry } from '@stellar/freighter-api'
 import { startAuthentication } from '@simplewebauthn/browser'
 
-import { normalizeDelegatedSignatureBase64, resolveDelegatedAuthEntryForSigner } from '../../lib/delegatedAuthSubmit'
+import {
+  normalizeDelegatedSignatureBase64,
+  resolveDelegatedAuthEntryForSigner,
+} from '../../lib/delegatedAuthSubmit'
 import {
   assertPasskeyAssertionMatchesAuthDigest,
   buildPasskeySigDataXdrFromAssertion,
@@ -38,7 +41,9 @@ type PhantomSolanaProvider = {
   signMessage(message: Uint8Array): Promise<Uint8Array | { signature: Uint8Array }>
 }
 
-export function extractTransactionHash(data: SubmitTxResponse | null | undefined): string | undefined {
+export function extractTransactionHash(
+  data: SubmitTxResponse | null | undefined
+): string | undefined {
   if (!data) return undefined
   if (typeof data.transactionHash === 'string') return data.transactionHash
   if (typeof data.hash === 'string') return data.hash
@@ -126,7 +131,9 @@ export async function signAndSubmitBuiltTx(args: {
         signerG: activeAccount.gAddress,
       })
       if (!delegated) {
-        throw new Error('Could not find delegated auth entry for your G-address in this transaction.')
+        throw new Error(
+          'Could not find delegated auth entry for your G-address in this transaction.'
+        )
       }
       const signed = await signAuthEntry(delegated.templateXdr, {
         networkPassphrase,
@@ -317,7 +324,6 @@ export async function signWithoutSubmitBuiltTx(
 ): Promise<{ signedTxXdr?: string; signedAuthEntry?: string }> {
   const res = await signAndSubmitBuiltTx({ ...args, submit: false })
   const signedTxXdr = extractSignedTxXdr(res)
-  const signedAuthEntry =
-    typeof res.signedAuthEntry === 'string' ? res.signedAuthEntry : undefined
+  const signedAuthEntry = typeof res.signedAuthEntry === 'string' ? res.signedAuthEntry : undefined
   return { signedTxXdr, signedAuthEntry }
 }

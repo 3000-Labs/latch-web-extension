@@ -31,8 +31,7 @@ export function SendSelectRecipientScreen({
     const q = search.trim().toLowerCase()
     if (!q) return entries
     return entries.filter(
-      (entry) =>
-        entry.name.toLowerCase().includes(q) || entry.address.toLowerCase().includes(q)
+      (entry) => entry.name.toLowerCase().includes(q) || entry.address.toLowerCase().includes(q)
     )
   }, [entries, search])
 

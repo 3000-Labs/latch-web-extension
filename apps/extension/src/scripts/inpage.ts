@@ -70,10 +70,7 @@ async function sendToBackground<TData>(type: string, payload: unknown): Promise<
         return
       }
       reject(
-        new LatchProviderError(
-          data.error?.message ?? 'Latch request failed',
-          data.error?.code
-        )
+        new LatchProviderError(data.error?.message ?? 'Latch request failed', data.error?.code)
       )
     }
 

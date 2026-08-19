@@ -4,10 +4,12 @@ import { parseApiError } from './errors'
 
 describe('api/errors', () => {
   it('parses webapp flat error shape', () => {
-    expect(parseApiError(409, { error: 'Context rule required', code: 'NO_CONTEXT_RULE' })).toEqual({
-      message: 'Context rule required',
-      code: 'NO_CONTEXT_RULE',
-    })
+    expect(parseApiError(409, { error: 'Context rule required', code: 'NO_CONTEXT_RULE' })).toEqual(
+      {
+        message: 'Context rule required',
+        code: 'NO_CONTEXT_RULE',
+      }
+    )
   })
 
   it('parses v1 nested error shape', () => {

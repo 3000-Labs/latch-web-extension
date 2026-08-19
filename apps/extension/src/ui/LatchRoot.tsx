@@ -46,12 +46,7 @@ import type {
   UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
-import {
-  isAllowed,
-  isConnected,
-  setAllowed,
-  getAddress,
-} from '@stellar/freighter-api'
+import { isAllowed, isConnected, setAllowed, getAddress } from '@stellar/freighter-api'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 import bs58 from 'bs58'
 import { ExternalLink } from 'lucide-react'
@@ -92,9 +87,7 @@ import { HomeLoadingOverlay } from './screens/home/components/HomeLoadingOverlay
 import { MainBottomNav, type MainTab } from './screens/home/components/MainBottomNav'
 import { storedAccountLabel } from './lib/storedAccountLabel'
 import { FullScreenLoaderOverlay } from './components/FullScreenLoaderOverlay'
-import {
-  markMigrationHomePromoCompleted,
-} from './lib/migrationHomePrefs'
+import { markMigrationHomePromoCompleted } from './lib/migrationHomePrefs'
 import { GrantAccessScreen } from './screens/dapp/GrantAccessScreen'
 import { ExternalSignReviewScreen } from './screens/dapp/ExternalSignReviewScreen'
 import {
@@ -465,8 +458,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const [seedEncryptionPassword, setSeedEncryptionPassword] = useState('')
   const [seedEncryptionConfirm, setSeedEncryptionConfirm] = useState('')
   const [unlockVaultPassword, setUnlockVaultPassword] = useState('')
-  const [transactionDetailReturnRoute, setTransactionDetailReturnRoute] =
-    useState<Route>('history')
+  const [transactionDetailReturnRoute, setTransactionDetailReturnRoute] = useState<Route>('history')
 
   const needsMnemonicUnlock = useMemo(
     () =>
@@ -512,10 +504,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     if (!activeAccount?.id) return
     setSwapCatalogLoading(true)
     try {
-      const res = await sendToBackground<
-        GetSwapTokenCatalogRequest,
-        GetSwapTokenCatalogResponse
-      >({
+      const res = await sendToBackground<GetSwapTokenCatalogRequest, GetSwapTokenCatalogResponse>({
         type: 'GET_SWAP_TOKEN_CATALOG',
         payload: { accountId: activeAccount.id },
       })
@@ -619,10 +608,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     return map
   }, [swapPayTokenCatalogWithIcons, swapReceiveTokenCatalogWithIcons])
 
-  const resolveSwapToken = useCallback(
-    (id: string) => swapTokenById.get(id),
-    [swapTokenById]
-  )
+  const resolveSwapToken = useCallback((id: string) => swapTokenById.get(id), [swapTokenById])
 
   /** Prefetch /begin options so Create / Continue does not await the network before credentials. */
   const passkeyPrefetchRef = useRef<
@@ -841,10 +827,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   }, [accountsHydrated, accountsLoadSucceeded, accounts.length])
 
   useEffect(() => {
-    function onStorage(
-      changes: { [key: string]: chrome.storage.StorageChange },
-      area: string
-    ) {
+    function onStorage(changes: { [key: string]: chrome.storage.StorageChange }, area: string) {
       if (area !== 'local') return
       if (changes['latch.pendingDappRequests']) {
         void loadPendingDapp().catch(() => {})
@@ -986,10 +969,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           return
         }
         const items = (res.data?.items ?? []).map((row) =>
-          mapTransactionToHistoryItem(
-            row,
-            iconUrlForCode(portfolioRowsRef.current, row.assetCode)
-          )
+          mapTransactionToHistoryItem(row, iconUrlForCode(portfolioRowsRef.current, row.assetCode))
         )
         setHistorySections(groupHistoryItems(items))
       } finally {
@@ -1386,17 +1366,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
     void loadPortfolio()
   }
 
-  const loadMarketPriceForToken = useCallback(
-    async (code: string): Promise<number | null> => {
-      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
-        type: 'GET_MARKET_PRICES',
-        payload: { tokens: [code] },
-      })
-      if (!res.ok || !res.data) return null
-      return res.data.pricesByCodeUpper[code.toUpperCase()]?.priceUsd ?? null
-    },
-    []
-  )
+  const loadMarketPriceForToken = useCallback(async (code: string): Promise<number | null> => {
+    const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+      type: 'GET_MARKET_PRICES',
+      payload: { tokens: [code] },
+    })
+    if (!res.ok || !res.data) return null
+    return res.data.pricesByCodeUpper[code.toUpperCase()]?.priceUsd ?? null
+  }, [])
 
   useEffect(() => {
     if (route !== 'send') return
@@ -1664,7 +1641,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
 
   const fetchSendFeeEstimate = useCallback(async (): Promise<BuildSendTxResponse | null> => {
     if (!activeAccount || activeAccount.mode === 'multisig') return null
-    const buildBody = buildSendRequestFromDraft(sendDraft, activeAccount, sendTokenPriceUsd, activeNetwork)
+    const buildBody = buildSendRequestFromDraft(
+      sendDraft,
+      activeAccount,
+      sendTokenPriceUsd,
+      activeNetwork
+    )
     if (!buildBody) return null
     try {
       const buildRes = await sendToBackground<BuildSendTxRequest, BuildSendTxResponse>({
@@ -1803,8 +1785,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   const containerClass =
     surface === 'sidepanel' ? 'h-screen w-full min-w-[320px]' : 'h-[600px] w-[360px]'
   const flowHeightClass = surface === 'sidepanel' ? 'flex-1 min-h-0' : 'h-[520px]'
-  const showTopHeader =
-    page === 'main' && !needsMnemonicUnlock && route === 'migration'
+  const showTopHeader = page === 'main' && !needsMnemonicUnlock && route === 'migration'
   // Home shell waits on portfolio only. History (Horizon + SAC) can be slow; gating
   // the whole home UI on it left a stuck "Loading..." overlay after the heavier fetch.
   const showAccountsHydrateOverlay =
@@ -1956,37 +1937,34 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                               surface,
                               accountId: activeAccount.id,
                               accountMode: activeAccount.mode,
-                              activeSmartSuffix: (
-                                activeAccount.smartAccountAddress ?? ''
-                              ).slice(-8),
-                              reqSmartSuffix: (
-                                req.signRequest?.smartAccountAddress ?? ''
-                              ).slice(-8),
+                              activeSmartSuffix: (activeAccount.smartAccountAddress ?? '').slice(
+                                -8
+                              ),
+                              reqSmartSuffix: (req.signRequest?.smartAccountAddress ?? '').slice(
+                                -8
+                              ),
                               accountsMatch:
                                 activeAccount.smartAccountAddress ===
                                 req.signRequest?.smartAccountAddress,
-                              passkeyCredSuffix: (
-                                activeAccount.passkeyCredentialId ?? ''
-                              ).slice(-12),
-                              hasPasskeyCred: Boolean(
-                                activeAccount.passkeyCredentialId?.trim()
+                              passkeyCredSuffix: (activeAccount.passkeyCredentialId ?? '').slice(
+                                -12
                               ),
-                              hasKeyData: Boolean(
-                                activeAccount.passkeyKeyDataHex?.trim()
-                              ),
+                              hasPasskeyCred: Boolean(activeAccount.passkeyCredentialId?.trim()),
+                              hasKeyData: Boolean(activeAccount.passkeyKeyDataHex?.trim()),
                               submit: req.signRequest?.submit,
                               origin: req.origin,
                             },
                           })
                           // #endregion
                           if (req.signRequest?.submit === false) {
-                            const { signedTxXdr, signedAuthEntry } =
-                              await signWithoutSubmitBuiltTx({
+                            const { signedTxXdr, signedAuthEntry } = await signWithoutSubmitBuiltTx(
+                              {
                                 build: req.prepared!,
                                 activeAccount,
                                 surface,
                                 onProgress: setDappProgressLabel,
-                              })
+                              }
+                            )
                             await resolvePendingDapp(req, true, {
                               signedTxXdr,
                               signedAuthEntry,
@@ -2423,7 +2401,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               </div>
             ) : null}
 
-            {!loading && (route === 'importSeed' || route === 'importSeedEncrypt') && !showOnboardingTabPrompt ? (
+            {!loading &&
+            (route === 'importSeed' || route === 'importSeedEncrypt') &&
+            !showOnboardingTabPrompt ? (
               <div
                 className={[
                   `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
@@ -2509,9 +2489,7 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   totalBalanceUsd={totalBalanceUsd}
                   balanceChangePercent="0.00%"
                   showPendingMultisigDot={hasPendingMultisigProposals}
-                  onOpenSwap={
-                    activeAccount?.mode === 'multisig' ? () => {} : openSwapFromNav
-                  }
+                  onOpenSwap={activeAccount?.mode === 'multisig' ? () => {} : openSwapFromNav}
                   swapDisabled={activeAccount?.mode === 'multisig'}
                   onOpenSend={openSendFlow}
                   onOpenReceive={() => setRoute('receive')}
@@ -2618,12 +2596,16 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                           setDappNetwork(res.data.network)
                           setNetworkLabel(
                             res.data.networkLabel ||
-                              (res.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
+                              (res.data.network === 'mainnet'
+                                ? 'Stellar Mainnet'
+                                : 'Stellar Testnet')
                           )
-                          const setupRes = await sendToBackground<undefined, GetSetupStateResponse>({
-                            type: 'GET_SETUP_STATE',
-                            payload: undefined,
-                          })
+                          const setupRes = await sendToBackground<undefined, GetSetupStateResponse>(
+                            {
+                              type: 'GET_SETUP_STATE',
+                              payload: undefined,
+                            }
+                          )
                           if (setupRes.ok && setupRes.data) setSetupState(setupRes.data.setupState)
                           await refreshAccounts()
                         }}
@@ -3018,7 +3000,6 @@ export function LatchRoot({ surface }: { surface: Surface }) {
           <SwapTransactionLoadingOverlay />
         </div>
       ) : null}
-
     </div>
   )
 }

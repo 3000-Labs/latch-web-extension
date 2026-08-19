@@ -14,21 +14,11 @@ function Pill({ label }: { label: string }) {
   )
 }
 
-function SummaryRow({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
+function SummaryRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex w-full items-center justify-between text-[12px]">
-      <span className="font-normal leading-[1.34] tracking-[-0.24px] text-[#b3b3b3]">
-        {label}
-      </span>
-      <span className="font-medium leading-[1.3] tracking-[-0.12px] text-[#fcfcfc]">
-        {value}
-      </span>
+      <span className="font-normal leading-[1.34] tracking-[-0.24px] text-[#b3b3b3]">{label}</span>
+      <span className="font-medium leading-[1.3] tracking-[-0.12px] text-[#fcfcfc]">{value}</span>
     </div>
   )
 }
@@ -109,4 +99,3 @@ export function ReviewConfirmScreen({
     </div>
   )
 }
-

@@ -15,11 +15,7 @@ export function buildMoonPayBuyUrl(params: {
   /** Active Stellar network; live keys are refused on testnet. */
   network?: 'testnet' | 'mainnet'
 }): string {
-  const apiKey = (
-    params.apiKey ??
-    process.env.PLASMO_PUBLIC_MOONPAY_API_KEY ??
-    ''
-  ).trim()
+  const apiKey = (params.apiKey ?? process.env.PLASMO_PUBLIC_MOONPAY_API_KEY ?? '').trim()
   if (!apiKey) {
     throw new Error('MoonPay is not configured (missing PLASMO_PUBLIC_MOONPAY_API_KEY)')
   }

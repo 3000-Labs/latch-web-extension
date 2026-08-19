@@ -45,13 +45,15 @@ export function normalizeMultisigProposalDetail(raw: unknown): MultisigProposalD
   if (!raw || typeof raw !== 'object') return raw as MultisigProposalDetail
   const rec = raw as Record<string, unknown>
 
-  const proposal = (rec.proposal && typeof rec.proposal === 'object'
-    ? (rec.proposal as Record<string, unknown>)
-    : rec) as MultisigProposalDetail
+  const proposal = (
+    rec.proposal && typeof rec.proposal === 'object'
+      ? (rec.proposal as Record<string, unknown>)
+      : rec
+  ) as MultisigProposalDetail
 
-  const account = (rec.account && typeof rec.account === 'object'
-    ? (rec.account as Record<string, unknown>)
-    : {}) as MultisigAccount
+  const account = (
+    rec.account && typeof rec.account === 'object' ? (rec.account as Record<string, unknown>) : {}
+  ) as MultisigAccount
 
   const members =
     (Array.isArray(rec.members) ? (rec.members as MultisigAccountMember[]) : undefined) ??
@@ -59,7 +61,9 @@ export function normalizeMultisigProposalDetail(raw: unknown): MultisigProposalD
 
   const approvals =
     (Array.isArray(rec.approvals) ? (rec.approvals as MultisigProposalApproval[]) : undefined) ??
-    (Array.isArray(proposal.approvals) ? (proposal.approvals as MultisigProposalApproval[]) : undefined)
+    (Array.isArray(proposal.approvals)
+      ? (proposal.approvals as MultisigProposalApproval[])
+      : undefined)
 
   // Flatten account context (threshold/address) onto proposal for UI convenience.
   return {
@@ -67,7 +71,8 @@ export function normalizeMultisigProposalDetail(raw: unknown): MultisigProposalD
     smartAccountAddress:
       proposal.smartAccountAddress?.trim() || account.smartAccountAddress?.trim() || undefined,
     threshold: proposal.threshold ?? account.threshold,
-    memberId: proposal.memberId ?? (account as any).memberId ?? (rec.memberId as string | undefined),
+    memberId:
+      proposal.memberId ?? (account as any).memberId ?? (rec.memberId as string | undefined),
     members,
     approvals,
     // Prefer nested proposal authDigestHex if present.

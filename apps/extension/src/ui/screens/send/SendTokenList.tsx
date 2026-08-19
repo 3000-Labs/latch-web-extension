@@ -36,14 +36,14 @@ export function SendTokenList({
 
   if (loading) {
     return (
-      <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">Loading balances…</div>
+      <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">
+        Loading balances…
+      </div>
     )
   }
 
   if (error) {
-    return (
-      <div className="py-12 text-center text-sm tracking-[-0.28px] text-red-300">{error}</div>
-    )
+    return <div className="py-12 text-center text-sm tracking-[-0.28px] text-red-300">{error}</div>
   }
 
   if (filtered.length === 0) {

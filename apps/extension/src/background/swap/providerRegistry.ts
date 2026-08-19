@@ -14,9 +14,7 @@ const REGISTRY_TTL_MS = 5 * 60_000
 let memoryCache: { network: SwapNetwork; at: number; registry: SwapProviderTokenRegistry } | null =
   null
 /** In-flight loads keyed by network so a switch cannot await/poison the other network. */
-const inflightByNetwork: Partial<
-  Record<SwapNetwork, Promise<SwapProviderTokenRegistry>>
-> = {}
+const inflightByNetwork: Partial<Record<SwapNetwork, Promise<SwapProviderTokenRegistry>>> = {}
 
 function buildMainnetRegistry(items: TokenListItem[]): SwapProviderTokenRegistry {
   // Mainnet passphrase is fixed; network switch only changes which registry we load.

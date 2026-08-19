@@ -26,10 +26,7 @@ export function AccountInformationScreen({
   const [walletName, setWalletName] = useState(accountName)
   const canSave = walletName.trim() !== accountName.trim() && walletName.trim().length > 0
 
-  const addressParts = useMemo(
-    () => formatSmartAccountAddress(accountAddress),
-    [accountAddress]
-  )
+  const addressParts = useMemo(() => formatSmartAccountAddress(accountAddress), [accountAddress])
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col gap-4">
@@ -42,10 +39,7 @@ export function AccountInformationScreen({
               <div className="size-10 shrink-0 overflow-hidden rounded-[32px]">
                 <img src={userAvatarUrl} alt="" className="size-full object-cover" />
               </div>
-              <button
-                type="button"
-                className="text-xs font-medium tracking-[-0.12px] text-primary"
-              >
+              <button type="button" className="text-xs font-medium tracking-[-0.12px] text-primary">
                 Change Profile Picture
               </button>
             </div>

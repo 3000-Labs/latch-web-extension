@@ -168,7 +168,10 @@ describe('tryHandleDepositMessage', () => {
         memoId: '12345',
       })
     )
-    expect(sendResponse).toHaveBeenCalledWith({ ok: true, data: expect.objectContaining({ memo_id: '12345' }) })
+    expect(sendResponse).toHaveBeenCalledWith({
+      ok: true,
+      data: expect.objectContaining({ memo_id: '12345' }),
+    })
   })
 
   it('maps unsigned live MoonPay failures to moonpay_unsigned_url', async () => {
@@ -183,7 +186,9 @@ describe('tryHandleDepositMessage', () => {
       expires_at: '2026-01-01T00:00:00Z',
     })
     openMoonPayBuyTab.mockRejectedValue(
-      new Error('MoonPay live URLs with walletAddress require a server-signed signature (missing widget_url)')
+      new Error(
+        'MoonPay live URLs with walletAddress require a server-signed signature (missing widget_url)'
+      )
     )
 
     await expect(

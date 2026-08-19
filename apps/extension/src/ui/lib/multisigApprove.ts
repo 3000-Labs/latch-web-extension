@@ -48,9 +48,7 @@ export function findProposalMember(
   return proposal.members?.find((m) => m.id === id)
 }
 
-export function isMultisigDelegatedMember(
-  member: MultisigAccountMember | undefined
-): boolean {
+export function isMultisigDelegatedMember(member: MultisigAccountMember | undefined): boolean {
   if (!member) return false
   const memberType = (member.memberType ?? member.type ?? '').trim().toLowerCase()
   if (memberType === 'seed' || memberType === 'delegated') return true
@@ -58,15 +56,11 @@ export function isMultisigDelegatedMember(
   return false
 }
 
-export function isMultisigPasskeyMember(
-  member: MultisigAccountMember | undefined
-): boolean {
+export function isMultisigPasskeyMember(member: MultisigAccountMember | undefined): boolean {
   if (!member || isMultisigDelegatedMember(member)) return false
   const memberType = (member.memberType ?? member.type ?? '').trim().toLowerCase()
   return (
-    memberType === 'passkey' ||
-    memberType === 'webauthn' ||
-    Boolean(member.credentialId?.trim())
+    memberType === 'passkey' || memberType === 'webauthn' || Boolean(member.credentialId?.trim())
   )
 }
 
@@ -227,7 +221,8 @@ function findPasskeySigningAccount(args: {
         (account.id === activeAccount.id ||
           account.smartAccountAddress === activeAccount.smartAccountAddress ||
           Boolean(account.passkeyKeyDataHex?.trim()))
-    ) ?? accounts.find((account) => account.mode === 'passkey' && account.passkeyCredentialId?.trim())
+    ) ??
+    accounts.find((account) => account.mode === 'passkey' && account.passkeyCredentialId?.trim())
   )
 }
 

@@ -46,7 +46,9 @@ export async function v1FetchAbsolute<T>(
     try {
       json = text ? JSON.parse(text) : undefined
     } catch {
-      throw new BackendError(`v1 API invalid JSON (${res.status}) for ${url}`, { status: res.status })
+      throw new BackendError(`v1 API invalid JSON (${res.status}) for ${url}`, {
+        status: res.status,
+      })
     }
 
     if (!res.ok) {
@@ -154,7 +156,10 @@ export async function refreshV1Tokens(refreshToken: string): Promise<V1TokenPair
   }
 }
 
-export async function requestWalletChallenge(wallet: string, keyType: string): Promise<Record<string, unknown>> {
+export async function requestWalletChallenge(
+  wallet: string,
+  keyType: string
+): Promise<Record<string, unknown>> {
   const body: Record<string, unknown> = { wallet, key_type: keyType }
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id

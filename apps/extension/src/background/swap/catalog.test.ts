@@ -1,10 +1,7 @@
 import { Asset, Networks } from '@stellar/stellar-sdk'
 import { describe, expect, it } from 'vitest'
 
-import {
-  buildSwapProviderTokenRegistry,
-  type SwapProviderTokenRegistry,
-} from '@latch/swap'
+import { buildSwapProviderTokenRegistry, type SwapProviderTokenRegistry } from '@latch/swap'
 import type { SmartAccountBalanceRow } from '@latch/types'
 
 import type { TokenListItem } from '../assetTokenLists'
@@ -215,7 +212,12 @@ describe('buildReceiveTokensFromListsAndBalances', () => {
       amount: '3',
       decimals: 7,
     }
-    const tokens = buildReceiveTokensFromListsAndBalances([], [xlmRow('1'), custom], PASSPHRASE, 'testnet')
+    const tokens = buildReceiveTokensFromListsAndBalances(
+      [],
+      [xlmRow('1'), custom],
+      PASSPHRASE,
+      'testnet'
+    )
     expect(tokens.some((t) => t.symbol === 'CUSTOM' && t.balance === '3')).toBe(true)
   })
 

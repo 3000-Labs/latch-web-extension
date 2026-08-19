@@ -4,10 +4,7 @@ import { OnboardingAnimatedCard } from './OnboardingAnimatedCard'
 import { OnboardingConfirmPasswordCard } from './OnboardingConfirmPasswordCard'
 import { OnboardingCreateAccountCard } from './OnboardingCreateAccountCard'
 import { OnboardingCreatePasskeyCard } from './OnboardingCreatePasskeyCard'
-import {
-  OnboardingHaveWalletCard,
-  type ImportMethod,
-} from './OnboardingHaveWalletCard'
+import { OnboardingHaveWalletCard, type ImportMethod } from './OnboardingHaveWalletCard'
 import { OnboardingImportFailedCard } from './OnboardingImportFailedCard'
 import { OnboardingImportRecoveryPhraseCard } from './OnboardingImportRecoveryPhraseCard'
 import { OnboardingImportSuccessCard } from './OnboardingImportSuccessCard'

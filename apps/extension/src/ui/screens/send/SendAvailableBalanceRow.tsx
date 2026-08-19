@@ -24,7 +24,10 @@ export function SendAvailableBalanceRow({
         onClick={onMax}
         className="relative flex h-8 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-[#2b2a29] px-5 shadow-[0px_12px_13.1px_-8px_rgba(56,56,56,0.1)]"
       >
-        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[10px] bg-[#383838]" />
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 rounded-[10px] bg-[#383838]"
+        />
         <span className="relative text-xs font-medium leading-[1.3] tracking-[-0.12px] text-[#d7d7d7]">
           Max
         </span>

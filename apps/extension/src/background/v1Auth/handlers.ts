@@ -1,7 +1,11 @@
 import type { BackgroundMessage } from '@latch/types'
 
 import { BackendError } from '../api/client'
-import { completeWalletSignInFromAssertion, requestWalletChallenge, resolveAccessToken } from '../api/v1Client'
+import {
+  completeWalletSignInFromAssertion,
+  requestWalletChallenge,
+  resolveAccessToken,
+} from '../api/v1Client'
 import { v1AuthWalletForLinkedAccount } from '../cosign/v1AuthWallet'
 import { getActiveNetwork } from '../network/config'
 import { getAccounts } from '../storage'

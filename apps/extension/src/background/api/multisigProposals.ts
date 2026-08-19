@@ -16,10 +16,9 @@ export async function listMultisigProposals(
   smartAccountAddress: string
 ): Promise<ListMultisigProposalsResponse> {
   const q = encodeURIComponent(smartAccountAddress)
-  return await latchFetch<ListMultisigProposalsResponse>(
-    `/api/multisig/proposals?account=${q}`,
-    { method: 'GET' }
-  )
+  return await latchFetch<ListMultisigProposalsResponse>(`/api/multisig/proposals?account=${q}`, {
+    method: 'GET',
+  })
 }
 
 export async function createMultisigProposal(

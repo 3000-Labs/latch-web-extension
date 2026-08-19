@@ -71,7 +71,9 @@ export function SendSummaryScreen({
             feeDisplay={feeDisplay}
           />
           {sendError && !isSending ? (
-            <p className="w-full text-center text-sm tracking-[-0.28px] text-red-300">{sendError}</p>
+            <p className="w-full text-center text-sm tracking-[-0.28px] text-red-300">
+              {sendError}
+            </p>
           ) : null}
         </div>
 

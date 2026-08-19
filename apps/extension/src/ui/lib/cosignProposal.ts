@@ -1,4 +1,8 @@
-import type { BuildSendTxResponse, CreateMultisigProposalResponse, StoredAccount } from '@latch/types'
+import type {
+  BuildSendTxResponse,
+  CreateMultisigProposalResponse,
+  StoredAccount,
+} from '@latch/types'
 
 import { friendlyError, sendToBackground } from './backgroundClient'
 import { apiProposeCosign } from './cosignFlow'
@@ -23,11 +27,7 @@ export async function createCosignSendProposalWithSetup(args: {
     )
   }
 
-  const setupBody = buildSetupRequestFromDraft(
-    args.draft,
-    args.multisigAccount,
-    signingPasskey
-  )
+  const setupBody = buildSetupRequestFromDraft(args.draft, args.multisigAccount, signingPasskey)
   if (!setupBody) {
     throw new Error(
       passkeySetupPrerequisiteError(signingPasskey) ??

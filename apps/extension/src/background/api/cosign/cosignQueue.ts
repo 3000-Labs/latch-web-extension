@@ -1,4 +1,9 @@
-import type { CosignRequest, CreateCosignRequestInput, PostJoinRelayRequest, JoinRelayRecord } from '@latch/types'
+import type {
+  CosignRequest,
+  CreateCosignRequestInput,
+  PostJoinRelayRequest,
+  JoinRelayRecord,
+} from '@latch/types'
 
 import { v1FetchForWallet } from '../v1Client'
 
@@ -58,7 +63,10 @@ export async function markCosignSubmitted(
   })
 }
 
-export async function cancelCosignRequest(wallet: string, id: string): Promise<{ message: string }> {
+export async function cancelCosignRequest(
+  wallet: string,
+  id: string
+): Promise<{ message: string }> {
   return v1FetchForWallet(wallet, `/v1/cosign/requests/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   })
@@ -78,7 +86,10 @@ export async function postJoinRelay(
   })
 }
 
-export async function getJoinRelay(wallet: string, inviteToken: string): Promise<JoinRelayRecord | null> {
+export async function getJoinRelay(
+  wallet: string,
+  inviteToken: string
+): Promise<JoinRelayRecord | null> {
   try {
     return await v1FetchForWallet<JoinRelayRecord>(
       wallet,
@@ -86,14 +97,22 @@ export async function getJoinRelay(wallet: string, inviteToken: string): Promise
       { method: 'GET' }
     )
   } catch (err) {
-    if (err && typeof err === 'object' && 'status' in err && (err as { status?: number }).status === 404) {
+    if (
+      err &&
+      typeof err === 'object' &&
+      'status' in err &&
+      (err as { status?: number }).status === 404
+    ) {
       return null
     }
     throw err
   }
 }
 
-export async function deleteJoinRelay(wallet: string, inviteToken: string): Promise<{ message: string }> {
+export async function deleteJoinRelay(
+  wallet: string,
+  inviteToken: string
+): Promise<{ message: string }> {
   return v1FetchForWallet(wallet, `/v1/join-relays/${encodeURIComponent(inviteToken)}`, {
     method: 'DELETE',
   })

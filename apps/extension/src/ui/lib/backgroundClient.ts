@@ -34,10 +34,7 @@ export function friendlyError(e?: SerializableError): string {
       'MoonPay did not return a signed widget URL. Funding cannot open an unsigned live buy link.'
     )
   }
-  if (
-    typeof e.message === 'string' &&
-    /failed to build setup transaction/i.test(e.message)
-  ) {
+  if (typeof e.message === 'string' && /failed to build setup transaction/i.test(e.message)) {
     return 'Could not set up send rules. Your smart account may not be deployed on this network yet — try again after the account finishes deploying.'
   }
   if (e.status === 403) return 'Not authorized.'

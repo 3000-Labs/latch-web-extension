@@ -46,9 +46,7 @@ import {
   listReusablePasskeyAccounts,
 } from '../lib/multisigPasskey'
 import { nextPasskeyRegistrationDisplayName } from '../webauthn/passkey'
-import {
-  findDraftMemberForStoredAccount,
-} from '../lib/multisigJoinHelpers'
+import { findDraftMemberForStoredAccount } from '../lib/multisigJoinHelpers'
 import { MultisigJoinFlow } from './MultisigJoinFlow'
 import { multisigDraftMembersEqual } from '../lib/multisigMembers'
 import { storedAccountLabel } from '../lib/storedAccountLabel'
@@ -149,10 +147,7 @@ export function MultisigRouteViews({
   const [proposalActionError, setProposalActionError] = useState<string | null>(null)
 
   const inviteUrl = wizard ? buildMultisigInviteUrl(wizard.inviteToken) : ''
-  const reusablePasskeyAccounts = useMemo(
-    () => listReusablePasskeyAccounts(accounts),
-    [accounts]
-  )
+  const reusablePasskeyAccounts = useMemo(() => listReusablePasskeyAccounts(accounts), [accounts])
   const [selectedPasskeyAccountId, setSelectedPasskeyAccountId] = useState<string | undefined>()
   const passkeyPickerOptions = useMemo(
     () =>
@@ -394,7 +389,14 @@ export function MultisigRouteViews({
       const data = await apiCreateMultisigDraft()
       const draftId = extractDraftId(data)
       const inviteToken = extractInviteToken(data)
-      setWizard({ walletName, purpose, draftId, inviteToken, threshold: 2, smartAccountAddress: '' })
+      setWizard({
+        walletName,
+        purpose,
+        draftId,
+        inviteToken,
+        threshold: 2,
+        smartAccountAddress: '',
+      })
       setDraftMembers(data.draft?.members ?? [])
       await sendToBackground({
         type: 'MULTISIG_SET_DRAFT_META',
@@ -568,8 +570,9 @@ export function MultisigRouteViews({
         onShareAddress={() => {
           const addr = wizard.smartAccountAddress?.trim()
           if (!addr) return
-          const share = (navigator as unknown as { share?: (data: { text: string }) => Promise<void> })
-            .share
+          const share = (
+            navigator as unknown as { share?: (data: { text: string }) => Promise<void> }
+          ).share
           if (share) {
             void share({ text: addr }).catch(() => {
               void navigator.clipboard.writeText(addr)
@@ -656,10 +659,10 @@ export function MultisigRouteViews({
           onSetRoute('joinMultisig')
         }}
         onRemovePendingInvite={(token) => {
-          void sendToBackground<
-            { token: string },
-            { invites: MultisigPendingInvite[] }
-          >({ type: 'MULTISIG_REMOVE_PENDING_INVITE', payload: { token } }).then((res) => {
+          void sendToBackground<{ token: string }, { invites: MultisigPendingInvite[] }>({
+            type: 'MULTISIG_REMOVE_PENDING_INVITE',
+            payload: { token },
+          }).then((res) => {
             if (res.ok && res.data?.invites) setPendingInvites(res.data.invites)
           })
         }}
@@ -750,10 +753,7 @@ export function MultisigRouteViews({
             if (!activeProposalId) return
             setProposalBusy(true)
             setProposalActionError(null)
-            void sendToBackground<
-              { proposalId: string },
-              MultisigProposalDetail
-            >({
+            void sendToBackground<{ proposalId: string }, MultisigProposalDetail>({
               type: 'MULTISIG_REFRESH_PROPOSAL',
               payload: { proposalId: activeProposalId },
             })

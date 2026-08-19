@@ -5,11 +5,7 @@ import failureIllustrationUrl from 'url:../../../../assets/permissions/session-f
 
 import { OnboardingPrimaryButton } from '../../onboarding/components/OnboardingCardButtons'
 
-export function MultisigDeployFailureScreen({
-  onTryAgain,
-}: {
-  onTryAgain: () => void
-}) {
+export function MultisigDeployFailureScreen({ onTryAgain }: { onTryAgain: () => void }) {
   return (
     <div className="flex h-full min-h-0 w-full flex-col gap-6">
       <div className="flex w-full shrink-0 flex-col items-center">
@@ -42,4 +38,3 @@ export function MultisigDeployFailureScreen({
     </div>
   )
 }
-

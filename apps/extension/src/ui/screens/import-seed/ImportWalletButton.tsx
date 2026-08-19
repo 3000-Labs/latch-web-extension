@@ -15,7 +15,9 @@ export function ImportWalletButton({
       onClick={onClick}
       className={[
         'h-12 w-full rounded-full border border-border text-base font-bold shadow-soft',
-        isDisabled ? 'bg-surface text-fg hover:bg-surface/80' : 'bg-primary text-black hover:bg-primary/80',
+        isDisabled
+          ? 'bg-surface text-fg hover:bg-surface/80'
+          : 'bg-primary text-black hover:bg-primary/80',
         'disabled:cursor-not-allowed disabled:opacity-50',
       ].join(' ')}
     >

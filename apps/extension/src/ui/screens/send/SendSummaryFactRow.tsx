@@ -21,7 +21,12 @@ export function SendSummaryFactRow({
           {value}
         </div>
         {showChevron ? (
-          <img src={chevronRightIconUrl} alt="" className="size-4 shrink-0 opacity-60" aria-hidden />
+          <img
+            src={chevronRightIconUrl}
+            alt=""
+            className="size-4 shrink-0 opacity-60"
+            aria-hidden
+          />
         ) : null}
       </div>
     </div>

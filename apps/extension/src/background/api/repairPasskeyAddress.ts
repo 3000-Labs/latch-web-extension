@@ -1,17 +1,14 @@
 import type { Network, StoredAccount } from '@latch/types'
 
 import { getActiveNetwork } from '../network/config'
-import {
-  getAccountsForNetwork,
-  patchAccountSmartAccountAddress,
-} from '../storage'
+import { getAccountsForNetwork, patchAccountSmartAccountAddress } from '../storage'
 
 /**
  * Empty factory wallet accidentally saved over the funded C-address during mid-send
  * create-or-connect. Map factory → funded address for restore.
  */
 const FACTORY_TO_FUNDED: Record<string, string> = {
-  'CCATLEKRXNV7OXJ2OD3BHFVAZG4A2KRS6VPSD7BO6KTBL6YHX5MESRJ5':
+  CCATLEKRXNV7OXJ2OD3BHFVAZG4A2KRS6VPSD7BO6KTBL6YHX5MESRJ5:
     'CCMC7L43YL4AVKNWWQJGY6PD2ZL6N2KKGVVWZ7GMLNZM2NYB7YMLY7ET',
 }
 

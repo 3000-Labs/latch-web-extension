@@ -31,7 +31,13 @@ import type { Network } from '@latch/types'
 
 const rowIconClass = 'h-5 w-5 object-contain'
 
-type SettingsView = 'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions' | 'network'
+type SettingsView =
+  | 'menu'
+  | 'accountInformation'
+  | 'viewAccounts'
+  | 'addressBook'
+  | 'permissions'
+  | 'network'
 
 export function SettingsScreen({
   surface,
@@ -244,7 +250,9 @@ export function SettingsScreen({
               label="Network"
               onClick={() => setView('network')}
               rightElement={
-                <span className="mr-2 truncate text-sm text-[#fcfcfc]/opacity-60">{networkLabel}</span>
+                <span className="mr-2 truncate text-sm text-[#fcfcfc]/opacity-60">
+                  {networkLabel}
+                </span>
               }
             />
             <SettingItem

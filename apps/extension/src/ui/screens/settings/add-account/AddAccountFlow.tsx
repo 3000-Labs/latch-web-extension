@@ -24,10 +24,7 @@ import {
   prepareRegistrationOptionsForCreate,
 } from '../../../webauthn/passkey'
 import { openPasskeyBridgeAndWait } from '../../../webauthn/passkeyBridge'
-import {
-  AddAccountChooseMethodScreen,
-  type AddAccountMethod,
-} from './AddAccountChooseMethodScreen'
+import { AddAccountChooseMethodScreen, type AddAccountMethod } from './AddAccountChooseMethodScreen'
 import { AddAccountCreatePasskeyScreen } from './AddAccountCreatePasskeyScreen'
 import { AddAccountCreateScreen } from './AddAccountCreateScreen'
 import { AddAccountPasskeyScreen } from './AddAccountPasskeyScreen'
@@ -151,37 +148,43 @@ export function AddAccountFlow({
     }
   }, [step, passkeyPrefetchNonce])
 
-  const runPasskeyAuthentication = useCallback(async (optionsJSON: unknown) => {
-    assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+  const runPasskeyAuthentication = useCallback(
+    async (optionsJSON: unknown) => {
+      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
-    if (surface === 'sidepanel') {
-      return await openPasskeyBridgeAndWait({ mode: 'authentication', optionsJSON })
-    }
+      if (surface === 'sidepanel') {
+        return await openPasskeyBridgeAndWait({ mode: 'authentication', optionsJSON })
+      }
 
-    try {
-      return await startAuthentication({
-        optionsJSON,
-      } as Parameters<typeof startAuthentication>[0])
-    } catch (e) {
-      throw new Error(formatWebauthnBrowserError(e))
-    }
-  }, [surface])
+      try {
+        return await startAuthentication({
+          optionsJSON,
+        } as Parameters<typeof startAuthentication>[0])
+      } catch (e) {
+        throw new Error(formatWebauthnBrowserError(e))
+      }
+    },
+    [surface]
+  )
 
-  const runPasskeyRegistration = useCallback(async (optionsJSON: unknown) => {
-    assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+  const runPasskeyRegistration = useCallback(
+    async (optionsJSON: unknown) => {
+      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
 
-    if (surface === 'sidepanel') {
-      return await openPasskeyBridgeAndWait({ mode: 'registration', optionsJSON })
-    }
+      if (surface === 'sidepanel') {
+        return await openPasskeyBridgeAndWait({ mode: 'registration', optionsJSON })
+      }
 
-    try {
-      return await startRegistration({
-        optionsJSON,
-      } as Parameters<typeof startRegistration>[0])
-    } catch (e) {
-      throw new Error(formatWebauthnBrowserError(e))
-    }
-  }, [surface])
+      try {
+        return await startRegistration({
+          optionsJSON,
+        } as Parameters<typeof startRegistration>[0])
+      } catch (e) {
+        throw new Error(formatWebauthnBrowserError(e))
+      }
+    },
+    [surface]
+  )
 
   const handleAuthenticatePasskey = useCallback(() => {
     setPasskeyActionError(null)

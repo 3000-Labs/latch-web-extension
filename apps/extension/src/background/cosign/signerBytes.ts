@@ -21,9 +21,7 @@ export function ed25519SignerPublicKeyBytes(publicKeyHex: string): Uint8Array {
  * Resolve on-chain signer public key bytes for blind-id derivation.
  * Delegated G-address uses 32-byte ed25519 pubkey when available on account.
  */
-export async function signerPublicKeyBytesForAccount(
-  account: StoredAccount
-): Promise<Uint8Array> {
+export async function signerPublicKeyBytesForAccount(account: StoredAccount): Promise<Uint8Array> {
   if (account.passkeyKeyDataHex?.trim()) {
     return webauthnSignerPublicKeyBytes(account.passkeyKeyDataHex)
   }

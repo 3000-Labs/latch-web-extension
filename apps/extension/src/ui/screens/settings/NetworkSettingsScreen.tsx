@@ -2,13 +2,7 @@ import React, { useState } from 'react'
 
 import type { Network } from '@latch/types'
 
-function SettingsFormField({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function SettingsFormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex w-full flex-col gap-1">
       <span className="text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">
@@ -71,8 +65,8 @@ export function NetworkSettingsScreen({
         </button>
         <h2 className="text-lg font-semibold tracking-[-0.32px] text-[#fcfcfc]">Switch network?</h2>
         <p className="text-sm leading-5 text-[#fcfcfc]/opacity-70">
-          Switch to {label}? Accounts, balances, and pending activity on{' '}
-          {networkLabel} stay on that network and will reappear when you switch back.
+          Switch to {label}? Accounts, balances, and pending activity on {networkLabel} stay on that
+          network and will reappear when you switch back.
         </p>
         {error ? <p className="text-sm text-red-400">{error}</p> : null}
         <button

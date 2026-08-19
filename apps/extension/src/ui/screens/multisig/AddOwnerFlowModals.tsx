@@ -58,7 +58,11 @@ export function AddOwnerFlowModals({
   const canAdd = ownerName.trim().length > 0 && address.trim().length > 0
 
   return (
-    <MultisigModalShell isOpen={step === 'pasteAddress'} title="Add owner by address" onClose={onClose}>
+    <MultisigModalShell
+      isOpen={step === 'pasteAddress'}
+      title="Add owner by address"
+      onClose={onClose}
+    >
       <div className="flex w-full flex-col gap-4">
         <div className="flex items-center gap-2 rounded-[14px] bg-[#2a2928] p-3">
           <img src={addressBookIconUrl} alt="" className="size-6 object-contain" />

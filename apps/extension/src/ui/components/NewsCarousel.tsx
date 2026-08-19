@@ -168,7 +168,9 @@ export function NewsCarousel({ className }: Props) {
   if (!storageReady || slidesCount === 0) return null
 
   return (
-    <div className={['flex w-full flex-col items-center gap-2', className].filter(Boolean).join(' ')}>
+    <div
+      className={['flex w-full flex-col items-center gap-2', className].filter(Boolean).join(' ')}
+    >
       <div
         className="relative h-[100px] w-full overflow-hidden rounded-[20px]"
         onPointerDown={onPointerDown}

@@ -11,10 +11,7 @@
 
 import { Address, Asset, scValToNative, xdr } from '@stellar/stellar-sdk'
 
-import {
-  curatedPortfolioProbes,
-  type StellarNetwork,
-} from './curatedAssets'
+import { curatedPortfolioProbes, type StellarNetwork } from './curatedAssets'
 import { parseHorizonAccountJson } from './migrationBalances'
 import { formatSacRawToHuman, STELLAR_SAC_DISPLAY_DECIMALS } from './sacBalance'
 import {
@@ -271,8 +268,7 @@ export async function fetchGAddressOps(
     const effectsBatch = await Promise.all(
       needEffects.map((op) =>
         horizonGet(`${base}/operations/${String(op.id)}/effects`, signal).then(
-          (r) =>
-            (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? []
+          (r) => (r as { _embedded?: { records?: unknown[] } } | null)?._embedded?.records ?? []
         )
       )
     )
@@ -282,12 +278,8 @@ export async function fetchGAddressOps(
       const effects = effectsBatch[i] as Record<string, unknown>[]
       const matchesCAddr = (e: Record<string, unknown>) =>
         e.contract === cAddress || e.account === cAddress
-      const creditEffect = effects.find(
-        (e) => e.type === 'contract_credited' && matchesCAddr(e)
-      )
-      const debitEffect = effects.find(
-        (e) => e.type === 'contract_debited' && matchesCAddr(e)
-      )
+      const creditEffect = effects.find((e) => e.type === 'contract_credited' && matchesCAddr(e))
+      const debitEffect = effects.find((e) => e.type === 'contract_debited' && matchesCAddr(e))
       if (!creditEffect && !debitEffect) continue
 
       const isIncoming = !!creditEffect
@@ -369,7 +361,12 @@ async function fetchTransferEvents(
 
   for (;;) {
     const start = Math.max(1, latestLedger - reach)
-    const resp = (await sorobanRpc(rpcUrl, 'getEvents', buildParams(start), signal)) as SorobanEventsPage
+    const resp = (await sorobanRpc(
+      rpcUrl,
+      'getEvents',
+      buildParams(start),
+      signal
+    )) as SorobanEventsPage
 
     if (resp?.error) {
       if (reach <= SAC_EVENTS_MIN_REACH_LEDGERS) return []
@@ -560,12 +557,7 @@ export async function fetchSmartAccountPayments(params: {
 
   const [gAddrResult, bundlerResult, sacResult] = await Promise.allSettled([
     params.gAddress?.trim()
-      ? fetchGAddressOps(
-          params.horizonUrl,
-          params.gAddress.trim(),
-          params.cAddress,
-          params.signal
-        )
+      ? fetchGAddressOps(params.horizonUrl, params.gAddress.trim(), params.cAddress, params.signal)
       : Promise.resolve([] as SmartAccountPayment[]),
     bundlerG
       ? fetchBundlerOps(params.horizonUrl, bundlerG, params.cAddress, params.signal)

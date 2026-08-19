@@ -11,11 +11,7 @@ export function MultisigProposalsHomeBanner({
 }) {
   return (
     <div className="relative mb-3 w-full rounded-[14px] border border-[#383838] bg-[#2a2928] pr-10 text-left">
-      <button
-        type="button"
-        onClick={onOpenProposals}
-        className="w-full px-4 py-3 text-left"
-      >
+      <button type="button" onClick={onOpenProposals} className="w-full px-4 py-3 text-left">
         <span className="block text-sm font-semibold text-[#fcfcfc]">
           Multisig proposals
           {pendingCount > 0 ? (

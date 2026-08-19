@@ -105,7 +105,10 @@ export async function getMarketPrices(tokens: string[]): Promise<{
       }
     }
     if (ok) {
-      return { updatedAtMs: memoryCache.updatedAtMs, pricesByCodeUpper: memoryCache.pricesByCodeUpper }
+      return {
+        updatedAtMs: memoryCache.updatedAtMs,
+        pricesByCodeUpper: memoryCache.pricesByCodeUpper,
+      }
     }
   }
 
@@ -114,7 +117,10 @@ export async function getMarketPrices(tokens: string[]): Promise<{
   if (existing) {
     const s = await existing
     memoryCache = mergePrices(memoryCache, s)
-    return { updatedAtMs: memoryCache.updatedAtMs, pricesByCodeUpper: memoryCache.pricesByCodeUpper }
+    return {
+      updatedAtMs: memoryCache.updatedAtMs,
+      pricesByCodeUpper: memoryCache.pricesByCodeUpper,
+    }
   }
 
   const p = fetchPricesSnapshot(tokensLower)
@@ -134,7 +140,10 @@ export async function getMarketPrices(tokens: string[]): Promise<{
   } catch (err) {
     // Network failure: use stale fallback if within window; otherwise return empty map and let UI show '—'.
     if (memoryCache && cacheUsableAsStaleFallback(memoryCache, now)) {
-      return { updatedAtMs: memoryCache.updatedAtMs, pricesByCodeUpper: memoryCache.pricesByCodeUpper }
+      return {
+        updatedAtMs: memoryCache.updatedAtMs,
+        pricesByCodeUpper: memoryCache.pricesByCodeUpper,
+      }
     }
     throw err
   }

@@ -89,11 +89,7 @@ export async function ensurePasskeySmartAccountDeployed(req: {
     try {
       const network = await getActiveNetwork()
       const rpcUrl = sorobanRpcUrlFor(network)
-      const deployed = await isContractInstanceDeployed(
-        rpcUrl,
-        hinted,
-        AbortSignal.timeout(8_000)
-      )
+      const deployed = await isContractInstanceDeployed(rpcUrl, hinted, AbortSignal.timeout(8_000))
       if (deployed) {
         return { smartAccountAddress: hinted, alreadyDeployed: true }
       }

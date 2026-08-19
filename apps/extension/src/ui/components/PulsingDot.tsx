@@ -1,12 +1,6 @@
 import React from 'react'
 
-export function PulsingDot({
-  pulsing,
-  className,
-}: {
-  pulsing?: boolean
-  className?: string
-}) {
+export function PulsingDot({ pulsing, className }: { pulsing?: boolean; className?: string }) {
   return (
     <span
       aria-hidden
@@ -18,4 +12,3 @@ export function PulsingDot({
     />
   )
 }
-

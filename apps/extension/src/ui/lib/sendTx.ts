@@ -22,7 +22,10 @@ import { isValidStellarGAddress } from './sendAddress'
 import { webauthnVerifierAddressFromEnv } from './latchEnv'
 import type { SendDraft } from '../types/send'
 
-export function sendCryptoAmountFromDraft(draft: SendDraft, priceUsd: number | null): string | null {
+export function sendCryptoAmountFromDraft(
+  draft: SendDraft,
+  priceUsd: number | null
+): string | null {
   if (!draft.token) return null
   if (draft.inputMode === 'crypto') {
     const trimmed = draft.amount.trim()
@@ -426,9 +429,7 @@ export function delegatedSubmitFields(
 }
 
 /** Map Render build-send fields (`authEntriesXdr` + indices) onto legacy delegated field names. */
-export function normalizeDelegatedBuildFields(
-  build: BuildSendTxResponse
-): BuildSendTxResponse {
+export function normalizeDelegatedBuildFields(build: BuildSendTxResponse): BuildSendTxResponse {
   const entries = build.authEntriesXdr
   if (!entries?.length) return build
 
