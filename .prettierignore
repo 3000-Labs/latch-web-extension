@@ -1,0 +1,14 @@
+node_modules
+dist
+.plasmo
+.turbo
+.next
+build
+references
+docs
+pnpm-lock.yaml
+doc.json
+*.png
+*.svg
+*.ttf
+*.otf
