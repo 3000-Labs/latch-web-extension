@@ -19,13 +19,38 @@ describe('buildMoonPayBuyUrl', () => {
     expect(parsed.searchParams.get('showWalletAddressForm')).toBe('true')
   })
 
-  it('uses production buy host for pk_live keys', () => {
+  it('refuses unsigned live-key URLs with walletAddress', () => {
+    expect(() =>
+      buildMoonPayBuyUrl({
+        apiKey: 'pk_live_abc',
+        poolAddress: 'GPOOL',
+        memoId: '1',
+      })
+    ).toThrow(/server-signed signature/)
+  })
+
+  it('builds signed live-key URLs with signature last', () => {
     const url = buildMoonPayBuyUrl({
       apiKey: 'pk_live_abc',
       poolAddress: 'GPOOL',
       memoId: '1',
+      signature: 'sig%value',
+      network: 'mainnet',
     })
     expect(new URL(url).origin).toBe('https://buy.moonpay.com')
+    expect(url.endsWith('&signature=sig%25value')).toBe(true)
+  })
+
+  it('refuses live keys while on testnet', () => {
+    expect(() =>
+      buildMoonPayBuyUrl({
+        apiKey: 'pk_live_abc',
+        poolAddress: 'GPOOL',
+        memoId: '1',
+        signature: 'sig',
+        network: 'testnet',
+      })
+    ).toThrow(/live keys cannot be used while the wallet is on testnet/)
   })
 
   it('throws when api key is missing', () => {

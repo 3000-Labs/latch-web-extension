@@ -29,8 +29,7 @@ vi.mock('@latch/swap', async () => {
   return {
     ...actual,
     fetchAquariusSwapRegistry: (...args: unknown[]) => fetchAquariusSwapRegistry(...args),
-    buildSwapProviderTokenRegistry: (...args: unknown[]) =>
-      buildSwapProviderTokenRegistry(...args),
+    buildSwapProviderTokenRegistry: (...args: unknown[]) => buildSwapProviderTokenRegistry(...args),
     entriesFromTokenList: (...args: unknown[]) => entriesFromTokenList(...args),
   }
 })

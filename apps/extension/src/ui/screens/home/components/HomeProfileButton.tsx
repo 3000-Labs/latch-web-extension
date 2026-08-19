@@ -21,7 +21,10 @@ export function HomeProfileButton({
     >
       {showPendingDot ? (
         <span className="pointer-events-none absolute right-0 top-0 translate-x-1/3 -translate-y-1/3">
-          <span aria-hidden className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulseDot" />
+          <span
+            aria-hidden
+            className="inline-flex h-2 w-2 rounded-full bg-primary animate-pulseDot"
+          />
         </span>
       ) : null}
       <div className="flex items-center gap-2">

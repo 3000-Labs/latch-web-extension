@@ -5,15 +5,11 @@ import swapIconUrl from 'url:../../../../assets/home/icon-swap-action.svg'
 import type { SwapQuoteVm } from '../swapVm'
 
 function DetailLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-xs font-normal tracking-[-0.24px] text-[#b3b3b3]">{children}</span>
-  )
+  return <span className="text-xs font-normal tracking-[-0.24px] text-[#b3b3b3]">{children}</span>
 }
 
 function DetailValue({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="text-xs font-medium tracking-[-0.12px] text-[#fcfcfc]">{children}</span>
-  )
+  return <span className="text-xs font-medium tracking-[-0.12px] text-[#fcfcfc]">{children}</span>
 }
 
 function RecommendPill() {

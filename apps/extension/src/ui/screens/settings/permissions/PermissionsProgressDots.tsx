@@ -17,4 +17,3 @@ export function PermissionsProgressDots({ activeCount }: { activeCount: 1 | 2 | 
     </div>
   )
 }
-

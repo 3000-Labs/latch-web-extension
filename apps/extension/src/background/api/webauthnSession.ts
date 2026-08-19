@@ -168,8 +168,7 @@ export async function persistWebauthnSession(
   sidFromResponse?: string
 ): Promise<void> {
   const baseUrl = latchApiBaseUrl()
-  const sid =
-    sidFromResponse ?? (await readSidCookieWithRetry(baseUrl))
+  const sid = sidFromResponse ?? (await readSidCookieWithRetry(baseUrl))
   if (!sid) return
   await persistWebauthnSessionSid(sid, kind)
 }

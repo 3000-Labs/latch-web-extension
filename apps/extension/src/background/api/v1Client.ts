@@ -4,6 +4,7 @@ import { latchApiBaseUrl } from './config'
 import { BackendError } from './client'
 import { clearV1TokenPair, getV1TokenPair, isTokenFresh, setV1TokenPair } from './v1TokenStorage'
 import { buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
+import { withActiveNetwork } from './withActiveNetwork'
 
 export { base64UrlToStandardB64, buildWalletSignInBodyFromAssertion } from './v1WalletSignIn'
 
@@ -45,7 +46,9 @@ export async function v1FetchAbsolute<T>(
     try {
       json = text ? JSON.parse(text) : undefined
     } catch {
-      throw new BackendError(`v1 API invalid JSON (${res.status}) for ${url}`, { status: res.status })
+      throw new BackendError(`v1 API invalid JSON (${res.status}) for ${url}`, {
+        status: res.status,
+      })
     }
 
     if (!res.ok) {
@@ -153,14 +156,18 @@ export async function refreshV1Tokens(refreshToken: string): Promise<V1TokenPair
   }
 }
 
-export async function requestWalletChallenge(wallet: string, keyType: string): Promise<Record<string, unknown>> {
+export async function requestWalletChallenge(
+  wallet: string,
+  keyType: string
+): Promise<Record<string, unknown>> {
   const body: Record<string, unknown> = { wallet, key_type: keyType }
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id
   }
+  const withNetwork = await withActiveNetwork(body)
   return v1Fetch<Record<string, unknown>>('/v1/auth/challenge', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withNetwork),
   })
 }
 
@@ -170,15 +177,16 @@ export async function completeWalletSignIn(body: Record<string, unknown>): Promi
   if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
     body.chromeExtensionId = chrome.runtime.id
   }
+  const withNetwork = await withActiveNetwork(body)
   const data = await v1Fetch<{
     access_token: string
     refresh_token: string
     expires_in: number
   }>('/v1/auth/sign-in', {
     method: 'POST',
-    body: JSON.stringify(body),
+    body: JSON.stringify(withNetwork),
   })
-  const wallet = String(body.wallet ?? '').trim()
+  const wallet = String(withNetwork.wallet ?? '').trim()
   const pair: V1TokenPair = {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,

@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 
+import type { DepositOnRampCrypto } from '@latch/types'
+
 import backIconUrl from 'url:../../../../assets/home/icon-back.svg'
 
-import { startMoonPayOnRamp } from '../../fund/startMoonPayOnRamp'
+import { startMoonPayOnRamp, startTransakOnRamp } from '../../fund/startMoonPayOnRamp'
 
 function FundProviderRow({
   title,
@@ -52,6 +54,8 @@ function FundProviderRow({
   )
 }
 
+type FundStep = 'providers' | 'transakAsset'
+
 export function FundScreen({
   accountId,
   accountMode,
@@ -67,13 +71,24 @@ export function FundScreen({
   onBack: () => void
   onOpenReceive: () => void
 }) {
+  const [step, setStep] = useState<FundStep>('providers')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const moonPayDisabled = accountMode === 'multisig'
+  const onRampDisabled = accountMode === 'multisig'
+
+  const onHeaderBack = () => {
+    if (busy) return
+    if (step === 'transakAsset') {
+      setError(null)
+      setStep('providers')
+      return
+    }
+    onBack()
+  }
 
   const onMoonPay = async () => {
-    if (busy || moonPayDisabled) return
+    if (busy || onRampDisabled) return
     setError(null)
     setBusy(true)
     try {
@@ -89,70 +104,146 @@ export function FundScreen({
     }
   }
 
+  const onTransakAsset = async (cryptoCurrency: DepositOnRampCrypto) => {
+    if (busy || onRampDisabled) return
+    setError(null)
+    setBusy(true)
+    try {
+      await startTransakOnRamp({
+        accountId,
+        passkeyCredentialId,
+        surface,
+        cryptoCurrency,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6">
       <div className="grid h-[22px] shrink-0 grid-cols-[20px_1fr_20px] items-center">
-        <button type="button" onClick={onBack} className="size-5 shrink-0" aria-label="Back">
+        <button type="button" onClick={onHeaderBack} className="size-5 shrink-0" aria-label="Back">
           <img src={backIconUrl} alt="" className="size-5" aria-hidden />
         </button>
-        <p className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb]">Fund</p>
+        <p className="text-center text-sm font-medium tracking-[-0.14px] text-[#fbfbfb]">
+          {step === 'transakAsset' ? 'Transak' : 'Fund'}
+        </p>
         <div aria-hidden />
       </div>
 
-      <div className="flex w-full flex-col gap-2">
-        <h1 className="text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
-          Buy XLM
-        </h1>
-        <p className="text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
-          Choose a provider. Funds are routed to your smart account via a one-time memo.
-        </p>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col justify-between gap-4">
-        <div className="flex w-full flex-col gap-3">
-          <FundProviderRow
-            title="MoonPay"
-            description={
-              moonPayDisabled
-                ? 'Not available for multisig wallets yet'
-                : busy
-                  ? 'Opening MoonPay…'
-                  : 'Card & bank transfer · 150+ countries'
-            }
-            badge="MP"
-            disabled={moonPayDisabled}
-            busy={busy}
-            onClick={() => void onMoonPay()}
-          />
-          <FundProviderRow
-            title="Fonbnk"
-            description="Mobile money & local rails"
-            badge="FB"
-            disabled
-          />
-
-          {error ? (
-            <p className="text-[13px] font-normal leading-[1.4] text-red-400" role="alert">
-              {error}
+      {step === 'providers' ? (
+        <>
+          <div className="flex w-full flex-col gap-2">
+            <h1 className="text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
+              Buy crypto
+            </h1>
+            <p className="text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
+              Choose a provider. Funds are routed to your smart account via a one-time memo.
             </p>
-          ) : null}
-        </div>
-
-        <div className="flex w-full flex-col gap-3 pb-1">
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-[#2B2A29]" />
-            <span className="text-[13px] font-medium text-[#b3b3b3]">OR</span>
-            <div className="h-px flex-1 bg-[#2B2A29]" />
           </div>
-          <button
-            type="button"
-            onClick={onOpenReceive}
-            className="flex h-[52px] w-full items-center justify-center rounded-full border border-[#2B2A29] text-[16px] font-semibold tracking-[-0.16px] text-[#fcfcfc]"
-          >
-            Receive from another wallet
-          </button>
-        </div>
-      </div>
+
+          <div className="flex min-h-0 flex-1 flex-col justify-between gap-4">
+            <div className="flex w-full flex-col gap-3">
+              <FundProviderRow
+                title="MoonPay"
+                description={
+                  onRampDisabled
+                    ? 'Not available for multisig wallets yet'
+                    : busy
+                      ? 'Opening MoonPay…'
+                      : 'Card & bank transfer · 150+ countries'
+                }
+                badge="MP"
+                disabled={onRampDisabled}
+                busy={busy}
+                onClick={() => void onMoonPay()}
+              />
+              <FundProviderRow
+                title="Transak"
+                description={
+                  onRampDisabled
+                    ? 'Not available for multisig wallets yet'
+                    : busy
+                      ? 'Opening Transak…'
+                      : 'Card & bank · XLM or USDC'
+                }
+                badge="TK"
+                disabled={onRampDisabled}
+                busy={busy}
+                onClick={() => {
+                  if (busy || onRampDisabled) return
+                  setError(null)
+                  setStep('transakAsset')
+                }}
+              />
+              <FundProviderRow
+                title="Fonbnk"
+                description="Mobile money & local rails"
+                badge="FB"
+                disabled
+              />
+
+              {error ? (
+                <p className="text-[13px] font-normal leading-[1.4] text-red-400" role="alert">
+                  {error}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex w-full flex-col gap-3 pb-1">
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-[#2B2A29]" />
+                <span className="text-[13px] font-medium text-[#b3b3b3]">OR</span>
+                <div className="h-px flex-1 bg-[#2B2A29]" />
+              </div>
+              <button
+                type="button"
+                onClick={onOpenReceive}
+                className="flex h-[52px] w-full items-center justify-center rounded-full border border-[#2B2A29] text-[16px] font-semibold tracking-[-0.16px] text-[#fcfcfc]"
+              >
+                Receive from another wallet
+              </button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="flex w-full flex-col gap-2">
+            <h1 className="text-[22px] font-medium leading-[1.32] tracking-[-0.44px] text-[#fcfcfc]">
+              Choose asset
+            </h1>
+            <p className="text-[16px] font-normal leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
+              Transak will send to Latch’s pool address with your one-time memo.
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-3">
+            <FundProviderRow
+              title="XLM"
+              description={busy ? 'Opening Transak…' : 'Stellar Lumens'}
+              badge="XLM"
+              busy={busy}
+              onClick={() => void onTransakAsset('XLM')}
+            />
+            <FundProviderRow
+              title="USDC"
+              description={busy ? 'Opening Transak…' : 'USD Coin on Stellar'}
+              badge="USDC"
+              busy={busy}
+              onClick={() => void onTransakAsset('USDC')}
+            />
+
+            {error ? (
+              <p className="text-[13px] font-normal leading-[1.4] text-red-400" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </div>
+        </>
+      )}
     </div>
   )
 }

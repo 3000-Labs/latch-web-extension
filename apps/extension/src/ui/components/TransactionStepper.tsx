@@ -17,9 +17,9 @@ export function TransactionStepper({ steps }: { steps: TransactionStepperStep[] 
   return (
     <div className="relative flex w-full items-start justify-between px-2">
       {/* Base orange connecting line */}
-      <div 
-        className="absolute top-[14px] left-[15%] right-[15%] h-[4px] bg-[#FFAD00] z-0" 
-        aria-hidden 
+      <div
+        className="absolute top-[14px] left-[15%] right-[15%] h-[4px] bg-[#FFAD00] z-0"
+        aria-hidden
       />
 
       {steps.map((s) => (
@@ -37,9 +37,7 @@ export function TransactionStepper({ steps }: { steps: TransactionStepperStep[] 
           >
             {s.label}
           </div>
-          <div className="mt-1 text-center text-[11px] text-[#8E8E93]">
-            {s.timeLabel ?? '~~'}
-          </div>
+          <div className="mt-1 text-center text-[11px] text-[#8E8E93]">{s.timeLabel ?? '~~'}</div>
         </div>
       ))}
     </div>

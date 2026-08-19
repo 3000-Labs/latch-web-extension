@@ -39,11 +39,7 @@ export function HomeBalanceOverview({
             aria-label={hidden ? 'Show balance' : 'Hide balance'}
             onClick={onToggleHidden}
           >
-            <img
-              src={hidden ? eyeVisibleUrl : eyeHiddenUrl}
-              alt=""
-              className="block size-full"
-            />
+            <img src={hidden ? eyeVisibleUrl : eyeHiddenUrl} alt="" className="block size-full" />
           </button>
         </div>
         <p className="whitespace-nowrap text-center text-[56px] font-bold leading-[1.2] tracking-[-1.68px] text-fg">

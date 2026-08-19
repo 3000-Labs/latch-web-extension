@@ -48,7 +48,10 @@ export function SessionNotCreatedScreen({
           onClick={onTryAgain}
           className="relative h-12 w-full shrink-0 overflow-hidden rounded-[32px] border border-[#f0a300] px-5 py-3 text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#121212] shadow-[0px_12px_13.1px_-8px_rgba(246,139,7,0.1)]"
         >
-          <span aria-hidden className="pointer-events-none absolute inset-0 rounded-[32px] bg-[#ffad00]" />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-[32px] bg-[#ffad00]"
+          />
           <span className="relative">Try Again</span>
           <span
             aria-hidden
@@ -59,4 +62,3 @@ export function SessionNotCreatedScreen({
     </div>
   )
 }
-

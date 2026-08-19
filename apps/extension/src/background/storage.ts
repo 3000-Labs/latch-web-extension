@@ -71,8 +71,7 @@ async function ensureAccountsPartitionMigrated(): Promise<void> {
     const patch: Record<string, unknown> = {}
     const remove: string[] = []
 
-    const hasPartitioned =
-      Array.isArray(byNetwork.testnet) || Array.isArray(byNetwork.mainnet)
+    const hasPartitioned = Array.isArray(byNetwork.testnet) || Array.isArray(byNetwork.mainnet)
 
     if (!hasPartitioned && Array.isArray(flatAccounts) && flatAccounts.length > 0) {
       patch[STORAGE_KEYS.accountsByNetwork] = {
@@ -339,14 +338,12 @@ export async function createAccount(params: {
     label: params.label ?? existing?.label,
     multisigThreshold: params.multisigThreshold ?? existing?.multisigThreshold,
     multisigMemberId: params.multisigMemberId ?? existing?.multisigMemberId,
-    multisigBackendAccountId:
-      params.multisigBackendAccountId ?? existing?.multisigBackendAccountId,
+    multisigBackendAccountId: params.multisigBackendAccountId ?? existing?.multisigBackendAccountId,
     cosignWckRefId: params.cosignWckRefId ?? existing?.cosignWckRefId,
     cosignBlindSignerId: params.cosignBlindSignerId ?? existing?.cosignBlindSignerId,
     cosignLinkedAccountId: params.cosignLinkedAccountId ?? existing?.cosignLinkedAccountId,
     multisigAccountSaltHex: params.multisigAccountSaltHex ?? existing?.multisigAccountSaltHex,
-    multisigMembersSnapshot:
-      params.multisigMembersSnapshot ?? existing?.multisigMembersSnapshot,
+    multisigMembersSnapshot: params.multisigMembersSnapshot ?? existing?.multisigMembersSnapshot,
   })
 }
 
@@ -375,7 +372,9 @@ export async function getMultisigPendingInvites(): Promise<MultisigPendingInvite
   return (res[STORAGE_KEYS.multisigPendingInvites] as MultisigPendingInvite[] | undefined) ?? []
 }
 
-export async function addMultisigPendingInvite(invite: MultisigPendingInvite): Promise<MultisigPendingInvite[]> {
+export async function addMultisigPendingInvite(
+  invite: MultisigPendingInvite
+): Promise<MultisigPendingInvite[]> {
   const current = await getMultisigPendingInvites()
   const filtered = current.filter((i) => i.token !== invite.token)
   const next = [...filtered, invite]

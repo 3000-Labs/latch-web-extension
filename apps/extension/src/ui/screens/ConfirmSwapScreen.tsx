@@ -66,8 +66,7 @@ export function ConfirmSwapScreen({
   const spendLine = `-${draft.payAmount || '0'} ${payToken.symbol}`
   const spendUsd = quote.receiveUsdApproxLine ? quote.receiveUsdApprox.replace('≈ ', '≈') : '≈--'
   const receiveLine = formatReceiveAmountLine(quote.receiveAmount, receiveToken.symbol)
-  const receiveUsd =
-    quote.receiveUsdApproxLine.replace('≈ ', '≈') || quote.receiveUsdApprox
+  const receiveUsd = quote.receiveUsdApproxLine.replace('≈ ', '≈') || quote.receiveUsdApprox
 
   return (
     <div
@@ -120,14 +119,14 @@ export function ConfirmSwapScreen({
               <ExchangeBalanceToggle checked={mevProtection} onChange={setMevProtection} />
             </div>
 
-            <ConfirmSwapDetailRow label="Network Fee" value={quote.networkFeeLine.replace('~ ', '')} />
+            <ConfirmSwapDetailRow
+              label="Network Fee"
+              value={quote.networkFeeLine.replace('~ ', '')}
+            />
 
             <ConfirmSwapDetailRow label="Min. Received" value={quote.minReceivedLine.trim()} />
 
-            <ConfirmSwapDetailRow
-              label="Quote"
-              value={quoteExpiryLine}
-            />
+            <ConfirmSwapDetailRow label="Quote" value={quoteExpiryLine} />
 
             <div className="flex items-center justify-between">
               <span className="text-xs tracking-[-0.24px] text-[#b3b3b3]">Provider</span>
@@ -138,7 +137,6 @@ export function ConfirmSwapScreen({
 
             <ConfirmSwapDetailRow label="Receive Address" value={shortAccountAddr} />
           </div>
-
         </div>
 
         <ConfirmSwapFooter busy={busy} onCancel={onBackOrCancel} onConfirm={onConfirm} />

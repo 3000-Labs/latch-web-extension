@@ -1,0 +1,12 @@
+Latch
+Copyright (c) 2026 3K1 Labs
+
+This product's source code is licensed under the MIT License (see LICENSE).
+
+Bundled fonts
+-------------
+
+Files under apps/extension/assets/fonts/ are SF Pro Rounded (Apple). Those
+files are Apple-licensed and are not covered by the MIT License that applies
+to this repository's source code. Do not redistribute those font files outside
+this extension unless you have a separate license from Apple.

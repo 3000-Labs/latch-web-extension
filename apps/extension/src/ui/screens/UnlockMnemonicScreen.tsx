@@ -72,7 +72,9 @@ export function UnlockMnemonicScreen({
             {busy ? 'Logging in…' : 'Log In'}
           </OnboardingPrimaryButton>
         ) : (
-          <OnboardingSecondaryButton disabled>{busy ? 'Logging in…' : 'Log In'}</OnboardingSecondaryButton>
+          <OnboardingSecondaryButton disabled>
+            {busy ? 'Logging in…' : 'Log In'}
+          </OnboardingSecondaryButton>
         )}
       </div>
     </div>

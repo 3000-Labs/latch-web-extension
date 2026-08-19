@@ -101,10 +101,7 @@ export function OnboardingUseExistingPasskeyCard({
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-2">
-          <OnboardingPrimaryButton
-            disabled={!canAuthenticate}
-            onClick={onAuthenticate}
-          >
+          <OnboardingPrimaryButton disabled={!canAuthenticate} onClick={onAuthenticate}>
             {primaryLabel}
           </OnboardingPrimaryButton>
 

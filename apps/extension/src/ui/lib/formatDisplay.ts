@@ -13,4 +13,3 @@ export function formatDisplayAmount2dp(amount: string): string {
   if (!Number.isFinite(n)) return amount
   return formatDisplay2dp(n)
 }
-

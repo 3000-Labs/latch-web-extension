@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeJoinPreview, normalizeMultisigProposalDetail, unwrapMultisigDraft } from './multisigNormalize'
+import {
+  normalizeJoinPreview,
+  normalizeMultisigProposalDetail,
+  unwrapMultisigDraft,
+} from './multisigNormalize'
 
 describe('multisigNormalize', () => {
   it('unwrapMultisigDraft reads nested draft payload', () => {

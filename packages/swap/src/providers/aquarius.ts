@@ -11,12 +11,7 @@ import {
 
 import { applySlippageMin, QUOTE_TTL_MS } from '../amounts'
 import { AQUARIUS_CONFIG } from '../constants'
-import type {
-  AquariusBuildPayload,
-  SwapProvider,
-  SwapQuote,
-  SwapQuoteRequest,
-} from '../types'
+import type { AquariusBuildPayload, SwapProvider, SwapQuote, SwapQuoteRequest } from '../types'
 
 type AquariusFindPathResponse = {
   success: boolean
@@ -48,8 +43,10 @@ export function parseAquariusFindPathResponse(
   const amountOutRaw = String(data.amount)
   const amountOutMinRaw = applySlippageMin(amountOutRaw, req.slippageBps)
   const config = AQUARIUS_CONFIG[req.network]
-  const pathLabels =
-    data.tokens?.map(tokenLabelFromPathToken) ?? [req.assetIn.symbol, req.assetOut.symbol]
+  const pathLabels = data.tokens?.map(tokenLabelFromPathToken) ?? [
+    req.assetIn.symbol,
+    req.assetOut.symbol,
+  ]
 
   const buildPayload: AquariusBuildPayload = {
     kind: 'aquarius',
@@ -103,8 +100,7 @@ export async function buildAquariusUnsignedTx(args: {
   rpcUrl: string
   networkPassphrase: string
 }): Promise<string> {
-  const { smartAccountAddress, transactionSourceG, buildPayload, rpcUrl, networkPassphrase } =
-    args
+  const { smartAccountAddress, transactionSourceG, buildPayload, rpcUrl, networkPassphrase } = args
 
   if (!transactionSourceG.startsWith('G')) {
     throw new Error('Swap transaction source must be a Stellar G-address.')

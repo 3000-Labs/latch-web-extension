@@ -6,9 +6,7 @@ import type {
 } from '@latch/types'
 
 import { friendlyError, sendToBackground } from './backgroundClient'
-import {
-  sendCryptoAmountFromDraft,
-} from './sendTx'
+import { sendCryptoAmountFromDraft } from './sendTx'
 import type { SendDraft } from '../types/send'
 
 export function buildCreateSendProposalRequest(
@@ -63,12 +61,13 @@ export async function createMultisigSendProposalWithSetup(args: {
   if (!proposalBody) throw new Error('Invalid send details')
 
   args.onProgress('Creating proposal…')
-  const createRes = await sendToBackground<CreateMultisigProposalRequest, CreateMultisigProposalResponse>(
-    {
-      type: 'MULTISIG_CREATE_PROPOSAL',
-      payload: proposalBody,
-    }
-  )
+  const createRes = await sendToBackground<
+    CreateMultisigProposalRequest,
+    CreateMultisigProposalResponse
+  >({
+    type: 'MULTISIG_CREATE_PROPOSAL',
+    payload: proposalBody,
+  })
   if (!createRes.ok) throw new Error(friendlyError(createRes.error))
   return createRes.data!
 }
@@ -80,11 +79,7 @@ export function proposalSummaryFromRow(row: {
   assetId?: string
   status?: string
 }): string {
-  if (
-    row.operationKind === 'sac_transfer' ||
-    row.operationKind === 'send' ||
-    row.recipient
-  ) {
+  if (row.operationKind === 'sac_transfer' || row.operationKind === 'send' || row.recipient) {
     const asset = row.assetId ?? 'asset'
     return `Send ${row.amount ?? '?'} ${asset} → ${truncate(row.recipient ?? '…')}`
   }

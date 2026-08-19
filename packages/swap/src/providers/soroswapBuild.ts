@@ -122,7 +122,9 @@ function formatAggregatorSimError(error: string): string {
     return 'Soroswap reports this DEX protocol is paused.'
   }
   const host = error.match(/HostError:[^\n]+/)?.[0]
-  return host ? `Soroswap simulation failed: ${host}` : `Soroswap simulation failed: ${error.slice(0, 240)}`
+  return host
+    ? `Soroswap simulation failed: ${host}`
+    : `Soroswap simulation failed: ${error.slice(0, 240)}`
 }
 
 function buildAggregatorTx(args: {
@@ -204,10 +206,9 @@ export async function buildSoroswapAggregatorUnsignedTx(args: {
     throw new Error('Invalid build payload for Soroswap aggregator build')
   }
 
-  const aggregatorId =
-    buildPayload.routerContractId?.startsWith('C')
-      ? buildPayload.routerContractId
-      : SOROSWAP_CONFIG[network].routerContractId
+  const aggregatorId = buildPayload.routerContractId?.startsWith('C')
+    ? buildPayload.routerContractId
+    : SOROSWAP_CONFIG[network].routerContractId
 
   const distribution = parseSoroswapDistribution(buildPayload.quote)
   const distributionScVal = buildDexDistributionScVal(distribution)

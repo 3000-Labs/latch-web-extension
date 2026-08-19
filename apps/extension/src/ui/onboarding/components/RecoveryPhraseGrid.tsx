@@ -35,9 +35,10 @@ export function RecoveryPhraseGrid({
             return (
               <div
                 key={index}
-                className={['flex h-[52px] min-w-0 flex-1 items-center rounded-[14px] p-3', cellClassName].join(
-                  ' '
-                )}
+                className={[
+                  'flex h-[52px] min-w-0 flex-1 items-center rounded-[14px] p-3',
+                  cellClassName,
+                ].join(' ')}
               >
                 <div className="flex min-w-0 flex-1 items-center gap-[9px]">
                   <span className="shrink-0 text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">

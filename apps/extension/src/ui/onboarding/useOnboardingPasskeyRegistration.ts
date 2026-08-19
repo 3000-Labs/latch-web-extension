@@ -58,12 +58,13 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         if (!accountsRes.ok) throw new Error(friendlyError(accountsRes.error))
 
         const displayName = nextPasskeyAccountDisplayName(accountsRes.data?.accounts ?? [])
-        const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>(
-          {
-            type: 'PASSKEY_REG_BEGIN',
-            payload: { displayName },
-          }
-        )
+        const begin = await sendToBackground<
+          { displayName?: string },
+          BackendWebauthnBeginResponse
+        >({
+          type: 'PASSKEY_REG_BEGIN',
+          payload: { displayName },
+        })
         if (cancelled) return
         if (!begin.ok) throw new Error(friendlyError(begin.error))
 

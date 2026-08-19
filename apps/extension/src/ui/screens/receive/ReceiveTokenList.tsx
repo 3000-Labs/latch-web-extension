@@ -70,12 +70,18 @@ export function ReceiveTokenList({
   }, [tokensList, search])
 
   if (portfolioLoading) {
-    return <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">Loading balances…</div>
+    return (
+      <div className="py-12 text-center text-sm tracking-[-0.28px] text-muted">
+        Loading balances…
+      </div>
+    )
   }
 
   if (portfolioError) {
     return (
-      <div className="py-12 text-center text-sm tracking-[-0.28px] text-red-300">{portfolioError}</div>
+      <div className="py-12 text-center text-sm tracking-[-0.28px] text-red-300">
+        {portfolioError}
+      </div>
     )
   }
 

@@ -34,10 +34,7 @@ export function CosignJoinFlow({
     setLocalAccounts(accounts)
   }, [accounts])
 
-  const passkeyOptions = useMemo(
-    () => listReusablePasskeyAccounts(localAccounts),
-    [localAccounts]
-  )
+  const passkeyOptions = useMemo(() => listReusablePasskeyAccounts(localAccounts), [localAccounts])
   const [selectedPasskeyAccountId, setSelectedPasskeyAccountId] = useState<string | undefined>()
 
   useEffect(() => {

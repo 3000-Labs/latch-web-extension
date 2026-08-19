@@ -10,11 +10,19 @@ import {
   listPendingCosignRequests,
   postJoinRelay,
 } from '../api/cosign/cosignQueue'
-import { completeWalletSignInFromAssertion, requestWalletChallenge, resolveAccessToken } from '../api/v1Client'
+import {
+  completeWalletSignInFromAssertion,
+  requestWalletChallenge,
+  resolveAccessToken,
+} from '../api/v1Client'
 import { assembleAndSubmitCosignRequest } from './assembleAndSubmit'
 import { deployCosignMultisigWallet } from './deploy'
 import { ensureDeviceTransportKeyPair } from './keyStorage'
-import { announceMemberForWallet, discoverMembershipsForAccount, getCosignRecordForWallet } from './membership'
+import {
+  announceMemberForWallet,
+  discoverMembershipsForAccount,
+  getCosignRecordForWallet,
+} from './membership'
 import { runCosignPollCycle } from './polling'
 import { exportRawPublicKey, deriveBlindSignerId, deriveMemberBlindId, toBase64 } from './crypto'
 import { signerPublicKeyBytesForAccount } from './signerBytes'
@@ -321,25 +329,22 @@ export async function tryHandleCosignMessage(
         authEntryXdr: string
       }
       try {
-        const attached = await latchFetch<{ auth_entry_xdr?: string; signedAuthEntryBase64?: string }>(
-          '/api/transaction/attach-auth-webauthn',
-          {
-            method: 'POST',
-            body: latchExtensionJsonBody(
-              await withActiveNetwork({
-                unsignedTxXdr: req.unsignedTxXdr,
-                authEntryXdr: req.authEntryXdr,
-                sigDataXdrHex: req.sigDataXdrHex,
-                keyDataHex: req.keyDataHex,
-                contextRuleId: req.contextRuleId,
-              })
-            ),
-          }
-        )
-        const signed =
-          attached.signedAuthEntryBase64 ??
-          attached.auth_entry_xdr ??
-          req.authEntryXdr
+        const attached = await latchFetch<{
+          auth_entry_xdr?: string
+          signedAuthEntryBase64?: string
+        }>('/api/transaction/attach-auth-webauthn', {
+          method: 'POST',
+          body: latchExtensionJsonBody(
+            await withActiveNetwork({
+              unsignedTxXdr: req.unsignedTxXdr,
+              authEntryXdr: req.authEntryXdr,
+              sigDataXdrHex: req.sigDataXdrHex,
+              keyDataHex: req.keyDataHex,
+              contextRuleId: req.contextRuleId,
+            })
+          ),
+        })
+        const signed = attached.signedAuthEntryBase64 ?? attached.auth_entry_xdr ?? req.authEntryXdr
         sendResponse(ok({ signedAuthEntryBase64: signed }))
         return true
       } catch {

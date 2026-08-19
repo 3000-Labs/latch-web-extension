@@ -40,7 +40,10 @@ import {
   removeMultisigPendingInvite,
   setMultisigDraftMeta,
 } from '../storage'
-import { ensureMultisigAccountRegisteredForSession, syncLocalMultisigAccountsFromBackend } from './syncLocalAccounts'
+import {
+  ensureMultisigAccountRegisteredForSession,
+  syncLocalMultisigAccountsFromBackend,
+} from './syncLocalAccounts'
 
 type OkFn = (data?: unknown) => { ok: boolean; data?: unknown }
 
@@ -62,7 +65,10 @@ export async function tryHandleMultisigMessage(
       return true
     }
     case 'MULTISIG_ADD_DRAFT_MEMBER': {
-      const req = message.payload as { draftId: string; member: import('@latch/types').MultisigDraftMemberRequest }
+      const req = message.payload as {
+        draftId: string
+        member: import('@latch/types').MultisigDraftMemberRequest
+      }
       const data = await addMultisigDraftMember(req)
       sendResponse(ok(data))
       return true

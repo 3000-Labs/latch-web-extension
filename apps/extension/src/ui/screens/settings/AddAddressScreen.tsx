@@ -6,13 +6,7 @@ import { isValidStellarRecipient } from '../../lib/sendAddress'
 import { saveToAddressBook } from '../send/useAddressBook'
 import { SettingsScreenHeader } from './SettingsScreenHeader'
 
-function SettingsFormField({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
+function SettingsFormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex w-full flex-col gap-1">
       <span className="text-base font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">

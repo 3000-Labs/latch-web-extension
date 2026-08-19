@@ -20,11 +20,7 @@ export function OnboardingCreatePasskeyCard({
   onGoBack: () => void
 }) {
   const errorMessage = actionError ?? prefetchError
-  const primaryLabel = !prefetchReady
-    ? 'Preparing…'
-    : busy
-      ? 'Creating passkey…'
-      : 'Create Passkey'
+  const primaryLabel = !prefetchReady ? 'Preparing…' : busy ? 'Creating passkey…' : 'Create Passkey'
 
   return (
     <div className="flex h-[600px] w-[420px] flex-col gap-2 rounded-[24px] bg-[#1c1c1c] p-6 shadow-[-5px_6px_7.7px_rgba(9,9,9,0.3)]">

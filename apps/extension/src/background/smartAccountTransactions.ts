@@ -1,12 +1,34 @@
-import { buildSmartAccountPortfolioProbes, fetchSmartAccountPayments, stellarAddressEquals } from '@latch/stellar'
+import {
+  buildSmartAccountPortfolioProbes,
+  fetchSmartAccountPayments,
+  stellarAddressEquals,
+  type SmartAccountPayment,
+} from '@latch/stellar'
 
 import type { GetSmartAccountTransactionsResponse, SmartAccountTransactionRow } from '@latch/types'
+import type { Network } from '@latch/types'
 
 import { getKnownSacProbes, recordKnownSacProbes } from './knownSacProbes'
-import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from './network/config'
+import {
+  getActiveNetwork,
+  horizonUrlFor,
+  networkPassphraseFor,
+  sorobanRpcUrlFor,
+} from './network/config'
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd } from './tokenPrices'
+
+/** Public bundler G from env (same as swap fee-payer). Avoid importing @latch/swap barrel here. */
+function resolveBundlerPublicG(network: Network): string | undefined {
+  if (network === 'mainnet') {
+    const mainnet = process.env.PLASMO_PUBLIC_LATCH_FEE_PAYER_G_MAINNET?.trim()
+    if (mainnet?.startsWith('G')) return mainnet
+    return undefined
+  }
+  const fromEnv = process.env.PLASMO_PUBLIC_LATCH_FEE_PAYER_G?.trim()
+  return fromEnv?.startsWith('G') ? fromEnv : undefined
+}
 
 type Snapshot = {
   updatedAtMs: number
@@ -62,10 +84,11 @@ async function writePersistedSnapshot(accountId: string, snapshot: Snapshot): Pr
 }
 
 function classifyKind(
-  tx: { from: string; to: string },
+  tx: SmartAccountPayment,
   cAddress: string,
   gAddress?: string
 ): SmartAccountTransactionRow['kind'] {
+  if (tx.txType === 'swap') return 'swap'
   if (
     stellarAddressEquals(tx.to, cAddress) &&
     gAddress &&
@@ -73,12 +96,14 @@ function classifyKind(
   ) {
     return 'deposit'
   }
-  if (stellarAddressEquals(tx.from, cAddress)) return 'sent'
-  if (stellarAddressEquals(tx.to, cAddress)) return 'received'
+  if (tx.txType === 'send' || stellarAddressEquals(tx.from, cAddress)) return 'sent'
+  if (tx.txType === 'receive' || stellarAddressEquals(tx.to, cAddress)) return 'received'
   return 'received'
 }
 
-async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccountTransactionsResponse> {
+async function computeTransactionsOnce(
+  accountId: string
+): Promise<GetSmartAccountTransactionsResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
   const c = acc?.smartAccountAddress?.trim()
@@ -89,12 +114,18 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
   const horizonUrl = horizonUrlFor(network)
   const rpcUrl = sorobanRpcUrlFor(network)
   const networkPassphrase = networkPassphraseFor(network)
+  const bundlerGAddress = resolveBundlerPublicG(network)
+  const additionalProbes = await getKnownSacProbes(accountId)
+
   const payments = await fetchSmartAccountPayments({
     cAddress: c,
     gAddress: g,
+    bundlerGAddress,
     horizonUrl,
     rpcUrl,
     networkPassphrase,
+    network,
+    additionalProbes,
   })
 
   void buildSmartAccountPortfolioProbes({
@@ -102,7 +133,7 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
     networkPassphrase,
     gAddress: g,
     horizonUrl,
-    additionalProbes: await getKnownSacProbes(accountId),
+    additionalProbes,
   }).then((probes) => recordKnownSacProbes(accountId, probes))
 
   const codes = payments.map((p) => p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET'))
@@ -111,7 +142,7 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
   const items: SmartAccountTransactionRow[] = payments.map((p) => {
     const code = p.assetCode ?? (p.assetType === 'native' ? 'XLM' : 'ASSET')
     const kind = classifyKind(p, c, g)
-    const isSent = stellarAddressEquals(p.from, c)
+    const isSent = kind === 'sent' || (kind === 'swap' && stellarAddressEquals(p.from, c))
     const sign = isSent ? '-' : '+'
     const amountNum = parseFloat(p.amount)
     const amountLabel = Number.isFinite(amountNum)
@@ -140,68 +171,74 @@ async function computeTransactionsOnce(accountId: string): Promise<GetSmartAccou
   return { items }
 }
 
+function trackInflight(
+  accountId: string,
+  p: Promise<GetSmartAccountTransactionsResponse>
+): Promise<GetSmartAccountTransactionsResponse> {
+  inflightByAccountId.set(accountId, p)
+  return p.finally(() => {
+    if (inflightByAccountId.get(accountId) === p) {
+      inflightByAccountId.delete(accountId)
+    }
+  })
+}
+
 function revalidateInBackground(accountId: string): void {
   if (inflightByAccountId.has(accountId)) return
 
-  const p = computeTransactionsOnce(accountId)
-    .then(async (data) => {
-      const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
-      memoryCacheByAccountId!.set(accountId, snapshot)
-      await writePersistedSnapshot(accountId, snapshot)
-      return data
-    })
-    .finally(() => {
-      inflightByAccountId.delete(accountId)
-    })
+  const p = computeTransactionsOnce(accountId).then(async (data) => {
+    const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
+    memoryCacheByAccountId!.set(accountId, snapshot)
+    await writePersistedSnapshot(accountId, snapshot)
+    return data
+  })
 
-  inflightByAccountId.set(accountId, p)
-  void p.catch(() => {})
+  void trackInflight(accountId, p).catch(() => {})
 }
 
 export async function runGetSmartAccountTransactions(
-  accountId: string
+  accountId: string,
+  opts?: { force?: boolean }
 ): Promise<GetSmartAccountTransactionsResponse> {
   const now = Date.now()
   if (!memoryCacheByAccountId) {
     memoryCacheByAccountId = new Map()
   }
 
-  const mem = memoryCacheByAccountId.get(accountId)
-  if (mem && snapshotFreshEnough(mem, now)) return mem.data
+  const force = opts?.force === true
 
-  if (!mem) {
-    const persisted = await readPersistedSnapshot(accountId)
-    if (persisted) {
-      memoryCacheByAccountId.set(accountId, persisted)
-      if (snapshotFreshEnough(persisted, now)) return persisted.data
-      if (snapshotUsableAsStaleFallback(persisted, now)) {
-        revalidateInBackground(accountId)
-        return persisted.data
+  if (!force) {
+    const mem = memoryCacheByAccountId.get(accountId)
+    if (mem && snapshotFreshEnough(mem, now)) return mem.data
+
+    if (!mem) {
+      const persisted = await readPersistedSnapshot(accountId)
+      if (persisted) {
+        memoryCacheByAccountId.set(accountId, persisted)
+        if (snapshotFreshEnough(persisted, now)) return persisted.data
+        if (snapshotUsableAsStaleFallback(persisted, now)) {
+          revalidateInBackground(accountId)
+          return persisted.data
+        }
       }
+    } else if (snapshotUsableAsStaleFallback(mem, now)) {
+      revalidateInBackground(accountId)
+      return mem.data
     }
-  } else if (snapshotUsableAsStaleFallback(mem, now)) {
-    revalidateInBackground(accountId)
-    return mem.data
+
+    const existing = inflightByAccountId.get(accountId)
+    if (existing) return await existing
   }
 
-  const existing = inflightByAccountId.get(accountId)
-  if (existing) return await existing
-
-  const p = computeTransactionsOnce(accountId)
-    .then(async (data) => {
-      const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
-      memoryCacheByAccountId!.set(accountId, snapshot)
-      await writePersistedSnapshot(accountId, snapshot)
-      return data
-    })
-    .finally(() => {
-      inflightByAccountId.delete(accountId)
-    })
-
-  inflightByAccountId.set(accountId, p)
+  const p = computeTransactionsOnce(accountId).then(async (data) => {
+    const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
+    memoryCacheByAccountId!.set(accountId, snapshot)
+    await writePersistedSnapshot(accountId, snapshot)
+    return data
+  })
 
   try {
-    return await p
+    return await trackInflight(accountId, p)
   } catch (e) {
     const fallback = memoryCacheByAccountId.get(accountId)
     if (fallback && snapshotUsableAsStaleFallback(fallback, Date.now())) {

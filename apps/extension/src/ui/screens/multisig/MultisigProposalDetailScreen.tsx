@@ -49,7 +49,7 @@ export function MultisigProposalDetailScreen({
             <p className="mt-1 text-sm capitalize text-[#b3b3b3]">{proposal.status ?? 'pending'}</p>
             {proposal.threshold != null ? (
               <p className="mt-2 text-sm text-primary">
-                {(proposal.approvalCount ?? proposal.approvals?.length ?? 0)}/{proposal.threshold}{' '}
+                {proposal.approvalCount ?? proposal.approvals?.length ?? 0}/{proposal.threshold}{' '}
                 approvals
               </p>
             ) : null}

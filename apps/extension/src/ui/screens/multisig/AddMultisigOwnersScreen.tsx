@@ -134,7 +134,9 @@ export function AddMultisigOwnersScreen({
                 <button
                   type="button"
                   onClick={onAddSelectedPasskeyOwner}
-                  disabled={passkeyAdding || addBusy || selectedPasskeyInOwners || !selectedPasskeyAccountId}
+                  disabled={
+                    passkeyAdding || addBusy || selectedPasskeyInOwners || !selectedPasskeyAccountId
+                  }
                   className="flex h-[52px] w-full items-center justify-center rounded-[14px] bg-primary text-base font-semibold text-[#121212] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {selectedPasskeyInOwners ? 'Passkey already added' : 'Add selected passkey'}
@@ -158,8 +160,15 @@ export function AddMultisigOwnersScreen({
                   disabled={passkeyAdding || addBusy}
                   className="flex h-[92px] w-full items-center justify-center gap-2 rounded-[14px] border border-dashed border-[#383838] bg-[#2a2928] p-3 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <img src={biometricsIconUrl} alt="" className="size-6 object-contain" aria-hidden />
-                  <span className="text-base font-semibold text-[#fcfcfc]">Create device passkey</span>
+                  <img
+                    src={biometricsIconUrl}
+                    alt=""
+                    className="size-6 object-contain"
+                    aria-hidden
+                  />
+                  <span className="text-base font-semibold text-[#fcfcfc]">
+                    Create device passkey
+                  </span>
                 </button>
                 <p className="text-xs text-[#b3b3b3]">
                   Creates a passkey on this computer — not a phone QR code.

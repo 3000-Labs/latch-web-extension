@@ -55,7 +55,11 @@ export function SendSuccessScreen({
               />
             )}
             {result.hash && !result.proposalId ? (
-              <SendViewTransactionLink hash={result.hash} network={network} onView={onViewReceipt} />
+              <SendViewTransactionLink
+                hash={result.hash}
+                network={network}
+                onView={onViewReceipt}
+              />
             ) : null}
           </div>
         </div>

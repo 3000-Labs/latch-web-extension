@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeMultisigSignerInitForApi, normalizeMultisigSignersForApi } from './multisigSignerInit'
+import {
+  normalizeMultisigSignerInitForApi,
+  normalizeMultisigSignersForApi,
+} from './multisigSignerInit'
 
 describe('multisigSignerInit', () => {
   it('maps passkey UI type to webauthn for accounts predict/deploy', () => {

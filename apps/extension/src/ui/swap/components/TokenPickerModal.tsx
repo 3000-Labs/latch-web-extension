@@ -88,7 +88,9 @@ export function TokenPickerModal({
                     />
                     <div>
                       <div className="text-sm font-extrabold text-fg">{token.name}</div>
-                      <div className="mt-0.5 text-xs font-semibold text-muted/70">{token.symbol}</div>
+                      <div className="mt-0.5 text-xs font-semibold text-muted/70">
+                        {token.symbol}
+                      </div>
                     </div>
                   </div>
                   {isSelected ? (

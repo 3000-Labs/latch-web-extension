@@ -1,0 +1,43 @@
+[files]
+extend-exclude = [
+  "pnpm-lock.yaml",
+  "apps/extension/assets/**",
+  "apps/extension/build/**",
+  "references/**",
+  "docs/**",
+  "**/*.png",
+  "**/*.svg",
+  "**/*.ttf",
+  "**/*.otf",
+  "**/*.woff",
+  "doc.json",
+]
+
+[default.extend-identifiers]
+gAddress = "gAddress"
+webauthn = "webauthn"
+WebAuthn = "WebAuthn"
+Soroban = "Soroban"
+Soroswap = "Soroswap"
+plasmo = "plasmo"
+Plasmo = "Plasmo"
+pnpm = "pnpm"
+XDR = "XDR"
+Ed25519 = "Ed25519"
+BIP = "BIP"
+SLIP = "SLIP"
+cose = "cose"
+COSE = "COSE"
+coseKey = "coseKey"
+coseKeyBytes = "coseKeyBytes"
+coseBytes = "coseBytes"
+coseToUncompressedP256 = "coseToUncompressedP256"
+
+[default.extend-words]
+soroban = "soroban"
+webauthn = "webauthn"
+passkey = "passkey"
+passkeys = "passkeys"
+hreflang = "hreflang"
+nd = "nd"
+cose = "cose"

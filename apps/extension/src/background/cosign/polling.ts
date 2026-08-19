@@ -44,10 +44,7 @@ export async function runCosignPollCycle(): Promise<number> {
       for (const req of pending) {
         const prev = lastSeen[req.id]
         const sigCount = req.signature_count ?? req.signatures?.length ?? 0
-        const changed =
-          !prev ||
-          prev.signatureCount !== sigCount ||
-          prev.status !== req.status
+        const changed = !prev || prev.signatureCount !== sigCount || prev.status !== req.status
         nextSeen[req.id] = { signatureCount: sigCount, status: req.status }
 
         if (!changed) continue

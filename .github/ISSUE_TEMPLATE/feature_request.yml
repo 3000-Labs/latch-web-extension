@@ -1,0 +1,60 @@
+name: Feature request
+description: Propose a feature or improvement
+title: '[Feature]: '
+labels: ['feature']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please open an issue **before** a PR (except trivial fixes). See [CONTRIBUTING.md](../../CONTRIBUTING.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user or contributor problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you want.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Concrete outcomes that define done.
+      placeholder: |
+        - Works in popup and side panel
+        - No key material in UI contexts
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Product / UX
+        - Extension (popup / side panel)
+        - Background / signing
+        - dapp SDK (`window.latch`)
+        - Stellar / Soroban
+        - Security
+        - DevEx / CI
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies or blockers
+      description: Related issues, API/backend work, or design.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched for an existing issue first
+          required: true

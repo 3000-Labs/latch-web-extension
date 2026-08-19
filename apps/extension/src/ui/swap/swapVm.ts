@@ -74,12 +74,10 @@ export function swapQuotePayloadToVm(
   const minReceived = rawToHuman(payload.amountOutMinRaw, payload.assetOut.decimals)
   const payHuman = rawToHuman(payload.amountInRaw, payload.assetIn.decimals)
   const payN = Number.parseFloat(payHuman)
-  const rate =
-    payN > 0 && receiveAmount > 0
-      ? receiveAmount / payN
-      : 0
+  const rate = payN > 0 && receiveAmount > 0 ? receiveAmount / payN : 0
 
-  const payUsd = payTokenPriceUsd != null && Number.isFinite(payTokenPriceUsd) ? payN * payTokenPriceUsd : NaN
+  const payUsd =
+    payTokenPriceUsd != null && Number.isFinite(payTokenPriceUsd) ? payN * payTokenPriceUsd : NaN
   const receiveUsd =
     receiveTokenPriceUsd != null && Number.isFinite(receiveTokenPriceUsd)
       ? receiveAmount * receiveTokenPriceUsd
@@ -120,16 +118,10 @@ export function pickDefaultReceiveTokenId(
     }
   }
   for (const sym of ['USDC', 'EURC']) {
-    const hit = receiveCatalog.find(
-      (t) => t.symbol.toUpperCase() === sym && t.id !== payTokenId
-    )
+    const hit = receiveCatalog.find((t) => t.symbol.toUpperCase() === sym && t.id !== payTokenId)
     if (hit) return hit.id
   }
-  return (
-    receiveCatalog.find((t) => t.id !== payTokenId)?.id ??
-    receiveCatalog[0]?.id ??
-    payTokenId
-  )
+  return receiveCatalog.find((t) => t.id !== payTokenId)?.id ?? receiveCatalog[0]?.id ?? payTokenId
 }
 
 export function mergeSwapTokenCatalogs(

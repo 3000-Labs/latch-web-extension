@@ -24,7 +24,9 @@ export async function apiCreateMultisigDraft(): Promise<CreateMultisigDraftRespo
   return res.data
 }
 
-export async function apiGetActiveDraft(): Promise<import('@latch/types').GetActiveMultisigDraftResponse> {
+export async function apiGetActiveDraft(): Promise<
+  import('@latch/types').GetActiveMultisigDraftResponse
+> {
   const res = await sendToBackground<
     undefined,
     import('@latch/types').GetActiveMultisigDraftResponse
@@ -72,7 +74,10 @@ export async function apiAddDraftMember(
   return res.data
 }
 
-export async function apiRemoveDraftMember(draftId: string, memberId: string): Promise<MultisigDraft> {
+export async function apiRemoveDraftMember(
+  draftId: string,
+  memberId: string
+): Promise<MultisigDraft> {
   const res = await sendToBackground<{ draftId: string; memberId: string }, MultisigDraft>({
     type: 'MULTISIG_REMOVE_DRAFT_MEMBER',
     payload: { draftId, memberId },
@@ -256,7 +261,12 @@ export async function apiSyncLocalMultisigAccounts(opts?: {
 }> {
   const res = await sendToBackground<
     { activateFirstCreated?: boolean },
-    { accounts: StoredAccount[]; activeAccountId?: string; created: StoredAccount[]; updated: boolean }
+    {
+      accounts: StoredAccount[]
+      activeAccountId?: string
+      created: StoredAccount[]
+      updated: boolean
+    }
   >({
     type: 'MULTISIG_SYNC_LOCAL_ACCOUNTS',
     payload: opts ?? {},
@@ -290,7 +300,10 @@ export async function apiCreateLocalMultisigAccount(args: {
   multisigMemberId?: string
   multisigBackendAccountId?: string
 }) {
-  const res = await sendToBackground<typeof args, { account: import('@latch/types').StoredAccount }>({
+  const res = await sendToBackground<
+    typeof args,
+    { account: import('@latch/types').StoredAccount }
+  >({
     type: 'MULTISIG_CREATE_LOCAL_ACCOUNT',
     payload: args,
   })
@@ -301,16 +314,21 @@ export async function apiCreateLocalMultisigAccount(args: {
 export async function apiCreateMultisigProposal(
   req: CreateMultisigProposalRequest
 ): Promise<CreateMultisigProposalResponse> {
-  const res = await sendToBackground<CreateMultisigProposalRequest, CreateMultisigProposalResponse>({
-    type: 'MULTISIG_CREATE_PROPOSAL',
-    payload: req,
-  })
+  const res = await sendToBackground<CreateMultisigProposalRequest, CreateMultisigProposalResponse>(
+    {
+      type: 'MULTISIG_CREATE_PROPOSAL',
+      payload: req,
+    }
+  )
   if (!res.ok || !res.data) throw new Error(friendlyError(res.error))
   return res.data
 }
 
 export async function apiListMultisigAccounts() {
-  const res = await sendToBackground<undefined, import('@latch/types').ListMultisigAccountsResponse>({
+  const res = await sendToBackground<
+    undefined,
+    import('@latch/types').ListMultisigAccountsResponse
+  >({
     type: 'MULTISIG_LIST_ACCOUNTS',
     payload: undefined,
   })
@@ -343,7 +361,11 @@ export function extractInviteToken(data: CreateMultisigDraftResponse): string {
 }
 
 export function memberCountFromDraft(
-  draft: MultisigDraft | { members?: MultisigDraftMember[]; validMemberCount?: number } | null | undefined
+  draft:
+    | MultisigDraft
+    | { members?: MultisigDraftMember[]; validMemberCount?: number }
+    | null
+    | undefined
 ): number {
   if (!draft) return 0
   return draft.validMemberCount ?? draft.members?.length ?? 0

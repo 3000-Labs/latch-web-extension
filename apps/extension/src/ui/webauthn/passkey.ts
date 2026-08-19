@@ -3,13 +3,7 @@ import { p256 } from '@noble/curves/nist.js'
 import { decodeMultiple } from 'cbor-x'
 import { xdr } from '@stellar/stellar-sdk'
 
-import {
-  base64UrlToBytes,
-  bytesToBase64Url,
-  bytesToHex,
-  concatBytes,
-  hexToBytes,
-} from './utils'
+import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from './utils'
 
 /** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
 export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
@@ -268,9 +262,9 @@ export function challengeBase64UrlFromWebauthnAssertion(assertion: unknown): str
   const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
   if (typeof clientDataJSON !== 'string' || !clientDataJSON) return undefined
   try {
-    const parsed = JSON.parse(
-      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
-    ) as { challenge?: unknown }
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(clientDataJSON))) as {
+      challenge?: unknown
+    }
     return typeof parsed.challenge === 'string' ? parsed.challenge : undefined
   } catch {
     return undefined
@@ -606,9 +600,9 @@ export function getWebauthnCeremonyTypeFromCredential(credential: unknown): Weba
   const clientDataJSON = (resp as { clientDataJSON?: unknown }).clientDataJSON
   if (typeof clientDataJSON !== 'string' || !clientDataJSON) return 'unknown'
   try {
-    const parsed = JSON.parse(
-      new TextDecoder().decode(base64UrlToBytes(clientDataJSON))
-    ) as { type?: unknown }
+    const parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(clientDataJSON))) as {
+      type?: unknown
+    }
     if (parsed.type === 'webauthn.create' || parsed.type === 'webauthn.get') {
       return parsed.type
     }

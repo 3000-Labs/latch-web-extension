@@ -47,7 +47,9 @@ export function OnboardingHaveWalletCard({
                 onClick={() => onSelect('seedPhrase')}
                 className={[
                   'w-full rounded-[14px] bg-[#201f1e] p-3 text-left',
-                  selected === 'seedPhrase' ? 'border border-[#f0a300]' : 'border border-transparent',
+                  selected === 'seedPhrase'
+                    ? 'border border-[#f0a300]'
+                    : 'border border-transparent',
                 ].join(' ')}
               >
                 <p className="text-[16px] font-semibold leading-[1.31] tracking-[-0.16px] text-[#fcfcfc]">

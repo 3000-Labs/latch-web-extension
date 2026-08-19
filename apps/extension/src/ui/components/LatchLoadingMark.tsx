@@ -18,12 +18,7 @@ export function LatchLoadingMark() {
       </div>
       <div className="absolute left-0 top-0 size-[116px] overflow-clip">
         <div className="absolute inset-[3.45%]">
-          <svg
-            viewBox="0 0 111 111"
-            className="block size-full"
-            fill="none"
-            aria-hidden
-          >
+          <svg viewBox="0 0 111 111" className="block size-full" fill="none" aria-hidden>
             <defs>
               <linearGradient
                 id={gradientId}
@@ -65,7 +60,12 @@ export function LatchLoadingMark() {
         </div>
         <div className="absolute inset-[19.83%_20.69%_20.69%_21.55%]">
           <div className="absolute bottom-[31.03%] left-[calc(50%-0.32px)] top-[25.49%] w-[56px] -translate-x-1/2">
-            <img src={logoSymbolUrl} alt="" className="absolute inset-0 block size-full max-w-none" aria-hidden />
+            <img
+              src={logoSymbolUrl}
+              alt=""
+              className="absolute inset-0 block size-full max-w-none"
+              aria-hidden
+            />
           </div>
         </div>
       </div>

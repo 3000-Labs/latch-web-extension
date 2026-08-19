@@ -12,4 +12,3 @@ export type SessionKeyPermission = {
 }
 
 export type SessionKeyDraft = Omit<SessionKeyPermission, 'id'>
-

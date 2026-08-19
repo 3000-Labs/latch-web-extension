@@ -14,10 +14,7 @@ type AquariusPoolsPage = {
 const REGISTRY_TTL_MS = 5 * 60_000
 const FETCH_TIMEOUT_MS = 15_000
 
-const memoryCache = new Map<
-  SwapNetwork,
-  { at: number; registry: SwapProviderTokenRegistry }
->()
+const memoryCache = new Map<SwapNetwork, { at: number; registry: SwapProviderTokenRegistry }>()
 
 let inflight: Promise<SwapProviderTokenRegistry> | null = null
 

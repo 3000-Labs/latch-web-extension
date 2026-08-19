@@ -60,8 +60,7 @@ export async function assembleAndSubmitCosignRequest(args: {
 
   if (args.keyDataHex?.trim()) {
     const smartIdx = 0
-    const authEntries =
-      assembled.toEnvelope().v1()?.tx().ext().sorobanData().auth() ?? []
+    const authEntries = assembled.toEnvelope().v1()?.tx().ext().sorobanData().auth() ?? []
     const authEntriesXdr = authEntries.map((entry: xdr.SorobanAuthorizationEntry) =>
       entry.toXDR('base64')
     )

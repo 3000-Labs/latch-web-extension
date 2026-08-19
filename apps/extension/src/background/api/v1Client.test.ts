@@ -2,21 +2,41 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { BackendError } from './client'
 import { v1FetchForWallet } from './v1Client'
+import { clearCachedActiveNetwork } from '../network/config'
+import { resetV1TokenLegacyPruneFlag, v1TokenStorageKey } from './v1TokenStorage'
 
 const STORAGE_KEY = 'latch.v1TokensByWallet'
 
+function stubChromeStore(store: Record<string, unknown>) {
+  vi.stubGlobal('chrome', {
+    storage: {
+      local: {
+        get: vi.fn(async (keys: string | string[]) => {
+          const list = Array.isArray(keys) ? keys : [keys]
+          const out: Record<string, unknown> = {}
+          for (const k of list) out[k] = store[k]
+          return out
+        }),
+        set: vi.fn(async (patch: Record<string, unknown>) => {
+          Object.assign(store, patch)
+        }),
+      },
+    },
+  })
+}
+
 describe('v1FetchForWallet', () => {
   afterEach(() => {
+    clearCachedActiveNetwork()
+    resetV1TokenLegacyPruneFlag()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })
 
   it('retries once on 401 after refreshing the wallet token pair', async () => {
-    vi.stubGlobal('chrome', { storage: { local: { get: vi.fn(), set: vi.fn() } } })
-
     const store: Record<string, unknown> = {
       [STORAGE_KEY]: {
-        'CABC123': {
+        [v1TokenStorageKey('testnet', 'CABC123')]: {
           accessToken: 'stale-access',
           refreshToken: 'refresh-raw',
           expiresAt: Date.now() + 60_000,
@@ -24,17 +44,7 @@ describe('v1FetchForWallet', () => {
         },
       },
     }
-
-    vi.stubGlobal('chrome', {
-      storage: {
-        local: {
-          get: vi.fn(async (key: string) => ({ [key]: store[key] })),
-          set: vi.fn(async (patch: Record<string, unknown>) => {
-            Object.assign(store, patch)
-          }),
-        },
-      },
-    })
+    stubChromeStore(store)
 
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const auth = (init?.headers as Record<string, string> | undefined)?.authorization
@@ -94,7 +104,7 @@ describe('v1FetchForWallet', () => {
   it('clears stored tokens and throws V1_AUTH_REQUIRED when refresh fails', async () => {
     const store: Record<string, unknown> = {
       [STORAGE_KEY]: {
-        'CABC123': {
+        [v1TokenStorageKey('testnet', 'CABC123')]: {
           accessToken: 'stale-access',
           refreshToken: 'bad-refresh',
           expiresAt: Date.now() + 60_000,
@@ -102,17 +112,7 @@ describe('v1FetchForWallet', () => {
         },
       },
     }
-
-    vi.stubGlobal('chrome', {
-      storage: {
-        local: {
-          get: vi.fn(async (key: string) => ({ [key]: store[key] })),
-          set: vi.fn(async (patch: Record<string, unknown>) => {
-            Object.assign(store, patch)
-          }),
-        },
-      },
-    })
+    stubChromeStore(store)
 
     vi.stubGlobal(
       'fetch',
@@ -143,6 +143,8 @@ describe('v1FetchForWallet', () => {
       status: 401,
     } satisfies Partial<BackendError>)
 
-    expect((store[STORAGE_KEY] as Record<string, unknown>)['CABC123']).toBeUndefined()
+    expect(
+      (store[STORAGE_KEY] as Record<string, unknown>)[v1TokenStorageKey('testnet', 'CABC123')]
+    ).toBeUndefined()
   })
 })

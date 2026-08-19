@@ -31,11 +31,7 @@ export type SwapProviderTokenRegistry = {
   byAssetKey: Map<string, SwapProviderTokenEntry>
 }
 
-export function swapAssetKeyFromParts(
-  code: string,
-  issuer?: string,
-  assetId?: string
-): string {
+export function swapAssetKeyFromParts(code: string, issuer?: string, assetId?: string): string {
   if (issuer) return `${code}:${issuer}`
   return assetId ?? (code.toUpperCase() === 'XLM' ? 'native' : code)
 }

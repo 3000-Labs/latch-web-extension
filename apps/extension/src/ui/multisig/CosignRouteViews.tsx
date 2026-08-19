@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type { CosignMemberInit, CosignRequest, MultisigPredictResponse, StoredAccount } from '@latch/types'
+import type {
+  CosignMemberInit,
+  CosignRequest,
+  MultisigPredictResponse,
+  StoredAccount,
+} from '@latch/types'
 
 import {
   buildCosignInviteUrl,
@@ -27,7 +32,10 @@ import {
 } from '../lib/cosignFlow'
 import { ensureCosignV1Auth } from '../lib/cosignV1Auth'
 import { approveCosignRequest } from '../lib/cosignApprove'
-import { listReusablePasskeyAccounts, enrollNewPasskeyForCosignWizard } from '../lib/multisigPasskey'
+import {
+  listReusablePasskeyAccounts,
+  enrollNewPasskeyForCosignWizard,
+} from '../lib/multisigPasskey'
 import { storedAccountLabel } from '../lib/storedAccountLabel'
 import { CosignJoinFlow } from './CosignJoinFlow'
 import { AddMultisigOwnersScreen } from '../screens/multisig/AddMultisigOwnersScreen'
@@ -123,10 +131,7 @@ export function CosignRouteViews({
 
   const [pendingRelays, setPendingRelays] = useState<string[]>([])
 
-  const reusablePasskeyAccounts = useMemo(
-    () => listReusablePasskeyAccounts(accounts),
-    [accounts]
-  )
+  const reusablePasskeyAccounts = useMemo(() => listReusablePasskeyAccounts(accounts), [accounts])
   const [selectedPasskeyAccountId, setSelectedPasskeyAccountId] = useState<string | undefined>()
   const selectedPasskeyAccount = useMemo(
     () => reusablePasskeyAccounts.find((a) => a.id === selectedPasskeyAccountId),
@@ -333,9 +338,7 @@ export function CosignRouteViews({
         inviteToken: wizard.inviteToken,
         creatorLinkedAccountId: creator.id,
       })
-      setWizard((w) =>
-        w ? { ...w, smartAccountAddress: result.smartAccountAddress } : w
-      )
+      setWizard((w) => (w ? { ...w, smartAccountAddress: result.smartAccountAddress } : w))
       setPendingRelays([wizard.inviteToken])
       onSetActiveAccountId(result.account.id)
       await onRefreshAccounts()

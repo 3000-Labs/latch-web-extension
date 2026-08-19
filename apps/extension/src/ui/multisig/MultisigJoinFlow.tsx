@@ -49,10 +49,7 @@ export function MultisigJoinFlow({
   const [joined, setJoined] = useState(false)
   const [walletSynced, setWalletSynced] = useState(false)
 
-  const reusablePasskeyAccounts = useMemo(
-    () => listReusablePasskeyAccounts(accounts),
-    [accounts]
-  )
+  const reusablePasskeyAccounts = useMemo(() => listReusablePasskeyAccounts(accounts), [accounts])
   const [selectedPasskeyAccountId, setSelectedPasskeyAccountId] = useState<string | undefined>()
   const passkeyPickerOptions = useMemo(
     () =>
@@ -114,7 +111,10 @@ export function MultisigJoinFlow({
       const members = latest?.members ?? latest?.draft?.members ?? draft.members ?? []
       const member =
         findDraftMemberByCredentialId(draft, credentialId) ??
-        findDraftMemberByCredentialId({ members } as import('@latch/types').MultisigDraft, credentialId)
+        findDraftMemberByCredentialId(
+          { members } as import('@latch/types').MultisigDraft,
+          credentialId
+        )
       await sendToBackground({
         type: 'MULTISIG_ADD_PENDING_INVITE',
         payload: {

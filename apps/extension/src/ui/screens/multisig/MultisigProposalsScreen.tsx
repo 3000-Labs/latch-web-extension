@@ -39,7 +39,9 @@ export function MultisigProposalsScreen({
 
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
         {!loading && proposals.length === 0 ? (
-          <p className="rounded-[14px] bg-[#2a2928] p-4 text-sm text-[#b3b3b3]">No proposals yet.</p>
+          <p className="rounded-[14px] bg-[#2a2928] p-4 text-sm text-[#b3b3b3]">
+            No proposals yet.
+          </p>
         ) : null}
         {proposals.map((p) => (
           <button
@@ -54,7 +56,7 @@ export function MultisigProposalsScreen({
             <span className="text-xs capitalize text-[#b3b3b3]">{p.status ?? 'pending'}</span>
             {p.threshold != null ? (
               <span className="text-xs text-primary">
-                {(p.approvalCount ?? 0)}/{p.threshold} approvals
+                {p.approvalCount ?? 0}/{p.threshold} approvals
               </span>
             ) : null}
           </button>

@@ -52,10 +52,7 @@ export async function enrollNewPasskeyForCosignWizard(args: {
   label: string
   surface: 'popup' | 'sidepanel'
 }): Promise<StoredAccount> {
-  const displayName = nextPasskeyRegistrationDisplayName(
-    args.accounts,
-    `${args.label} multisig`
-  )
+  const displayName = nextPasskeyRegistrationDisplayName(args.accounts, `${args.label} multisig`)
   const begin = await sendToBackground<{ displayName?: string }, BackendWebauthnBeginResponse>({
     type: 'PASSKEY_REG_BEGIN',
     payload: { displayName },

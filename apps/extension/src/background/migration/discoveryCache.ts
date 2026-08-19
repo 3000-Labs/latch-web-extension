@@ -1,6 +1,10 @@
 import type { MigrationDiscovery } from '@latch/types'
 
-import { getActiveNetwork, peekCachedActiveNetwork, getStellarNetworkFromEnv } from '../network/config'
+import {
+  getActiveNetwork,
+  peekCachedActiveNetwork,
+  getStellarNetworkFromEnv,
+} from '../network/config'
 
 const TTL_MS = 60_000
 

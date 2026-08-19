@@ -3,11 +3,7 @@ import importSuccessUrl from 'url:../../../assets/onboarding/web/import-success.
 
 import { OnboardingPrimaryButton } from './components/OnboardingCardButtons'
 
-export function OnboardingImportSuccessCard({
-  onGoToDashboard,
-}: {
-  onGoToDashboard: () => void
-}) {
+export function OnboardingImportSuccessCard({ onGoToDashboard }: { onGoToDashboard: () => void }) {
   return (
     <div className="flex h-[600px] w-[420px] flex-col gap-2 rounded-[24px] bg-[#1c1c1c] p-6 shadow-[-5px_6px_7.7px_rgba(9,9,9,0.3)]">
       <div className="flex min-h-0 flex-1 flex-col items-center justify-between">

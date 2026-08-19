@@ -72,9 +72,7 @@ describe('parseAquariusPoolTokenLabel', () => {
 
   it('parses CODE:ISSUER labels', () => {
     expect(
-      parseAquariusPoolTokenLabel(
-        'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5'
-      )
+      parseAquariusPoolTokenLabel('USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5')
     ).toEqual({
       symbol: 'USDC',
       issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
@@ -91,10 +89,7 @@ describe('entriesFromAquariusPools', () => {
           'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
           'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC',
         ],
-        tokens_str: [
-          'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-          'native',
-        ],
+        tokens_str: ['USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5', 'native'],
       },
       {
         tokens_addresses: [
@@ -111,9 +106,8 @@ describe('entriesFromAquariusPools', () => {
     const registry = buildSwapProviderTokenRegistry(entries)
     expect(registry.byContractId.size).toBe(3)
     expect(
-      registry.byAssetKey.get(
-        'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5'
-      )?.contractId
+      registry.byAssetKey.get('USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5')
+        ?.contractId
     ).toBe('CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA')
     expect(registry.byAssetKey.get('native')?.contractId).toBe(
       'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'

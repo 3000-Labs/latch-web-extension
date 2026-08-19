@@ -41,10 +41,7 @@ export async function approveCosignRequest(args: {
   const networkPassphrase =
     process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
 
-  if (
-    args.linkedAccount.mode === 'freighter' ||
-    args.linkedAccount.mode === 'mnemonic'
-  ) {
+  if (args.linkedAccount.mode === 'freighter' || args.linkedAccount.mode === 'mnemonic') {
     const template =
       prepared.gAddressEntryTemplateXdr ??
       prepared.smartAccountAuthEntryXdr ??
@@ -126,8 +123,7 @@ export async function approveCosignRequest(args: {
       sigDataXdrHex,
       keyDataHex: args.linkedAccount.passkeyKeyDataHex ?? '',
       contextRuleId: Number(prepared.contextRuleId ?? 0),
-      authEntryXdr:
-        prepared.smartAccountAuthEntryXdr ?? prepared.authEntryXdr ?? '',
+      authEntryXdr: prepared.smartAccountAuthEntryXdr ?? prepared.authEntryXdr ?? '',
     },
   })
   if (!attachRes.ok || !attachRes.data) throw new Error(friendlyError(attachRes.error))

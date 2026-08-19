@@ -54,7 +54,9 @@ export function GrantAccessScreen({
         <div className="mt-1 text-sm font-bold capitalize">{network}</div>
 
         <div className="mt-4 text-xs font-bold text-muted">Smart account</div>
-        <div className="mt-1 font-mono text-sm font-bold">{truncateAddress(smartAccountAddress)}</div>
+        <div className="mt-1 font-mono text-sm font-bold">
+          {truncateAddress(smartAccountAddress)}
+        </div>
 
         <div className="mt-4 text-xs font-bold text-muted">Permission</div>
         <div className="mt-1 text-sm font-bold">{permissionLabel}</div>

@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a defect, regression, or unexpected behavior
+title: '[Bug]: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Do **not** paste mnemonics, private keys, passwords, or WebAuthn material.
+        Security issues: use [GitHub Security Advisories](https://github.com/3000-Labs/latch-web-extension/security/advisories/new), not a public issue.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Onboarding / passkey
+        - Popup UI
+        - Side panel
+        - Background / signing
+        - dapp bridge (`window.latch`)
+        - Send / swap / history
+        - Multisig
+        - CI / tooling
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, extension version or commit if known
+      placeholder: Chrome 128 / macOS 15 / unpacked chrome-mv3-dev
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Load unpacked from apps/extension/build/chrome-mv3-dev
+        2. Open the popup
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or logs
+      description: Redact secrets. Extension service-worker logs from chrome://extensions are useful.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: This issue does not include secrets, recovery phrases, private keys, or credentials
+          required: true
+        - label: I searched for an existing issue first
+          required: true

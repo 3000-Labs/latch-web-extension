@@ -4,101 +4,25 @@ import backIconUrl from 'url:../../../../assets/home/icon-back.svg'
 import filterIconUrl from 'url:../../../../assets/home/icon-filter.svg'
 import searchIconUrl from 'url:../../../../assets/home/icon-search.svg'
 
-import { TokenAvatar } from '../../components/TokenAvatar'
-import type { HistoryItemVm } from '../../types/history'
+import { NewsCarousel } from '../../components/NewsCarousel'
 import { MAIN_BOTTOM_NAV_CLEARANCE_PX } from '../home/components/MainBottomNav'
+import { RecommendedDappCard } from './RecommendedDappCard'
+import { RECOMMENDED_DAPPS } from './recommendedDapps'
 
-function exploreStatusLabel(item: HistoryItemVm): string {
-  if (item.status === 'pending') return 'Pending'
-  if (item.kind === 'received' || item.kind === 'deposit') return 'Received'
-  if (item.kind === 'sent') return 'Sent'
-  return 'Completed'
-}
-
-function formatCalendarDate(dateStr: string): string {
-  const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-}
-
-function amountDisplay(item: HistoryItemVm): string {
-  if (item.amountUsd) {
-    const raw = item.amountUsd.replace(/[^0-9.-]/g, '')
-    const n = parseFloat(raw)
-    if (Number.isFinite(n)) {
-      const sign = item.kind === 'sent' ? '-' : '+'
-      return `${sign}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-    }
-  }
-  return item.amountLabel
-}
-
-function ExploreTransactionRow({
-  item,
-  onClick,
-}: {
-  item: HistoryItemVm
-  onClick?: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-full items-center rounded-[14px] bg-card p-3 text-left"
-    >
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <TokenAvatar
-          symbol={item.assetCode}
-          iconUrl={item.iconUrl}
-          rounded="rounded-lg"
-          className="h-8 w-8"
-        />
-        <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold tracking-[-0.16px] text-fg">{item.asset}</div>
-          <div className="flex items-center gap-1 text-sm tracking-[-0.28px] text-muted">
-            <span>{exploreStatusLabel(item)}</span>
-            <span className="h-[3px] w-[3px] rounded-[1px] bg-border" aria-hidden />
-            <span>{item.timeLabel}</span>
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
-          <div className="text-base font-semibold tracking-[-0.16px] text-fg">
-            {amountDisplay(item)}
-          </div>
-          <div className="text-sm tracking-[-0.28px] text-muted">
-            {formatCalendarDate(item.createdAt)}
-          </div>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-export function ExploreScreen({
-  items,
-  loading,
-  error,
-  onBack,
-  onSelectItem,
-}: {
-  items: HistoryItemVm[]
-  loading?: boolean
-  error?: string | null
-  onBack: () => void
-  onSelectItem?: (item: HistoryItemVm) => void
-}) {
+export function ExploreScreen({ onBack }: { onBack: () => void }) {
   const [query, setQuery] = useState('')
 
-  const filtered = useMemo(() => {
+  const filteredDapps = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return items
-    return items.filter(
-      (it) =>
-        it.asset.toLowerCase().includes(q) ||
-        it.assetCode.toLowerCase().includes(q) ||
-        it.transactionHash.toLowerCase().includes(q)
+    if (!q) return RECOMMENDED_DAPPS
+    return RECOMMENDED_DAPPS.filter(
+      (dapp) => dapp.name.toLowerCase().includes(q) || dapp.description.toLowerCase().includes(q)
     )
-  }, [items, query])
+  }, [query])
+
+  const openDapp = (url: string) => {
+    void chrome.tabs.create({ url })
+  }
 
   return (
     <div
@@ -119,7 +43,7 @@ export function ExploreScreen({
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for transactions ..."
+              placeholder="Search for assets or dApps ..."
               className="w-full bg-transparent text-xs tracking-[-0.24px] text-fg outline-none placeholder:text-muted"
             />
             <img src={searchIconUrl} alt="" className="h-4 w-4 shrink-0" aria-hidden />
@@ -133,27 +57,22 @@ export function ExploreScreen({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading ? (
-            <p className="text-sm text-muted">Loading transactions…</p>
-          ) : error ? (
-            <p className="text-sm text-red-300">{error}</p>
-          ) : (
-            <>
-              <p className="text-sm tracking-[-0.28px] text-muted">
-                {filtered.length} result{filtered.length === 1 ? '' : 's'}
-              </p>
-              <div className="mt-4 flex flex-col gap-2">
-                {filtered.map((item) => (
-                  <ExploreTransactionRow
-                    key={item.id}
-                    item={item}
-                    onClick={onSelectItem ? () => onSelectItem(item) : undefined}
-                  />
-                ))}
-              </div>
-            </>
-          )}
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
+          <NewsCarousel className="w-full shrink-0 self-stretch" />
+
+          <div className="flex w-full flex-col gap-4">
+            <p className="text-sm leading-[1.34] tracking-[-0.28px] text-muted">
+              Recommended dApps
+            </p>
+            <div className="flex flex-col gap-2">
+              {filteredDapps.map((dapp) => (
+                <RecommendedDappCard key={dapp.id} dapp={dapp} onOpen={openDapp} />
+              ))}
+              {filteredDapps.length === 0 ? (
+                <p className="text-sm text-muted">No dApps match your search.</p>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
     </div>

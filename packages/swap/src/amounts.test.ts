@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  applySlippageMin,
-  humanToRaw,
-  rawToHuman,
-  rawToNumber,
-} from './amounts'
+import { applySlippageMin, humanToRaw, rawToHuman, rawToNumber } from './amounts'
 
 describe('humanToRaw', () => {
   it('converts XLM decimals', () => {

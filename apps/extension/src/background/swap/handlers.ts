@@ -169,9 +169,7 @@ export async function runGetSwapQuote(req: GetSwapQuoteRequest): Promise<GetSwap
   }
 }
 
-export async function runPrepareSwapTx(
-  req: PrepareSwapTxRequest
-): Promise<PrepareSwapTxResponse> {
+export async function runPrepareSwapTx(req: PrepareSwapTxRequest): Promise<PrepareSwapTxResponse> {
   const account = await getActiveAccount(req.accountId)
   const network = await getActiveNetwork()
   const { quote: payload } = req

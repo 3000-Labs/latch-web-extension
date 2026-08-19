@@ -5,31 +5,85 @@ on:
   push:
     branches: [main]
 
-jobs:
-  lint_and_test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+permissions:
+  contents: read
 
+jobs:
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Check for typos
+        uses: crate-ci/typos@v1.48.0
         with:
-          node-version: 20
+          config: _typos.toml
+
+  ci:
+    name: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect code changes
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            code:
+              - 'apps/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'turbo.json'
+              - 'eslint.config.js'
+              - '.prettierrc'
+              - '.prettierignore'
+              - 'tsconfig.json'
+              - '.nvmrc'
+              - '.github/workflows/**'
+
+      - name: Skip heavy CI for docs-only changes
+        if: steps.changes.outputs.code != 'true'
+        run: echo "Docs-only change; lint/test/build skipped. Job still reports success."
 
       - name: Setup pnpm
+        if: steps.changes.outputs.code == 'true'
         uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
 
+      - name: Setup Node
+        if: steps.changes.outputs.code == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
       - name: Install dependencies
+        if: steps.changes.outputs.code == 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: Format check
+        if: steps.changes.outputs.code == 'true'
+        run: pnpm format:check
+
       - name: Lint
+        if: steps.changes.outputs.code == 'true'
         run: pnpm lint
 
       - name: Test
+        if: steps.changes.outputs.code == 'true'
         run: pnpm test
 
+      - name: Build
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          cp apps/extension/.env.example apps/extension/.env
+          pnpm build

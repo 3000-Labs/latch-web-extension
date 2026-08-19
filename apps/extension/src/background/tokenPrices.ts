@@ -3,7 +3,10 @@ function formatUsdFloor(n: number): string {
   return floored.toFixed(2)
 }
 
-export function computeBalanceUsd(amount: string, priceUsd: number | null | undefined): string | null {
+export function computeBalanceUsd(
+  amount: string,
+  priceUsd: number | null | undefined
+): string | null {
   if (priceUsd == null) return null
   const n = parseFloat(amount)
   if (!Number.isFinite(n)) return null

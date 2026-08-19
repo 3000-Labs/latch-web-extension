@@ -19,7 +19,8 @@ function coerceToUint8Array(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) return value
   if (typeof value === 'string') {
     try {
-      const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)
+      const padded =
+        value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)
       const bin = atob(padded)
       const out = new Uint8Array(bin.length)
       for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
@@ -66,7 +67,8 @@ function normalizeInnerResponse(
 
 function decodeBase64UrlToUtf8(value: string): string | null {
   try {
-    const padded = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)
+    const padded =
+      value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (value.length % 4)) % 4)
     const bin = atob(padded)
     const out = new Uint8Array(bin.length)
     for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)

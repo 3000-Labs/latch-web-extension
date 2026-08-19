@@ -3,14 +3,20 @@ export function formatUsdAmount(n: number): string {
   return floored.toFixed(2)
 }
 
-export function cryptoToFiat(cryptoAmount: string, priceUsd: number | null | undefined): string | null {
+export function cryptoToFiat(
+  cryptoAmount: string,
+  priceUsd: number | null | undefined
+): string | null {
   if (priceUsd == null) return null
   const n = parseFloat(cryptoAmount)
   if (!Number.isFinite(n) || n < 0) return null
   return formatUsdAmount(n * priceUsd)
 }
 
-export function fiatToCrypto(fiatAmount: string, priceUsd: number | null | undefined): string | null {
+export function fiatToCrypto(
+  fiatAmount: string,
+  priceUsd: number | null | undefined
+): string | null {
   if (priceUsd == null || priceUsd <= 0) return null
   const n = parseFloat(fiatAmount.replace(/^\$/, ''))
   if (!Number.isFinite(n) || n < 0) return null

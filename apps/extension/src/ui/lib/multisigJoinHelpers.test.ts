@@ -33,9 +33,7 @@ describe('multisigJoinHelpers', () => {
     expect(findDraftMemberForStoredAccount(members, account)?.id).toBe('m1')
     expect(draftHasMemberForStoredAccount(members, account)).toBe(true)
 
-    const byCred = [
-      { id: 'm3', memberType: 'passkey', credentialId: 'cred-abc' },
-    ]
+    const byCred = [{ id: 'm3', memberType: 'passkey', credentialId: 'cred-abc' }]
     expect(findDraftMemberForStoredAccount(byCred, account)?.id).toBe('m3')
   })
 })

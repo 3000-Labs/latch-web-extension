@@ -1,7 +1,4 @@
-export function parseApiError(
-  status: number,
-  data: unknown
-): { message: string; code?: string } {
+export function parseApiError(status: number, data: unknown): { message: string; code?: string } {
   if (!data || typeof data !== 'object') {
     return { message: `Request failed: ${status}` }
   }

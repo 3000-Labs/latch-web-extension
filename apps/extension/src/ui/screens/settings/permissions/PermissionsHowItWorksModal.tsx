@@ -83,4 +83,3 @@ export function PermissionsHowItWorksModal({
     document.body
   )
 }
-

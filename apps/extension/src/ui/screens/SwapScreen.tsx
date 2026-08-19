@@ -147,13 +147,9 @@ export function SwapScreen({
     return () => clearTimeout(timer)
   }, [accountId, payAmount, payToken, quoteRequestKey, receiveToken, tokenPriceUsdBySymbol])
 
-  const payUsdPrice = payToken
-    ? tokenPriceUsdBySymbol?.[payToken.symbol.toUpperCase()]
-    : undefined
+  const payUsdPrice = payToken ? tokenPriceUsdBySymbol?.[payToken.symbol.toUpperCase()] : undefined
   const payUsdApprox =
-    payN === null || payUsdPrice == null
-      ? '≈--'
-      : `≈$${(payN * payUsdPrice).toFixed(5)}`
+    payN === null || payUsdPrice == null ? '≈--' : `≈$${(payN * payUsdPrice).toFixed(5)}`
   const receiveDisplayAmount = quoteLoading
     ? '…'
     : previewQuote === null
@@ -242,9 +238,7 @@ export function SwapScreen({
             {insufficientBalance ? (
               <p className="text-center text-xs text-red-400">Insufficient balance</p>
             ) : null}
-            {quoteError ? (
-              <p className="text-center text-xs text-red-400">{quoteError}</p>
-            ) : null}
+            {quoteError ? <p className="text-center text-xs text-red-400">{quoteError}</p> : null}
 
             <SwapEnterAmountButton
               label={ctaLabel}

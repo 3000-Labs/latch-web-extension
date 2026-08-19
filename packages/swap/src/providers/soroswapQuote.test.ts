@@ -9,14 +9,12 @@ import {
 describe('poolHashToBytes / normalizePoolHashForBuild', () => {
   it('converts 64-char hex Aquarius indexes to Base64 BytesN<32>', () => {
     expect(
-      normalizePoolHashForBuild(
-        'b2e02fcfca6c96f8ad5cbd84e7784a777b36d9c96a2459402c4f458462aab7f0'
-      )
+      normalizePoolHashForBuild('b2e02fcfca6c96f8ad5cbd84e7784a777b36d9c96a2459402c4f458462aab7f0')
     ).toBe('suAvz8pslvitXL2E53hKd3s22clqJFlALE9FhGKqt/A=')
     expect(
-      poolHashToBytes(
-        'b2e02fcfca6c96f8ad5cbd84e7784a777b36d9c96a2459402c4f458462aab7f0'
-      ).toString('base64')
+      poolHashToBytes('b2e02fcfca6c96f8ad5cbd84e7784a777b36d9c96a2459402c4f458462aab7f0').toString(
+        'base64'
+      )
     ).toBe('suAvz8pslvitXL2E53hKd3s22clqJFlALE9FhGKqt/A=')
   })
 

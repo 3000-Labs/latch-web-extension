@@ -1,5 +1,6 @@
-import type { CreateDepositIntentRequest, DepositIntent } from '@latch/types'
+import type { CreateDepositIntentRequest, DepositIntent, DepositOnRampCrypto } from '@latch/types'
 
+import { formatFundError } from './fundErrors'
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import { ensureV1Auth } from '../lib/v1Auth'
 
@@ -8,6 +9,8 @@ export async function createDepositIntentForAccount(args: {
   passkeyCredentialId?: string
   surface: 'popup' | 'sidepanel'
   openMoonPay?: boolean
+  openTransak?: boolean
+  cryptoCurrency?: DepositOnRampCrypto
 }): Promise<DepositIntent> {
   if (!args.accountId.trim()) {
     throw new Error('No active account selected')
@@ -29,6 +32,8 @@ export async function createDepositIntentForAccount(args: {
       payload: {
         accountId: args.accountId,
         openMoonPay: args.openMoonPay,
+        openTransak: args.openTransak,
+        cryptoCurrency: args.cryptoCurrency,
       },
     })
 
@@ -46,12 +51,12 @@ export async function createDepositIntentForAccount(args: {
     throw new Error('No response from background — reload the Latch extension and try again')
   }
   if (!res.ok) {
-    throw new Error(friendlyError(res.error))
+    throw new Error(formatFundError(res.error) || friendlyError(res.error))
   }
   if (!res.data?.memo_id || !res.data?.pool_address) {
     throw new Error(
       res.error
-        ? friendlyError(res.error)
+        ? formatFundError(res.error) || friendlyError(res.error)
         : 'Deposit intent failed (empty response). Reload the Latch extension on chrome://extensions and try again.'
     )
   }
@@ -66,5 +71,18 @@ export async function startMoonPayOnRamp(args: {
   return createDepositIntentForAccount({
     ...args,
     openMoonPay: true,
+  })
+}
+
+export async function startTransakOnRamp(args: {
+  accountId: string
+  passkeyCredentialId?: string
+  surface: 'popup' | 'sidepanel'
+  cryptoCurrency: DepositOnRampCrypto
+}): Promise<DepositIntent> {
+  return createDepositIntentForAccount({
+    ...args,
+    openTransak: true,
+    cryptoCurrency: args.cryptoCurrency,
   })
 }

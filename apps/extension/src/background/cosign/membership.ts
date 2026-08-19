@@ -11,7 +11,16 @@ import {
   sorobanRpcUrlFromEnv,
 } from '../migration/env'
 import { getAccounts, upsertAccount } from '../storage'
-import { deriveBlindSignerId, deriveMemberBlindId, derivePickupKey, fromBase64, fromHex, sealWCKBundle, toHex, unsealWCKBundle } from './crypto'
+import {
+  deriveBlindSignerId,
+  deriveMemberBlindId,
+  derivePickupKey,
+  fromBase64,
+  fromHex,
+  sealWCKBundle,
+  toHex,
+  unsealWCKBundle,
+} from './crypto'
 import { ensureDeviceTransportKeyPair } from './keyStorage'
 import { signerPublicKeyBytesForAccount } from './signerBytes'
 import {

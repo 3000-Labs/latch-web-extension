@@ -25,7 +25,11 @@ export function normalizeListMultisigAccountsResponse(
   if (Array.isArray(raw)) return raw
   if (Array.isArray(raw.accounts)) return raw.accounts
   const nested = (raw as Record<string, unknown>).data
-  if (nested && typeof nested === 'object' && Array.isArray((nested as { accounts?: unknown }).accounts)) {
+  if (
+    nested &&
+    typeof nested === 'object' &&
+    Array.isArray((nested as { accounts?: unknown }).accounts)
+  ) {
     return (nested as { accounts: MultisigAccount[] }).accounts
   }
   return []
@@ -62,7 +66,8 @@ export function draftMembersToRegisterMembers(
           (a) =>
             a.mode === 'passkey' &&
             ((credentialId && a.passkeyCredentialId?.trim() === credentialId) ||
-              (keyDataHex && a.passkeyKeyDataHex?.trim().toLowerCase() === keyDataHex.toLowerCase()) ||
+              (keyDataHex &&
+                a.passkeyKeyDataHex?.trim().toLowerCase() === keyDataHex.toLowerCase()) ||
               findDraftMemberForStoredAccount([m], a))
         )
         credentialId = credentialId ?? local?.passkeyCredentialId?.trim()
@@ -78,7 +83,10 @@ export function draftMembersToRegisterMembers(
     })
 }
 
-export function draftLooksDeployed(draft?: MultisigDraft | null, predict?: MultisigPredictResponse | null): boolean {
+export function draftLooksDeployed(
+  draft?: MultisigDraft | null,
+  predict?: MultisigPredictResponse | null
+): boolean {
   if (predict?.alreadyDeployed) return true
   const status = draft?.status?.trim().toLowerCase()
   if (status === 'deployed' || status === 'live') return true
@@ -134,7 +142,8 @@ export function multisigLocalAccountNeedsUpdate(
   }
 ): boolean {
   if (next.memberId && existing.multisigMemberId !== next.memberId) return true
-  if (next.backendAccountId && existing.multisigBackendAccountId !== next.backendAccountId) return true
+  if (next.backendAccountId && existing.multisigBackendAccountId !== next.backendAccountId)
+    return true
   if (next.threshold != null && existing.multisigThreshold !== next.threshold) return true
   if (next.label && existing.label !== next.label) return true
   return !existing.multisigMemberId && Boolean(next.memberId)

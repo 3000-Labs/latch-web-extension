@@ -16,10 +16,25 @@ export function friendlyError(e?: SerializableError): string {
   if (e.code === 'fund_unsupported_mode') {
     return 'Fund via on-ramp is not available for this account type yet.'
   }
-  if (
-    typeof e.message === 'string' &&
-    /failed to build setup transaction/i.test(e.message)
-  ) {
+  if (e.code === 'network_mismatch') {
+    return (
+      e.message ||
+      'The Latch API challenge network does not match your active wallet network. Switch network or try again.'
+    )
+  }
+  if (e.code === 'moonpay_network_mismatch') {
+    return (
+      e.message ||
+      'MoonPay live keys cannot be used while the wallet is on testnet. Use a sandbox key or switch to mainnet.'
+    )
+  }
+  if (e.code === 'moonpay_unsigned_url') {
+    return (
+      e.message ||
+      'MoonPay did not return a signed widget URL. Funding cannot open an unsigned live buy link.'
+    )
+  }
+  if (typeof e.message === 'string' && /failed to build setup transaction/i.test(e.message)) {
     return 'Could not set up send rules. Your smart account may not be deployed on this network yet — try again after the account finishes deploying.'
   }
   if (e.status === 403) return 'Not authorized.'
@@ -27,11 +42,14 @@ export function friendlyError(e?: SerializableError): string {
     return 'Seed signer is not loaded. Unlock with your saved password or re-import your recovery phrase.'
   }
   if (
-    e.code === 'internal_error' &&
+    (e.code === 'internal_error' || e.code === 'INTERNAL_ERROR') &&
     typeof e.message === 'string' &&
     /^internal error$/i.test(e.message.trim())
   ) {
-    return 'The Latch API accepted your passkey but failed while deploying the smart account. This is usually a backend configuration issue (factory contract, Soroban RPC, or deploy funding on Render).'
+    return (
+      'The Latch API returned an internal error. This is usually a backend configuration issue ' +
+      '(funding relayer, Soroban RPC, or deploy funding on Render). Try again shortly.'
+    )
   }
   return e.message
 }

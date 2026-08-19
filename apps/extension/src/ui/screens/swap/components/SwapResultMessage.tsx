@@ -73,7 +73,9 @@ export function SwapFailureMessage({
         <span className="font-bold text-[#fcfcfc]">{receiveLine}.</span>
       </p>
       {detail?.trim() ? (
-        <p className="w-full break-words px-2 text-[13px] leading-[1.4] text-[#8a8a8a]">{detail.trim()}</p>
+        <p className="w-full break-words px-2 text-[13px] leading-[1.4] text-[#8a8a8a]">
+          {detail.trim()}
+        </p>
       ) : null}
     </div>
   )

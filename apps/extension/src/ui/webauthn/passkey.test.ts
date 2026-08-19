@@ -314,7 +314,9 @@ describe('webauthn/passkey', () => {
   })
 
   it('nextPasskeyRegistrationDisplayName adds optional context', () => {
-    expect(nextPasskeyRegistrationDisplayName([], 'Team vault')).toBe('Latch account 1 · Team vault')
+    expect(nextPasskeyRegistrationDisplayName([], 'Team vault')).toBe(
+      'Latch account 1 · Team vault'
+    )
   })
 
   it('prepareRegistrationOptionsForCreate requires registration options and preserves server authenticatorSelection', () => {

@@ -18,7 +18,12 @@ import { BackendError } from '../backend'
 import { getMnemonicKeypair } from '../mnemonicSession'
 import { getAccounts } from '../storage'
 import { invalidateDiscoveryCacheForAccount } from './discoveryCache'
-import { getActiveNetwork, horizonUrlFor, networkPassphraseFor, sorobanRpcUrlFor } from '../network/config'
+import {
+  getActiveNetwork,
+  horizonUrlFor,
+  networkPassphraseFor,
+  sorobanRpcUrlFor,
+} from '../network/config'
 
 const sorobanPollOpts = { pollIntervalMs: 1500, maxAttempts: 90 } as const
 /** Keep at least this much XLM on G while further Soroban sweeps may run (per product / fee headroom). */

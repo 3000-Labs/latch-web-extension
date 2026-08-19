@@ -243,6 +243,8 @@ export interface SmartAccountTransactionRow {
 
 export interface GetSmartAccountTransactionsRequest {
   accountId: string
+  /** Bypass fresh TTL and recompute (History pull-to-refresh). */
+  force?: boolean
 }
 
 export interface GetSmartAccountTransactionsResponse {
@@ -624,12 +626,22 @@ export interface GetMarketPricesResponse {
   pricesByCodeUpper: Record<string, MarketTokenPrice>
 }
 
+/** On-ramp crypto locked into a Transak / deposit-intent session. */
+export type DepositOnRampCrypto = 'XLM' | 'USDC'
+
 /** Per-funding-session latch-relayer deposit intent (`POST /v1/accounts/deposit-intent`). */
 export interface DepositIntent {
   intent_id: string
   memo_id: string
   pool_address: string
   expires_at: string
+  /**
+   * Server-built on-ramp widget URL (snake_case from Latch API).
+   * MoonPay: HMAC-signed buy URL. Transak: Create Widget URL session (`widgetUrl`).
+   */
+  widget_url?: string
+  /** Server-built on-ramp widget URL (camelCase alias). */
+  widgetUrl?: string
 }
 
 export interface DepositForward {
@@ -655,6 +667,10 @@ export interface CreateDepositIntentRequest {
   accountId: string
   /** When true, background opens the MoonPay buy tab after minting the intent. */
   openMoonPay?: boolean
+  /** When true, background opens the Transak widget tab after minting the intent. */
+  openTransak?: boolean
+  /** Required when `openTransak` is true — locked into the Transak session. */
+  cryptoCurrency?: DepositOnRampCrypto
 }
 
 export interface GetDepositIntentStatusRequest {

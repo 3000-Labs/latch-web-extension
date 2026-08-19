@@ -161,11 +161,7 @@ export async function unsealWCKBundle(
     false,
     []
   )
-  const aesKey = await ecdhDeriveAesKey(
-    recipientPrivateKey,
-    ephemeralPub,
-    fromBase64(bundle.salt)
-  )
+  const aesKey = await ecdhDeriveAesKey(recipientPrivateKey, ephemeralPub, fromBase64(bundle.salt))
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: fromBase64(bundle.iv) },
     aesKey,

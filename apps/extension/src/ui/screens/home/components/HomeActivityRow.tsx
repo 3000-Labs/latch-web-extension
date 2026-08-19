@@ -54,13 +54,7 @@ function ActivityIcon({ item }: { item: HistoryItemVm }) {
   )
 }
 
-export function HomeActivityRow({
-  item,
-  onClick,
-}: {
-  item: HistoryItemVm
-  onClick?: () => void
-}) {
+export function HomeActivityRow({ item, onClick }: { item: HistoryItemVm; onClick?: () => void }) {
   return (
     <button
       type="button"

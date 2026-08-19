@@ -34,9 +34,13 @@ export function ProfileCard({ name, address, onClick }: ProfileCardProps) {
           <img src={userAvatarUrl} alt="" className="size-full object-cover" />
         </div>
         <div className="flex flex-col items-start gap-0.5">
-          <div className="text-xl font-semibold leading-[1.31] tracking-[-0.4px] text-[#fcfcfc]">{name}</div>
+          <div className="text-xl font-semibold leading-[1.31] tracking-[-0.4px] text-[#fcfcfc]">
+            {name}
+          </div>
           <div className="flex items-center gap-1">
-            <span className="text-sm font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">{shortAddress}</span>
+            <span className="text-sm font-normal leading-[1.34] tracking-[-0.28px] text-[#b3b3b3]">
+              {shortAddress}
+            </span>
             <button
               type="button"
               disabled={disabled}

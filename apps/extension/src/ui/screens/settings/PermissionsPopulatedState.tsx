@@ -84,4 +84,3 @@ export function PermissionsPopulatedState({ session }: { session: SessionKeyPerm
     </div>
   )
 }
-

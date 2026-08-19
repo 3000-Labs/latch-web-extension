@@ -90,9 +90,7 @@ export function parseSoroswapDistribution(
     if (!entry || typeof entry !== 'object') {
       throw new Error(`Invalid Soroswap distribution entry at ${index}`)
     }
-    const protocolId = String(
-      entry.protocol_id ?? entry.protocolId ?? ''
-    ).toLowerCase()
+    const protocolId = String(entry.protocol_id ?? entry.protocolId ?? '').toLowerCase()
     if (!protocolId) {
       throw new Error(`Soroswap distribution entry ${index} missing protocol_id`)
     }

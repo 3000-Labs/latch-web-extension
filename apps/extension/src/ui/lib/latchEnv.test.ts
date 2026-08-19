@@ -7,7 +7,10 @@ describe('webauthnVerifierAddressFromEnv', () => {
   })
 
   it('returns undefined on mainnet when only the testnet verifier env is set', async () => {
-    vi.stubEnv('PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS', 'CDBBGLSWWHWK52REY7GK5HWAQGAJJ4GP5O75LOM3F4INN6W4KT6DPBVY')
+    vi.stubEnv(
+      'PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS',
+      'CDBBGLSWWHWK52REY7GK5HWAQGAJJ4GP5O75LOM3F4INN6W4KT6DPBVY'
+    )
     vi.stubEnv('PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS_MAINNET', '')
     const { webauthnVerifierAddressFromEnv } = await import('./latchEnv')
     expect(webauthnVerifierAddressFromEnv('mainnet')).toBeUndefined()

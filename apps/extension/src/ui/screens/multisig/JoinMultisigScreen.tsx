@@ -2,7 +2,10 @@ import React from 'react'
 
 import type { MultisigJoinPreviewResponse } from '@latch/types'
 
-import { OnboardingPrimaryButton, OnboardingSecondaryButton } from '../../onboarding/components/OnboardingCardButtons'
+import {
+  OnboardingPrimaryButton,
+  OnboardingSecondaryButton,
+} from '../../onboarding/components/OnboardingCardButtons'
 import { OnboardingSmallEmblem } from '../../onboarding/components/OnboardingSmallEmblem'
 import { draftMemberCount } from '../../lib/multisigMembers'
 
@@ -99,15 +102,15 @@ export function JoinMultisigScreen({
                   <span className="text-sm text-[#b3b3b3]">Owners added</span>
                   <span className="text-sm font-semibold text-primary">{ownerCount}</span>
                 </div>
-              <p className="text-xs leading-[1.4] text-[#b3b3b3]">
-                {flowVariant === 'cosign'
-                  ? waiting
-                    ? 'The wallet owner will grant access shortly. You can close this screen and check Multisig Wallets later.'
-                    : 'After you continue, the wallet owner receives your device key and completes setup.'
-                  : ownerCount === 0
-                    ? 'You can be the first owner to join with your passkey.'
-                    : `${ownerCount} owner${ownerCount === 1 ? ' has' : 's have'} already joined. Add your passkey to complete the owner set.`}
-              </p>
+                <p className="text-xs leading-[1.4] text-[#b3b3b3]">
+                  {flowVariant === 'cosign'
+                    ? waiting
+                      ? 'The wallet owner will grant access shortly. You can close this screen and check Multisig Wallets later.'
+                      : 'After you continue, the wallet owner receives your device key and completes setup.'
+                    : ownerCount === 0
+                      ? 'You can be the first owner to join with your passkey.'
+                      : `${ownerCount} owner${ownerCount === 1 ? ' has' : 's have'} already joined. Add your passkey to complete the owner set.`}
+                </p>
               </>
             )}
           </div>
@@ -150,7 +153,11 @@ export function JoinMultisigScreen({
                 }
                 onClick={onJoinWithExistingPasskey}
               >
-                {joinBusy ? 'Joining…' : waiting ? 'Waiting for owner…' : 'Join with selected passkey'}
+                {joinBusy
+                  ? 'Joining…'
+                  : waiting
+                    ? 'Waiting for owner…'
+                    : 'Join with selected passkey'}
               </OnboardingPrimaryButton>
               <OnboardingSecondaryButton
                 disabled={joinBusy || previewLoading || Boolean(previewError) || waiting}

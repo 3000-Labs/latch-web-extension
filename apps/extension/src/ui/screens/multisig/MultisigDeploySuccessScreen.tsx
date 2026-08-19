@@ -52,7 +52,9 @@ export function MultisigDeploySuccessScreen({
       <div className="flex min-h-0 flex-1 flex-col justify-between">
         <div className="w-full rounded-[16px] bg-[#121212] p-3">
           <div className="flex flex-col gap-1">
-            <p className="text-base font-semibold tracking-[-0.16px] text-[#fcfcfc]">Wallet Address</p>
+            <p className="text-base font-semibold tracking-[-0.16px] text-[#fcfcfc]">
+              Wallet Address
+            </p>
             <div className="mt-2 rounded-[12px] border border-[#383838] px-3 pt-3">
               <p className="h-[86px] break-all text-base leading-[1.36] tracking-[-0.32px] text-[#b3b3b3]">
                 {smartAccountAddress}
@@ -110,4 +112,3 @@ function ActionIconButton({
     </button>
   )
 }
-
