@@ -26,18 +26,18 @@ packages/
 | -------------- | ----------------------------------------- | ------------------------------------------------------------------ |
 | Popup          | `apps/extension/src/popup/index.tsx`      | Primary UI surface. No key material. Sends messages to background. |
 | Side panel     | `apps/extension/src/sidepanel/index.tsx`  | Same rules as popup: no key material; messages to background only. |
-| Background SW  | `apps/extension/src/background/index.ts`  | ONLY context allowed to hold keys / sign.                          |
+| Background SW  | `apps/extension/src/background/index.ts` (+ `*/handlers.ts`) | ONLY context allowed to hold keys / sign. Message routing is a thin `tryHandle*` chain. |
 | Content Script | `apps/extension/src/contents/injector.ts` | Proxy only. Bridges dapp ↔ background.                             |
 
 **Never import `@latch/crypto` outside the background service worker.**
 
 ### Popup vs side panel (feature parity)
 
-- Wallet UX is implemented in **`apps/extension/src/ui/LatchRoot.tsx`** (and screens under `apps/extension/src/ui/screens/*`). Both **popup** and **side panel** mount the same `LatchRoot` tree with a `surface` prop (`"popup"` | `"sidepanel"`) for layout only.
+- Wallet UX is implemented in **`apps/extension/src/ui/LatchRoot.tsx`** (shell: accounts hydrate, routing, shared portfolio/history, overlays) plus feature **`*RouteViews`** under `apps/extension/src/ui/{swap,send,accounts,dapp,multisig}/` and screens under `apps/extension/src/ui/screens/*`. Route types and WebAuthn mount helpers live in [`apps/extension/src/ui/routing/routes.ts`](apps/extension/src/ui/routing/routes.ts). Both **popup** and **side panel** mount the same `LatchRoot` tree with a `surface` prop (`"popup"` | `"sidepanel"`) for layout only.
 - **Do not ship flows that work in one surface but not the other** unless you document an explicit, product-approved exception in this file. Onboarding, passkey create/login, settings, and signing flows must behave the same in popup and side panel.
 - Avoid long `await` chains between a **user click** and **`navigator.credentials`** (WebAuthn): transient user activation is easier to lose in the side panel than in the popup; keep pre-credential work minimal.
-- **Do not swap the whole route for a generic loading screen** between the click and WebAuthn: unmounting the control that received the gesture can prevent the passkey UI from appearing (especially in the side panel). Keep passkey-related screens mounted and use inline disabled/busy state instead (see `routeKeepsUiMountedForWebauthn` in `LatchRoot.tsx`).
-- **Side panel WebAuthn**: Chrome often does not complete `navigator.credentials` in the side panel (hangs with no OS prompt). Latch **prefetches** `/begin` on the Create / Passkey-login screens, then runs `startRegistration` / `startAuthentication` in a small **`tabs/passkey-bridge`** extension popup (`chrome.windows` + `chrome.storage.session` handoff). The action toolbar **popup** keeps in-page WebAuthn. Both surfaces use the same backend finish calls.
+- **Do not swap the whole route for a generic loading screen** between the click and WebAuthn: unmounting the control that received the gesture can prevent the passkey UI from appearing (especially in the side panel). Keep passkey-related screens mounted and use inline disabled/busy state instead (see `routeKeepsUiMountedForWebauthn` in [`routing/routes.ts`](apps/extension/src/ui/routing/routes.ts)).
+- **Side panel WebAuthn**: Chrome often does not complete `navigator.credentials` in the side panel (hangs with no OS prompt). Latch **prefetches** `/begin` on the Create / Passkey-login screens, then runs `startRegistration` / `startAuthentication` in a small **`tabs/passkey-bridge`** extension popup (`chrome.windows` + `chrome.storage.session` handoff) via [`runWebauthnCredential`](apps/extension/src/ui/webauthn/runWebauthnCredential.ts). The action toolbar **popup** keeps in-page WebAuthn. Both surfaces use the same backend finish calls.
 
 ## Tech Stack
 
@@ -67,10 +67,11 @@ packages/
 
 - **Popup / side panel UI (`apps/extension/src/popup/*`, `apps/extension/src/sidepanel/*`, `apps/extension/src/ui/*`)**: UI-only. No secrets. **Do not** talk to RPCs/APIs directly except for truly public, low-risk reads (and even then, prefer the background for consistency).
 - **Content script (`apps/extension/src/contents/*`)**: proxy only. **Never** fetch from the page context and never embed business logic. Bridge dapp ↔ background.
-- **Background service worker (`apps/extension/src/background/index.ts`)**: **the place for network + privileged work**:
+- **Background service worker (`apps/extension/src/background/index.ts` + feature `*/handlers.ts`)**: **the place for network + privileged work**:
   - signing, vault access, key derivation
   - RPC/API requests that depend on user state, authorization, rate-limits, or consistency
   - caching, de-duping, retries/backoff, request cancellation
+  - message routing: thin `tryHandle*` chain (accounts, tx, reads, swap, migration, network, dapp, onboarding, plus existing multisig/v1Auth/deposit)
 
 ### Architecture: one network “edge” in the background
 
@@ -141,7 +142,7 @@ The extension merges **`chromeExtensionId`** into begin, registration finish, au
 - **Join flow**: deep link or Settings → Multisig Wallets; [`MultisigJoinFlow`](apps/extension/src/ui/multisig/MultisigJoinFlow.tsx) uses **`MULTISIG_JOIN_*`**, then pending invite + sync so members get `smartAccountAddress` + `multisigMemberId`.
 - **Send**: when the active account is multisig, Send creates a backend proposal via `createMultisigSendProposalWithSetup` (`MULTISIG_CREATE_PROPOSAL`). **Swap is disabled** for multisig accounts.
 - **Proposals**: list/detail; approve via [`multisigApprove.ts`](apps/extension/src/ui/lib/multisigApprove.ts); execute via **`MULTISIG_EXECUTE_PROPOSAL`** when threshold met.
-- **Side panel WebAuthn**: use **passkey-bridge** for join and proposal approve. Routes that trigger WebAuthn must stay mounted — see `routeKeepsUiMountedForWebauthn` in [`LatchRoot.tsx`](apps/extension/src/ui/LatchRoot.tsx) (`addMultisigOwners`, `joinMultisig`, `multisigProposalDetail`).
+- **Side panel WebAuthn**: use **passkey-bridge** for join and proposal approve. Routes that trigger WebAuthn must stay mounted — see `routeKeepsUiMountedForWebauthn` in [`routing/routes.ts`](apps/extension/src/ui/routing/routes.ts) (`addMultisigOwners`, `joinMultisig`, `multisigProposalDetail`).
 
 **Cosign / `/v1/cosign` — superseded / not shipped.** Source under `background/cosign/*`, `ui/lib/cosign*`, and `CosignRouteViews` remains on disk but is **unwired** from `background/index.ts` and `LatchRoot`. Do not route new product work through cosign; see [`LATCH_BACKEND_COSIGN_EXTENSION.md`](LATCH_BACKEND_COSIGN_EXTENSION.md).
 
