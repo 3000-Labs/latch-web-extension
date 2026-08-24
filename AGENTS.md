@@ -22,12 +22,12 @@ packages/
 
 ## Extension Execution Contexts
 
-| Context        | File                                      | Rule                                                               |
-| -------------- | ----------------------------------------- | ------------------------------------------------------------------ |
-| Popup          | `apps/extension/src/popup/index.tsx`      | Primary UI surface. No key material. Sends messages to background. |
-| Side panel     | `apps/extension/src/sidepanel/index.tsx`  | Same rules as popup: no key material; messages to background only. |
+| Context        | File                                                         | Rule                                                                                    |
+| -------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Popup          | `apps/extension/src/popup/index.tsx`                         | Primary UI surface. No key material. Sends messages to background.                      |
+| Side panel     | `apps/extension/src/sidepanel/index.tsx`                     | Same rules as popup: no key material; messages to background only.                      |
 | Background SW  | `apps/extension/src/background/index.ts` (+ `*/handlers.ts`) | ONLY context allowed to hold keys / sign. Message routing is a thin `tryHandle*` chain. |
-| Content Script | `apps/extension/src/contents/injector.ts` | Proxy only. Bridges dapp ↔ background.                             |
+| Content Script | `apps/extension/src/contents/injector.ts`                    | Proxy only. Bridges dapp ↔ background.                                                  |
 
 **Never import `@latch/crypto` outside the background service worker.**
 
@@ -121,15 +121,22 @@ Render onboarding until `setupState === "has_account"`, then the dashboard/home 
 
 ### WebAuthn / passkey (Chrome extension)
 
-The background sends **`chromeExtensionId`** (`chrome.runtime.id` in the service worker) on WebAuthn-related API calls so the **Latch API** can issue and verify credentials for the **`chrome-extension://`** origin.
+Passkeys use a **shared HTTPS-domain RP ID** so the same credential can work in the Chrome extension, a future Latch website, and associated native apps.
 
-**Contract for the Latch API** (registration begin/finish, authentication begin/finish, and any route that verifies WebAuthn assertions, e.g. submit-webauthn):
+- **RP ID:** `PLASMO_PUBLIC_WEBAUTHN_RP_ID` (default `latch-testing.vercel.app`). Hostname only — never `chrome.runtime.id`.
+- **Origins:** ceremonies from the extension produce `clientDataJSON.origin = chrome-extension://<chrome.runtime.id>`. Web ceremonies use `https://latch-testing.vercel.app`. The Latch API must allowlist both as `expectedOrigins` while always verifying `expectedRPID` = the domain.
+- The background still sends **`chromeExtensionId`** (`chrome.runtime.id`) on WebAuthn-related API calls as an **origin hint only** — not as `rp.id`.
 
-- Accept optional **`chromeExtensionId`** on the JSON body when the client is the extension.
-- When `chromeExtensionId` is present, set **`rp.id` / `rpId`** in issued WebAuthn options to that value (not `localhost` or a website hostname).
-- On **`verifyRegistrationResponse` / `verifyAuthenticationResponse`** (or equivalent), set **`expectedRPID`** to **`chromeExtensionId`** and **`expectedOrigin`** to **`chrome-extension://<chromeExtensionId>`** (use the same values on **finish** as on **begin**; prefer the **`chromeExtensionId` on the finish body** if session storage is unreliable).
+**Contract for the Latch API** (registration begin/finish, authentication begin/finish, and any route that verifies WebAuthn assertions):
 
-The extension merges **`chromeExtensionId`** into begin, registration finish, authentication finish, and **`submitTxWebauthn`** request bodies from [`api/webauthn.ts`](apps/extension/src/background/api/webauthn.ts) and [`api/transactions.ts`](apps/extension/src/background/api/transactions.ts). The UI asserts server-issued **`rp.id` / `rpId`** matches **`chrome.runtime.id`** before calling `startRegistration` / `startAuthentication` (see [`passkey.ts`](apps/extension/src/ui/webauthn/passkey.ts)).
+- Always set **`rp.id` / `rpId`** = `WEBAUTHN_RP_ID` (`latch-testing.vercel.app`), for both web and extension clients.
+- When `chromeExtensionId` is present, include **`chrome-extension://<chromeExtensionId>`** in **`expectedOrigins`** (do **not** set `expectedRPID` to the extension id).
+- Also allow `https://latch-testing.vercel.app` in `expectedOrigins`.
+- Prefer the finish-body `chromeExtensionId` if session storage is unreliable.
+
+Full backend cutover guide: [`LATCH_BACKEND_DOMAIN_WEBAUTHN_RPID.md`](LATCH_BACKEND_DOMAIN_WEBAUTHN_RPID.md).
+
+The extension merges **`chromeExtensionId`** into begin, registration finish, authentication finish, and **`submitTxWebauthn`** request bodies from [`api/webauthn.ts`](apps/extension/src/background/api/webauthn.ts) and [`api/transactions.ts`](apps/extension/src/background/api/transactions.ts). The UI asserts server-issued **`rp.id` / `rpId`** matches **`latchWebauthnRpId()`** before calling `startRegistration` / `startAuthentication` (see [`passkey.ts`](apps/extension/src/ui/webauthn/passkey.ts) → `assertBeginOptionsRpIdMatchesCanonicalDomain`). Extension manifest must include host permission `https://latch-testing.vercel.app/*` so Chrome can claim that RP ID from extension pages.
 
 ### Multisig wallets (`/api/multisig` — shipped)
 

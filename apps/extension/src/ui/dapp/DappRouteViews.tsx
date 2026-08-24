@@ -154,11 +154,9 @@ export function DappRouteViews({
 
   return (
     <div
-      className={[
-        routeContentMarginClass,
-        'flex flex-col animate-screenIn',
-        flowHeightClass,
-      ].join(' ')}
+      className={[routeContentMarginClass, 'flex flex-col animate-screenIn', flowHeightClass].join(
+        ' '
+      )}
     >
       {pendingDappRequests[0]?.kind === 'externalSignReview' && pendingDappRequests[0].prepared ? (
         <ExternalSignReviewScreen

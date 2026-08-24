@@ -2,11 +2,7 @@ import '../style.css'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type {
-  GetSetupStateResponse,
-  MultisigProposal,
-  SetActiveAccountRequest,
-} from '@latch/types'
+import type { GetSetupStateResponse, MultisigProposal, SetActiveAccountRequest } from '@latch/types'
 
 import { HistoryScreen } from './screens/history/HistoryScreen'
 import { HomeScreen } from './screens/HomeScreen'

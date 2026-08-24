@@ -256,13 +256,7 @@ export function SwapRouteViews({
       swapBusy,
       swapStep,
     })
-  }, [
-    onOverlayFlags,
-    swapCatalogLoading,
-    swapPayTokenCatalogWithIcons.length,
-    swapBusy,
-    swapStep,
-  ])
+  }, [onOverlayFlags, swapCatalogLoading, swapPayTokenCatalogWithIcons.length, swapBusy, swapStep])
 
   async function refreshSwapQuoteForConfirm(): Promise<SwapQuoteVm> {
     if (!activeAccount?.id || !swapDraft || !swapQuote) {

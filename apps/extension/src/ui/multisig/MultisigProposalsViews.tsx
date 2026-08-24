@@ -1,10 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 
-import type {
-  MultisigProposal,
-  MultisigProposalDetail,
-  StoredAccount,
-} from '@latch/types'
+import type { MultisigProposal, MultisigProposalDetail, StoredAccount } from '@latch/types'
 
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import { formatMultisigProposalError } from '../lib/multisigErrors'

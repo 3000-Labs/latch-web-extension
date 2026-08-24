@@ -19,7 +19,9 @@ export function MigrationSuccessScreen({
       ].join(' ')}
     >
       <img src={successAvatarUrl} alt="" className="h-16 w-16 object-contain" />
-      <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight">Migration complete</h2>
+      <h2 className="mt-6 text-center text-2xl font-extrabold tracking-tight">
+        Migration complete
+      </h2>
       <p className="mt-3 max-w-[280px] text-center text-sm leading-relaxed text-muted">
         Your transactions were submitted to the network. Balances may take a moment to update
         on-chain.

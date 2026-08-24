@@ -1,15 +1,8 @@
-import type {
-  ExternalSignResult,
-  PendingDappRequest,
-  SignTransactionResponse,
-} from '@latch/types'
+import type { ExternalSignResult, PendingDappRequest, SignTransactionResponse } from '@latch/types'
 
 import { BackendError } from '../api/client'
 import type { ExternalSignDecision } from '../externalSign/orchestrator'
-import {
-  addPendingDappRequest,
-  clearPendingDappRequests,
-} from '../storage'
+import { addPendingDappRequest, clearPendingDappRequests } from '../storage'
 
 type PendingResolver = (result: ExternalSignDecision) => void
 export const pendingDappResolvers = new Map<string, PendingResolver>()

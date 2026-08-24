@@ -1,13 +1,6 @@
-import type {
-  BuildSendTxRequest,
-  BuildSendTxResponse,
-  StoredAccount,
-} from '@latch/types'
+import type { BuildSendTxRequest, BuildSendTxResponse, StoredAccount } from '@latch/types'
 
-import {
-  extractTransactionHash,
-  signAndSubmitBuiltTx,
-} from './signBuiltTx'
+import { extractTransactionHash, signAndSubmitBuiltTx } from './signBuiltTx'
 import { friendlyError, sendToBackground } from './backgroundClient'
 import {
   buildSendRequestFromDraft,
@@ -29,8 +22,14 @@ export async function executeSendWithSetupLoop(args: {
   surface: Surface
   onProgress: (label: string | null) => void
 }): Promise<SendResult> {
-  const { draft, activeAccount: account, sendTokenPriceUsd, activeNetwork, surface, onProgress } =
-    args
+  const {
+    draft,
+    activeAccount: account,
+    sendTokenPriceUsd,
+    activeNetwork,
+    surface,
+    onProgress,
+  } = args
 
   // Do NOT call /api/smart-account/webauthn here. With a network-specific factory,
   // create-or-connect returns a *new* C-address and aborts before passkey signing,

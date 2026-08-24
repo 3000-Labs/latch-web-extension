@@ -12,11 +12,7 @@ import type {
   UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
-import {
-  ensureSetupStateMatchesAccounts,
-  getSetupState,
-  setSetupState,
-} from '../actionBehavior'
+import { ensureSetupStateMatchesAccounts, getSetupState, setSetupState } from '../actionBehavior'
 import { BackendError } from '../api/client'
 import {
   createOrConnectFreighter,

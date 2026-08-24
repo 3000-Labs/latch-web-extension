@@ -1,10 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type {
-  MultisigDraftMember,
-  MultisigPredictResponse,
-  StoredAccount,
-} from '@latch/types'
+import type { MultisigDraftMember, MultisigPredictResponse, StoredAccount } from '@latch/types'
 
 import { sendToBackground } from '../lib/backgroundClient'
 import { buildMultisigInviteUrl } from '../lib/multisigDeepLink'

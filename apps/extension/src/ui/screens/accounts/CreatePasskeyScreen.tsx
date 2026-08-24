@@ -22,11 +22,9 @@ export function CreatePasskeyScreen({
 }) {
   return (
     <div
-      className={[
-        routeContentMarginClass,
-        'flex flex-col animate-screenIn',
-        flowHeightClass,
-      ].join(' ')}
+      className={[routeContentMarginClass, 'flex flex-col animate-screenIn', flowHeightClass].join(
+        ' '
+      )}
     >
       <div className="text-center">
         <img src={logoUrl} alt="Latch" className="mx-auto h-10 w-10 object-contain" />

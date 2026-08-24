@@ -71,10 +71,7 @@ export const ROUTES_GATED_BY_MNEMONIC_UNLOCK: Route[] = [
   'dappApproval',
 ]
 
-export function resolveMainRoute(args: {
-  needsMnemonicUnlock: boolean
-  preferred?: Route
-}): Route {
+export function resolveMainRoute(args: { needsMnemonicUnlock: boolean; preferred?: Route }): Route {
   if (args.needsMnemonicUnlock) return 'unlockMnemonic'
   return args.preferred ?? 'home'
 }

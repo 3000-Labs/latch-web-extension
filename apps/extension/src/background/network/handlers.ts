@@ -2,11 +2,7 @@ import type { BackgroundMessage } from '@latch/types'
 
 import { broadcastActiveAccountChanged, broadcastNetworkChanged } from '../dappProviderEvents'
 import type { OkFn } from '../messageResponse'
-import {
-  getNetworkConfig,
-  networkLabelFor,
-  setActiveNetwork,
-} from './config'
+import { getNetworkConfig, networkLabelFor, setActiveNetwork } from './config'
 import { clearNetworkScopedMemoryCaches } from './clearCaches'
 
 /** Returns true if the message type was handled. */
