@@ -118,7 +118,7 @@ export function DappRouteViews({
 
   useEffect(() => {
     void loadPendingDapp().catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only, matches LatchRoot
+    // Mount-only, matches LatchRoot.
   }, [])
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export function DappRouteViews({
     }
     chrome.storage.onChanged.addListener(onStorage)
     return () => chrome.storage.onChanged.removeListener(onStorage)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- listener stable
+    // Listener is stable; deps intentionally empty.
   }, [])
 
   // Action popup / side panel close must reject pending reviews. The fallback
