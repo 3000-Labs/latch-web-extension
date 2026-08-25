@@ -37,8 +37,6 @@ export type Route =
   | 'migration'
   | 'migrationSuccess'
 
-export type SignerId = 'freighter' | 'phantom' | 'passkey'
-
 /**
  * WebAuthn must run in the same document update as the user click as much as possible.
  * The global loading screen replaces route content and unmounts the button; Chrome (esp. side panel) then drops transient activation, so the passkey sheet never appears.

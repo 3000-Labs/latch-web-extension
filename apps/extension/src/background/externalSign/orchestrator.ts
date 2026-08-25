@@ -28,9 +28,8 @@ export type ExternalSignDecision = {
 export type WaitForExternalSignDecision = (requestId: string) => Promise<ExternalSignDecision>
 
 function accountModeToSignerType(account: StoredAccount): SendSignerType {
-  if (account.mode === 'phantom') return 'phantom'
-  if (account.mode === 'passkey') return 'passkey'
-  return 'freighter'
+  // 'freighter' is the backend wire value for delegated G-signer builds (mnemonic accounts).
+  return account.mode === 'passkey' ? 'passkey' : 'freighter'
 }
 
 function resolveOrigin(request: ExternalSignRequest, senderUrl?: string): string {

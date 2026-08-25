@@ -15,7 +15,7 @@ import { getActiveNetwork } from '../network/config'
 import { getAccounts } from '../storage'
 import type { OkFn } from '../messageResponse'
 
-const FUNDABLE_MODES = new Set(['passkey', 'freighter', 'mnemonic', 'phantom'])
+const FUNDABLE_MODES = new Set(['passkey', 'mnemonic'])
 
 function signedWidgetUrlFromIntent(intent: DepositIntent): string | undefined {
   const raw = intent.widget_url?.trim() || intent.widgetUrl?.trim()

@@ -6,7 +6,6 @@ import type {
   SetupSendRulesRequest,
   SignDelegatedGAuthEntryRequest,
   SubmitDelegatedTxRequest,
-  SubmitPhantomTxRequest,
   SubmitWebauthnTxRequest,
 } from '@latch/types'
 
@@ -17,7 +16,6 @@ import {
   buildTx,
   setupSendRules,
   submitTxDelegated,
-  submitTxPhantom,
   submitTxWebauthn,
 } from '../backend'
 import { signDelegatedGAddressEntry } from '../delegatedLocalSign'
@@ -60,13 +58,6 @@ export async function tryHandleTxMessage(
     case 'BUILD_DELEGATED_TX': {
       const req = message.payload as BuildDelegatedTxRequest
       const data = await buildDelegatedTx(req)
-      sendResponse(ok(data))
-      return true
-    }
-
-    case 'SUBMIT_TX_PHANTOM': {
-      const req = message.payload as SubmitPhantomTxRequest
-      const data = await submitTxPhantom(req)
       sendResponse(ok(data))
       return true
     }

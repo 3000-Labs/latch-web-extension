@@ -16,9 +16,9 @@ const passkeyAccount: StoredAccount = {
   passkeyKeyDataHex: 'aa'.repeat(32),
 }
 
-const freighterAccount: StoredAccount = {
+const delegatedAccount: StoredAccount = {
   id: '2',
-  mode: 'freighter',
+  mode: 'mnemonic',
   smartAccountAddress: 'CC3L3ACABZIRMM5OJDQ6CFV27HWP3ITZ5GOAF6ZIAYTNFWY7AM3VXWXW',
   gAddress: 'GUSER123456789012345678901234567890123456789012345678901234',
 }
@@ -113,11 +113,11 @@ describe('swapBuildNeedsSignerReconfigure', () => {
     ).toBe(true)
   })
 
-  it('returns false for freighter when submitMethod is bundler-delegated', () => {
+  it('returns false for delegated (mnemonic) accounts when submitMethod is bundler-delegated', () => {
     expect(
       swapBuildNeedsSignerReconfigure(
         baseBuild({ submitMethod: 'bundler-delegated' }),
-        freighterAccount
+        delegatedAccount
       )
     ).toBe(false)
   })

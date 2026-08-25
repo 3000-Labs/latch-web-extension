@@ -54,8 +54,8 @@ export function explainSendDraftNotBuildable(
 }
 
 export function accountToSignerType(mode: AccountMode): SendSignerType {
+  // 'freighter' is the backend wire value for delegated G-signer builds (mnemonic accounts).
   if (mode === 'passkey' || mode === 'multisig') return 'passkey'
-  if (mode === 'phantom') return 'phantom'
   return 'freighter'
 }
 
@@ -138,10 +138,6 @@ export function buildSetupRequestFromDraft(
     if (credentialId) {
       req.credentialId = credentialId
     }
-  }
-  if (signerType === 'phantom') {
-    if (!account.phantomPublicKeyHex?.trim()) return null
-    req.publicKeyHex = account.phantomPublicKeyHex
   }
   if (signerType === 'freighter') {
     if (!account.gAddress?.trim()) return null

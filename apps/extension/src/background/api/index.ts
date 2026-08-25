@@ -15,7 +15,6 @@ export {
   getFreighterSmartAccountStatus,
   createOrConnectFreighter,
   ensureFreighterSmartAccountDeployed,
-  createOrConnectPhantom,
   createOrConnectPasskey,
   ensurePasskeySmartAccountDeployed,
 } from './smartAccount'
@@ -26,7 +25,6 @@ export {
   setupSwapRules,
   buildTx,
   buildDelegatedTx,
-  submitTxPhantom,
   submitTxDelegated,
   submitTxWebauthn,
   prepareSign,

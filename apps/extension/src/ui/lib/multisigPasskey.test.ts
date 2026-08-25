@@ -51,7 +51,7 @@ describe('findReusablePasskeyAccount', () => {
 
   it('returns undefined when no passkey has both fields', () => {
     const accounts: StoredAccount[] = [
-      { id: '1', mode: 'freighter', label: 'F', smartAccountAddress: 'G1', createdAt: 1 },
+      { id: '1', mode: 'mnemonic', label: 'M', smartAccountAddress: 'G1', createdAt: 1 },
       {
         id: '2',
         mode: 'passkey',
