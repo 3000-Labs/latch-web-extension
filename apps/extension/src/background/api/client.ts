@@ -59,7 +59,7 @@ function throwIfNotOk(res: Response, data: unknown): void {
 
 export async function latchFetch<TRes>(
   path: string,
-  init?: RequestInit & { timeoutMs?: number }
+  init?: RequestInit & { timeoutMs?: number; signal?: AbortSignal }
 ): Promise<TRes> {
   const baseUrl = latchApiBaseUrl()
   return latchFetchAbsolute<TRes>(`${baseUrl}${path}`, init)
@@ -67,18 +67,25 @@ export async function latchFetch<TRes>(
 
 export async function latchFetchAbsoluteWithResponse<TRes>(
   url: string,
-  init?: RequestInit & { timeoutMs?: number }
+  init?: RequestInit & { timeoutMs?: number; signal?: AbortSignal }
 ): Promise<{ res: Response; data: TRes }> {
-  const controller = new AbortController()
+  const timeoutController = new AbortController()
   const timeoutMs = init?.timeoutMs ?? 20_000
-  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  const timeout = setTimeout(() => timeoutController.abort(), timeoutMs)
   const baseUrl = latchApiBaseUrl()
+
+  // Merge the caller's external signal with our timeout signal so either can
+  // abort the fetch. AbortSignal.any() is available in Chrome 116+ (MV3 target).
+  const signal =
+    init?.signal
+      ? AbortSignal.any([init.signal, timeoutController.signal])
+      : timeoutController.signal
 
   try {
     const res = await fetch(url, {
       ...init,
       credentials: init?.credentials ?? 'include',
-      signal: controller.signal,
+      signal,
       headers: {
         'content-type': 'application/json',
         ...(init?.headers ?? {}),
@@ -91,6 +98,11 @@ export async function latchFetchAbsoluteWithResponse<TRes>(
   } catch (err) {
     if (err instanceof BackendError) throw err
     if (err instanceof Error && err.name === 'AbortError') {
+      // Distinguish between a timeout and an explicit cancellation.
+      const cancelledByExternal = init?.signal?.aborted
+      if (cancelledByExternal) {
+        throw new BackendError('Request cancelled', { code: 'cancelled' })
+      }
       throw new BackendError('Request timed out', { code: 'timeout' })
     }
     throw new BackendError(err instanceof Error ? err.message : String(err))
@@ -101,7 +113,7 @@ export async function latchFetchAbsoluteWithResponse<TRes>(
 
 export async function latchFetchAbsolute<TRes>(
   url: string,
-  init?: RequestInit & { timeoutMs?: number }
+  init?: RequestInit & { timeoutMs?: number; signal?: AbortSignal }
 ): Promise<TRes> {
   const { data } = await latchFetchAbsoluteWithResponse<TRes>(url, init)
   return data

@@ -15,9 +15,14 @@ import {
   iconUrlForCode,
   mapTransactionToHistoryItem,
 } from '../lib/historyFormat'
-import { sendToBackground } from '../lib/backgroundClient'
+import { cancelBackgroundRequest, sendToBackground } from '../lib/backgroundClient'
 import type { HistorySectionVm } from '../types/history'
 import type { Page, Route } from '../routing/routes'
+
+/** Generate a unique id for each request so the background can key an AbortController. */
+function newRequestId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 export function usePortfolioAndHistory({
   accounts,
@@ -52,12 +57,27 @@ export function usePortfolioAndHistory({
   portfolioRowsRef.current = portfolioRows
   const portfolioHydratedRef = useRef(false)
 
+  // Track the most-recent in-flight requestId for each resource so we can
+  // cancel the previous one when a new request supersedes it.
+  const portfolioRequestIdRef = useRef<string | null>(null)
+  const historyRequestIdRef = useRef<string | null>(null)
+
   const recentActivityItems = useMemo(
     () => historySections.flatMap((section) => section.items),
     [historySections]
   )
 
   useEffect(() => {
+    // Cancel any in-flight portfolio/history requests for the previous account.
+    if (portfolioRequestIdRef.current) {
+      cancelBackgroundRequest(portfolioRequestIdRef.current)
+      portfolioRequestIdRef.current = null
+    }
+    if (historyRequestIdRef.current) {
+      cancelBackgroundRequest(historyRequestIdRef.current)
+      historyRequestIdRef.current = null
+    }
+
     portfolioHydratedRef.current = false
     setPortfolioHydrated(false)
     setPortfolioRows([])
@@ -68,6 +88,20 @@ export function usePortfolioAndHistory({
     // Do not clear portfolioLoading/historyLoading here — in-flight fetches still
     // own those flags and will clear them in finally.
   }, [activeAccountId])
+
+  // Cancel in-flight requests on unmount.
+  useEffect(() => {
+    return () => {
+      if (portfolioRequestIdRef.current) {
+        cancelBackgroundRequest(portfolioRequestIdRef.current)
+        portfolioRequestIdRef.current = null
+      }
+      if (historyRequestIdRef.current) {
+        cancelBackgroundRequest(historyRequestIdRef.current)
+        historyRequestIdRef.current = null
+      }
+    }
+  }, [])
 
   // Network switch: drop stale history rows. Skip the initial mount so we don't
   // race GET_ACTIVE_NETWORK and leave hydrated=false with no refetch started.
@@ -88,6 +122,14 @@ export function usePortfolioAndHistory({
         setHistoryLoading(false)
         return
       }
+
+      // Cancel any in-flight history request before starting a new one.
+      if (historyRequestIdRef.current) {
+        cancelBackgroundRequest(historyRequestIdRef.current)
+      }
+      const requestId = newRequestId('history')
+      historyRequestIdRef.current = requestId
+
       setHistoryLoading(true)
       setHistoryError(null)
       try {
@@ -96,8 +138,12 @@ export function usePortfolioAndHistory({
           GetSmartAccountTransactionsResponse
         >({
           type: 'GET_SMART_ACCOUNT_TRANSACTIONS',
-          payload: { accountId: acc.id, force: opts?.force === true },
+          payload: { accountId: acc.id, force: opts?.force === true, requestId },
         })
+
+        // Guard against a response arriving after the request was superseded.
+        if (historyRequestIdRef.current !== requestId) return
+
         if (!res.ok) {
           setHistoryError(res.error?.message ?? 'Could not load transactions')
           setHistorySections([])
@@ -108,7 +154,10 @@ export function usePortfolioAndHistory({
         )
         setHistorySections(groupHistoryItems(items))
       } finally {
-        setHistoryLoading(false)
+        if (historyRequestIdRef.current === requestId) {
+          historyRequestIdRef.current = null
+          setHistoryLoading(false)
+        }
       }
     },
     [accounts, activeAccountId]
@@ -123,6 +172,14 @@ export function usePortfolioAndHistory({
       setPortfolioHydrated(true)
       return
     }
+
+    // Cancel any in-flight portfolio request before starting a new one.
+    if (portfolioRequestIdRef.current) {
+      cancelBackgroundRequest(portfolioRequestIdRef.current)
+    }
+    const requestId = newRequestId('portfolio')
+    portfolioRequestIdRef.current = requestId
+
     const showLoading = !portfolioHydratedRef.current
     if (showLoading) setPortfolioLoading(true)
     setPortfolioError(null)
@@ -132,8 +189,12 @@ export function usePortfolioAndHistory({
         GetSmartAccountBalancesResponse
       >({
         type: 'GET_SMART_ACCOUNT_BALANCES',
-        payload: { accountId: acc.id },
+        payload: { accountId: acc.id, requestId },
       })
+
+      // Guard against a response arriving after the request was superseded.
+      if (portfolioRequestIdRef.current !== requestId) return
+
       if (!res.ok) {
         setPortfolioError(res.error?.message ?? 'Could not load balances')
         setPortfolioRows([])
@@ -142,9 +203,12 @@ export function usePortfolioAndHistory({
       setPortfolioRows(res.data?.rows ?? [])
       setTotalBalanceUsd(res.data?.totalBalanceUsd ?? null)
     } finally {
-      setPortfolioLoading(false)
-      portfolioHydratedRef.current = true
-      setPortfolioHydrated(true)
+      if (portfolioRequestIdRef.current === requestId) {
+        portfolioRequestIdRef.current = null
+        setPortfolioLoading(false)
+        portfolioHydratedRef.current = true
+        setPortfolioHydrated(true)
+      }
     }
   }, [accounts, activeAccountId])
 

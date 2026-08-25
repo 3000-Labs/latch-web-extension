@@ -84,7 +84,10 @@ function isNetworkLikeError(e: unknown): boolean {
   )
 }
 
-async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBalancesResponse> {
+async function computeBalancesOnce(
+  accountId: string,
+  signal?: AbortSignal
+): Promise<GetSmartAccountBalancesResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
   const c = acc?.smartAccountAddress?.trim()
@@ -97,7 +100,10 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
   const passphrase = networkPassphraseFor(network)
 
   // Hard cap for portfolio load (Horizon + Soroban RPC). Without this, cold starts can hang forever.
-  const portfolioSignal = AbortSignal.timeout(12_000)
+  // Merge with any caller-supplied cancellation signal so the fetch aborts on unmount/supersede.
+  const portfolioSignal = signal
+    ? AbortSignal.any([signal, AbortSignal.timeout(12_000)])
+    : AbortSignal.timeout(12_000)
   const knownProbes = await getKnownSacProbes(accountId)
   const core = await loadSmartAccountPortfolioRows({
     rpcUrl,
@@ -167,18 +173,23 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
 }
 
 async function computeBalancesWithRetry(
-  accountId: string
+  accountId: string,
+  signal?: AbortSignal
 ): Promise<GetSmartAccountBalancesResponse> {
   const backoffMs = [0, 400, 1_200, 2_500]
   let lastErr: unknown = null
   for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    // Stop retrying if the caller already cancelled.
+    if (signal?.aborted) throw new Error('Request cancelled')
     if (backoffMs[attempt] > 0) {
       await new Promise((r) => setTimeout(r, backoffMs[attempt]))
     }
     try {
-      return await computeBalancesOnce(accountId)
+      return await computeBalancesOnce(accountId, signal)
     } catch (e) {
       lastErr = e
+      // Propagate cancellations immediately — never retry them.
+      if (signal?.aborted) throw e
       // Retry only for the common cold-start/transient cases.
       if (!(isTimeoutLikeError(e) || isNetworkLikeError(e))) throw e
     }
@@ -205,7 +216,8 @@ function revalidateInBackground(accountId: string): void {
 }
 
 export async function runGetSmartAccountBalances(
-  accountId: string
+  accountId: string,
+  signal?: AbortSignal
 ): Promise<GetSmartAccountBalancesResponse> {
   const now = Date.now()
   if (!memoryCacheByAccountId) {
@@ -234,7 +246,7 @@ export async function runGetSmartAccountBalances(
   const existing = inflightByAccountId.get(accountId)
   if (existing) return await existing
 
-  const p = computeBalancesWithRetry(accountId)
+  const p = computeBalancesWithRetry(accountId, signal)
     .then(async (data) => {
       const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
       memoryCacheByAccountId!.set(accountId, snapshot)

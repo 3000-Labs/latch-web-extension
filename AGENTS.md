@@ -79,7 +79,63 @@ packages/
 - **UI talks in messages, not URLs**: popup asks for _intent_ (“get balances”, “simulate tx”, “create passkey”) via typed messages; background returns typed responses.
 - **No duplicated clients**: avoid creating separate fetch/RPC clients in popup, sidepanel, and background. Centralize in background and expose a message API.
 
-### Fetch implementation guidance (clean + reliable)
+### Request cancellation (AbortController per view lifecycle)
+
+Applies to: `GET_SMART_ACCOUNT_BALANCES`, `GET_SMART_ACCOUNT_TRANSACTIONS`, `GET_SWAP_QUOTE`.
+
+**Protocol**
+
+1. UI generates a unique `requestId` (e.g. `portfolio-<timestamp>-<random>`) and includes it in the message payload.
+2. Background handler calls `registerRequestAbortController(requestId)` from `background/requestRegistry.ts`, which returns an `AbortController` whose signal is threaded through to all I/O.
+3. Handler calls `unregisterRequestAbortController(requestId)` in `finally` after the operation completes.
+4. When the view unmounts or a new request supersedes the old one, the UI sends `CANCEL_REQUEST { requestId }` via `cancelBackgroundRequest(requestId)` from `ui/lib/backgroundClient.ts`.
+5. `background/index.ts` handles `CANCEL_REQUEST` synchronously before the async handler chain, calling `controller.abort()` and deleting the registry entry.
+6. Handlers check `signal?.aborted` before calling `sendResponse` and swallow errors when already aborted — the UI never receives a stale response.
+7. `latchFetchAbsoluteWithResponse` merges the external signal with the internal timeout via `AbortSignal.any()`. A caller-initiated abort produces `code: 'cancelled'`; a timeout produces `code: 'timeout'`.
+
+**Adding cancellation to a new handler**
+
+```ts
+// 1. Add requestId?: string to your request type in @latch/types
+// 2. In the handler case:
+import { registerRequestAbortController, unregisterRequestAbortController } from '../requestRegistry'
+
+case 'MY_MESSAGE': {
+  const req = message.payload as MyRequest
+  const signal = req.requestId
+    ? registerRequestAbortController(req.requestId).signal
+    : undefined
+  try {
+    const data = await myFetch(req, signal)
+    if (!signal?.aborted) sendResponse(ok(data))
+  } catch (e) {
+    if (!signal?.aborted) throw e
+  } finally {
+    if (req.requestId) unregisterRequestAbortController(req.requestId)
+  }
+  return true
+}
+
+// 3. In the UI hook/component:
+import { cancelBackgroundRequest } from '../lib/backgroundClient'
+
+const requestIdRef = useRef<string | null>(null)
+
+// Cancel on unmount:
+useEffect(() => () => {
+  if (requestIdRef.current) cancelBackgroundRequest(requestIdRef.current)
+}, [])
+
+// In the fetch function, cancel previous and track new:
+const requestId = `my-view-${Date.now()}`
+if (requestIdRef.current) cancelBackgroundRequest(requestIdRef.current)
+requestIdRef.current = requestId
+const res = await sendToBackground({ type: 'MY_MESSAGE', payload: { ...req, requestId } })
+if (requestIdRef.current !== requestId) return  // superseded
+requestIdRef.current = null
+```
+
+**Scope**: cancellation is intentionally not applied to WebAuthn/signing ceremonies or cosign paths (out of scope — interrupting a signing flow mid-ceremony would leave state inconsistent).
 
 - **Use a typed request/response contract**:
   - define message payloads + responses in `@latch/types`

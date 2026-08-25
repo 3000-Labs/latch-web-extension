@@ -12,6 +12,10 @@ import { getAssetIconDataUrlsBatch } from '../assetIcons'
 import { recordKnownSacProbe } from '../knownSacProbes'
 import { getMarketPrices } from '../marketPrices'
 import type { OkFn } from '../messageResponse'
+import {
+  registerRequestAbortController,
+  unregisterRequestAbortController,
+} from '../requestRegistry'
 import { runGetSmartAccountBalances } from '../smartAccountBalances'
 import { runGetSmartAccountTransactions } from '../smartAccountTransactions'
 
@@ -24,17 +28,45 @@ export async function tryHandleReadsMessage(
   switch (message.type) {
     case 'GET_SMART_ACCOUNT_BALANCES': {
       const req = message.payload as GetSmartAccountBalancesRequest
-      const data = await runGetSmartAccountBalances(req.accountId)
-      sendResponse(ok(data))
+      const { requestId } = req
+
+      // Register an AbortController so the UI can cancel via CANCEL_REQUEST.
+      const signal = requestId
+        ? registerRequestAbortController(requestId).signal
+        : undefined
+
+      try {
+        const data = await runGetSmartAccountBalances(req.accountId, signal)
+        // Only respond if not already aborted (race: CANCEL_REQUEST arrived while awaiting).
+        if (!signal?.aborted) sendResponse(ok(data))
+      } catch (e) {
+        if (!signal?.aborted) throw e
+        // Cancelled — swallow silently; the UI already moved on.
+      } finally {
+        if (requestId) unregisterRequestAbortController(requestId)
+      }
       return true
     }
 
     case 'GET_SMART_ACCOUNT_TRANSACTIONS': {
       const req = message.payload as GetSmartAccountTransactionsRequest
-      const data = await runGetSmartAccountTransactions(req.accountId, {
-        force: req.force === true,
-      })
-      sendResponse(ok(data))
+      const { requestId } = req
+
+      const signal = requestId
+        ? registerRequestAbortController(requestId).signal
+        : undefined
+
+      try {
+        const data = await runGetSmartAccountTransactions(req.accountId, {
+          force: req.force === true,
+          signal,
+        })
+        if (!signal?.aborted) sendResponse(ok(data))
+      } catch (e) {
+        if (!signal?.aborted) throw e
+      } finally {
+        if (requestId) unregisterRequestAbortController(requestId)
+      }
       return true
     }
 

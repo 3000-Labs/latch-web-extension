@@ -102,7 +102,8 @@ function classifyKind(
 }
 
 async function computeTransactionsOnce(
-  accountId: string
+  accountId: string,
+  signal?: AbortSignal
 ): Promise<GetSmartAccountTransactionsResponse> {
   const { accounts } = await getAccounts()
   const acc = accounts.find((a) => a.id === accountId)
@@ -126,6 +127,7 @@ async function computeTransactionsOnce(
     networkPassphrase,
     network,
     additionalProbes,
+    signal,
   })
 
   void buildSmartAccountPortfolioProbes({
@@ -198,7 +200,7 @@ function revalidateInBackground(accountId: string): void {
 
 export async function runGetSmartAccountTransactions(
   accountId: string,
-  opts?: { force?: boolean }
+  opts?: { force?: boolean; signal?: AbortSignal }
 ): Promise<GetSmartAccountTransactionsResponse> {
   const now = Date.now()
   if (!memoryCacheByAccountId) {
@@ -206,6 +208,7 @@ export async function runGetSmartAccountTransactions(
   }
 
   const force = opts?.force === true
+  const signal = opts?.signal
 
   if (!force) {
     const mem = memoryCacheByAccountId.get(accountId)
@@ -230,7 +233,7 @@ export async function runGetSmartAccountTransactions(
     if (existing) return await existing
   }
 
-  const p = computeTransactionsOnce(accountId).then(async (data) => {
+  const p = computeTransactionsOnce(accountId, signal).then(async (data) => {
     const snapshot: Snapshot = { updatedAtMs: Date.now(), data }
     memoryCacheByAccountId!.set(accountId, snapshot)
     await writePersistedSnapshot(accountId, snapshot)

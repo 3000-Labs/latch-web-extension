@@ -12,13 +12,18 @@ import {
 } from '../swap/swapVm'
 import { SwapDetails } from '../swap/components/SwapDetails'
 import { TokenPickerModal } from '../swap/components/TokenPickerModal'
-import { friendlyError, sendToBackground } from '../lib/backgroundClient'
+import { cancelBackgroundRequest, friendlyError, sendToBackground } from '../lib/backgroundClient'
 import { SwapCardsStack } from './swap/components/SwapCardsStack'
 import { SwapEnterAmountButton } from './swap/components/SwapEnterAmountButton'
 import { SwapScreenHeader } from './swap/components/SwapScreenHeader'
 import { MAIN_BOTTOM_NAV_CLEARANCE_PX } from './home/components/MainBottomNav'
 
 const QUOTE_DEBOUNCE_MS = 400
+
+/** Generate a stable unique id for each quote request sent to the background. */
+function newQuoteRequestId(): string {
+  return `quote-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 export function SwapScreen({
   surface,
@@ -99,6 +104,18 @@ export function SwapScreen({
   }, [accountId, payAmount, payN, payToken, receiveToken])
 
   const quoteSeqRef = useRef(0)
+  // Track the background requestId of the current in-flight quote so we can cancel it.
+  const quoteRequestIdRef = useRef<string | null>(null)
+
+  // Cancel any in-flight background quote when the SwapScreen unmounts.
+  useEffect(() => {
+    return () => {
+      if (quoteRequestIdRef.current) {
+        cancelBackgroundRequest(quoteRequestIdRef.current)
+        quoteRequestIdRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!quoteRequestKey || !payToken || !receiveToken) {
@@ -113,6 +130,13 @@ export function SwapScreen({
     setQuoteError(null)
 
     const timer = setTimeout(() => {
+      // Cancel the previous in-flight background request before starting a new one.
+      if (quoteRequestIdRef.current) {
+        cancelBackgroundRequest(quoteRequestIdRef.current)
+      }
+      const requestId = newQuoteRequestId()
+      quoteRequestIdRef.current = requestId
+
       void (async () => {
         try {
           const res = await sendToBackground<GetSwapQuoteRequest, GetSwapQuoteResponse>({
@@ -122,10 +146,15 @@ export function SwapScreen({
               assetInId: payToken.id,
               assetOutId: receiveToken.id,
               amountIn: payAmount,
+              requestId,
             },
           })
           if (seq !== quoteSeqRef.current) return
+          // Clear the ref once we have a response (or the request was already superseded).
+          if (quoteRequestIdRef.current === requestId) quoteRequestIdRef.current = null
           if (!res.ok || !res.data) {
+            // Silently ignore explicit cancellations — the UI already moved on.
+            if (res.error?.code === 'cancelled') return
             setPreviewQuote(null)
             setQuoteError(friendlyError(res.error))
             return
@@ -136,6 +165,7 @@ export function SwapScreen({
           setQuoteError(null)
         } catch (e) {
           if (seq !== quoteSeqRef.current) return
+          if (quoteRequestIdRef.current === requestId) quoteRequestIdRef.current = null
           setPreviewQuote(null)
           setQuoteError(e instanceof Error ? e.message : String(e))
         } finally {

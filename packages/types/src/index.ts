@@ -207,6 +207,8 @@ export interface SetupSendRulesResponse extends BuildSendTxResponse {
 
 export interface GetSmartAccountBalancesRequest {
   accountId: string
+  /** Optional client-generated id; background registers an AbortController keyed to this id. */
+  requestId?: string
 }
 
 export interface GetSmartAccountBalancesResponse {
@@ -245,6 +247,8 @@ export interface GetSmartAccountTransactionsRequest {
   accountId: string
   /** Bypass fresh TTL and recompute (History pull-to-refresh). */
   force?: boolean
+  /** Optional client-generated id; background registers an AbortController keyed to this id. */
+  requestId?: string
 }
 
 export interface GetSmartAccountTransactionsResponse {
@@ -796,8 +800,17 @@ export type MessageType =
   | 'COSIGN_PREDICT_ACCOUNT'
   | 'COSIGN_PREPARE_SIGN'
   | 'COSIGN_ATTACH_WEBAUTHN_AUTH'
+  | 'CANCEL_REQUEST'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
+
+/**
+ * Sent by UI to abort an in-flight background request keyed by requestId.
+ * The background AbortController map entries are deleted after abort.
+ */
+export interface CancelRequest {
+  requestId: string
+}
 
 export interface BackgroundMessage<T = unknown> {
   type: MessageType

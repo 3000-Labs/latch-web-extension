@@ -1,4 +1,4 @@
-import type { BackgroundMessage, BackgroundResponse, SerializableError } from '@latch/types'
+import type { BackgroundMessage, BackgroundResponse, CancelRequest, SerializableError } from '@latch/types'
 
 export async function sendToBackground<TPayload, TData>(
   message: BackgroundMessage<TPayload>
@@ -6,8 +6,20 @@ export async function sendToBackground<TPayload, TData>(
   return (await chrome.runtime.sendMessage(message)) as BackgroundResponse<TData>
 }
 
+/**
+ * Ask the background to abort an in-flight request by its requestId.
+ * Fire-and-forget — callers don't need to await this.
+ */
+export function cancelBackgroundRequest(requestId: string): void {
+  const payload: CancelRequest = { requestId }
+  chrome.runtime.sendMessage({ type: 'CANCEL_REQUEST', payload }).catch(() => {
+    // Ignore errors — the SW may have already unloaded or the request already finished.
+  })
+}
+
 export function friendlyError(e?: SerializableError): string {
   if (!e) return 'Unknown error'
+  if (e.code === 'cancelled') return ''
   if (e.code === 'timeout') return 'Request timed out. Please try again.'
   if (e.code === 'unhandled_message') {
     return 'Extension background is out of date. Reload Latch on chrome://extensions and try again.'

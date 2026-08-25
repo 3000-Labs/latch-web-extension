@@ -25,6 +25,10 @@ import {
 
 import { BackendError, buildSwapTx, prepareSign, setupSwapRules } from '../backend'
 import type { OkFn } from '../messageResponse'
+import {
+  registerRequestAbortController,
+  unregisterRequestAbortController,
+} from '../requestRegistry'
 import { getActiveNetwork, networkPassphraseFor, sorobanRpcUrlFor } from '../network/config'
 import { getAccounts } from '../storage'
 import {
@@ -124,7 +128,10 @@ export async function runGetSwapTokenCatalog(
   }
 }
 
-export async function runGetSwapQuote(req: GetSwapQuoteRequest): Promise<GetSwapQuoteResponse> {
+export async function runGetSwapQuote(
+  req: GetSwapQuoteRequest,
+  signal?: AbortSignal
+): Promise<GetSwapQuoteResponse> {
   const account = await getActiveAccount(req.accountId)
   const network = await getActiveNetwork()
   const [payTokens, receiveTokens] = await Promise.all([
@@ -156,7 +163,8 @@ export async function runGetSwapQuote(req: GetSwapQuoteRequest): Promise<GetSwap
     slippage: slippageBps,
   })
 
-  const quote = await getOrCreateQuote(cacheKey, () =>
+  // Race the (possibly cached) quote against the caller-supplied abort signal.
+  const quotePromise = getOrCreateQuote(cacheKey, () =>
     provider.quote({
       network,
       assetIn: swapTokenToAsset(assetIn),
@@ -166,6 +174,21 @@ export async function runGetSwapQuote(req: GetSwapQuoteRequest): Promise<GetSwap
       recipient: account.smartAccountAddress!,
     })
   )
+
+  const quote = await (signal
+    ? Promise.race([
+        quotePromise,
+        new Promise<never>((_, reject) => {
+          if (signal.aborted) {
+            reject(new BackendError('Request cancelled', { code: 'cancelled' }))
+          } else {
+            signal.addEventListener('abort', () =>
+              reject(new BackendError('Request cancelled', { code: 'cancelled' }))
+            )
+          }
+        }),
+      ])
+    : quotePromise)
 
   return {
     quote: quoteToPayload(quote, assetIn, assetOut, slippageBps),
@@ -257,8 +280,21 @@ export async function tryHandleSwapMessage(
 
     case 'GET_SWAP_QUOTE': {
       const req = message.payload as GetSwapQuoteRequest
-      const data = await runGetSwapQuote(req)
-      sendResponse(ok(data))
+      const { requestId } = req
+
+      const signal = requestId
+        ? registerRequestAbortController(requestId).signal
+        : undefined
+
+      try {
+        const data = await runGetSwapQuote(req, signal)
+        if (!signal?.aborted) sendResponse(ok(data))
+      } catch (e) {
+        if (!signal?.aborted) throw e
+        // Cancelled — swallow silently; the UI already moved on.
+      } finally {
+        if (requestId) unregisterRequestAbortController(requestId)
+      }
       return true
     }
 

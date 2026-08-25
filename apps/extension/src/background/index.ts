@@ -12,7 +12,7 @@
 import './cleanup-main-injector'
 import './actionBehavior'
 
-import type { BackgroundMessage, BackgroundResponse } from '@latch/types'
+import type { BackgroundMessage, BackgroundResponse, CancelRequest } from '@latch/types'
 
 import { tryHandleAccountsMessage } from './accounts/handlers'
 import { initDappApprovalListeners } from './dapp/approvalSession'
@@ -25,9 +25,16 @@ import { tryHandleMultisigMessage } from './multisig/handlers'
 import { tryHandleNetworkMessage } from './network/handlers'
 import { tryHandleOnboardingMessage } from './onboarding/handlers'
 import { tryHandleReadsMessage } from './reads/handlers'
+import {
+  registerRequestAbortController,
+  requestAbortControllers,
+  unregisterRequestAbortController,
+} from './requestRegistry'
 import { tryHandleSwapMessage } from './swap/handlers'
 import { tryHandleTxMessage } from './tx/handlers'
 import { tryHandleV1AuthMessage } from './v1Auth/handlers'
+
+export { registerRequestAbortController, requestAbortControllers, unregisterRequestAbortController }
 
 initDappApprovalListeners()
 
@@ -40,6 +47,19 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
     return true
   }
   // #endregion
+
+  // Handle CANCEL_REQUEST synchronously — no async needed.
+  if (rawMessage?.type === 'CANCEL_REQUEST') {
+    const { requestId } = rawMessage.payload as CancelRequest
+    const controller = requestAbortControllers.get(requestId)
+    if (controller) {
+      controller.abort()
+      requestAbortControllers.delete(requestId)
+    }
+    sendResponse({ ok: true })
+    return true
+  }
+
   const message = rawMessage as BackgroundMessage
 
   ;(async () => {

@@ -52,6 +52,8 @@ export interface GetSwapQuoteRequest {
   amountIn: string
   slippageBps?: number
   providerId?: string
+  /** Optional client-generated id; background registers an AbortController keyed to this id. */
+  requestId?: string
 }
 
 export interface GetSwapQuoteResponse {
