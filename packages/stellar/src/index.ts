@@ -17,6 +17,11 @@ export {
 
 export { buildClassicNativePaymentTx } from './classicXlmPayment'
 export { buildUnsignedSacTransferTx } from './sacTransfer'
+export {
+  extractInvokeContractIds,
+  parseUnsignedTxForReview,
+} from './parseUnsignedTxForReview'
+export type { LocalReview } from './parseUnsignedTxForReview'
 
 export {
   createRpcServer,

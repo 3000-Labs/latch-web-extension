@@ -6,6 +6,17 @@ export interface PreparedSignOperation {
   details?: Record<string, string>
 }
 
+/** Wallet-side decode of the unsigned XDR for review (source of truth for the list). */
+export interface LocalReview {
+  operations: PreparedSignOperation[]
+  /** Invoke contract id(s) extracted from the unsigned XDR (C-addresses). */
+  invokeContractIds: string[]
+  /** True when the XDR parsed successfully. */
+  parsed: boolean
+  /** Human-readable parse error when parsed is false. */
+  parseError?: string
+}
+
 export interface PrepareSignRequest {
   network: Network
   smartAccountAddress: string
@@ -81,6 +92,7 @@ export interface RunExternalSignFlowPreparedResponse {
   origin: string
   signRequest: ExternalSignRequest
   prepared: PrepareSignResponse
+  localReview: LocalReview
 }
 
 /** Params for window.latch.openSignRequest (Layer 2 without chrome-extension:// redirect). */
