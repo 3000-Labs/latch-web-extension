@@ -1,13 +1,7 @@
 import type { SmartAccountBalanceRow } from '@latch/types'
 
 export type SendStep =
-  | 'selectToken'
-  | 'selectRecipient'
-  | 'enterAmount'
-  | 'summary'
-  | 'success'
-  | 'failure'
-  | 'receipt'
+  'selectToken' | 'selectRecipient' | 'enterAmount' | 'summary' | 'success' | 'failure' | 'receipt'
 
 export type SendInputMode = 'crypto' | 'fiat'
 

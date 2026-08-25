@@ -30,12 +30,7 @@ import { AddAccountRecoveryPhraseScreen } from './AddAccountRecoveryPhraseScreen
 import { AddAccountSuccessScreen } from './AddAccountSuccessScreen'
 
 type AddAccountStep =
-  | 'chooseMethod'
-  | 'passkey'
-  | 'createPasskey'
-  | 'recoveryPhrase'
-  | 'createAccount'
-  | 'success'
+  'chooseMethod' | 'passkey' | 'createPasskey' | 'recoveryPhrase' | 'createAccount' | 'success'
 
 type PendingPasskey =
   | { kind: 'authentication'; optionsJSON: unknown; assertion: unknown }

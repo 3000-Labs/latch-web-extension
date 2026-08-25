@@ -80,8 +80,7 @@ export interface StoredAccount {
    * may appear on unwired cosign paths.
    */
   multisigMembersSnapshot?:
-    | import('./multisig').MultisigDraftMember[]
-    | import('./cosign').CosignMemberInit[]
+    import('./multisig').MultisigDraftMember[] | import('./cosign').CosignMemberInit[]
 
   createdAt: number
 }

@@ -59,7 +59,7 @@ export function HistoryScreen({
     >
       <HistoryHeader onBack={onBack} />
       <div className="mt-5">
-        <HistorySearchRow value={query} onChange={setQuery} onFilterClick={onRefresh} />
+        <HistorySearchRow value={query} onChange={setQuery} onRefreshClick={onRefresh} />
       </div>
       <div className="mt-4">
         <HistoryFilterChips active={filter} onChange={setFilter} />

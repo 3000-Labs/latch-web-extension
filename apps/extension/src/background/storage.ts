@@ -244,8 +244,7 @@ export async function createAccount(params: {
   cosignLinkedAccountId?: string
   multisigAccountSaltHex?: string
   multisigMembersSnapshot?:
-    | import('@latch/types').MultisigDraftMember[]
-    | import('@latch/types').CosignMemberInit[]
+    import('@latch/types').MultisigDraftMember[] | import('@latch/types').CosignMemberInit[]
   /**
    * When false/omitted, never replace an existing passkey account's C-address with a
    * different one (guards against create-or-connect factory drift). Repair flows set true.
@@ -358,8 +357,7 @@ export async function createMultisigAccount(params: {
   cosignLinkedAccountId?: string
   multisigAccountSaltHex?: string
   multisigMembersSnapshot?:
-    | import('@latch/types').MultisigDraftMember[]
-    | import('@latch/types').CosignMemberInit[]
+    import('@latch/types').MultisigDraftMember[] | import('@latch/types').CosignMemberInit[]
 }) {
   return await createAccount({
     mode: 'multisig',
