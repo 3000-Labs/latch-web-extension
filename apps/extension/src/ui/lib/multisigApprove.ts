@@ -8,10 +8,8 @@ import type {
   StoredAccount,
 } from '@latch/types'
 
-import { signAuthEntry } from '@stellar/freighter-api'
 import { startAuthentication } from '@simplewebauthn/browser'
 
-import { normalizeDelegatedSignatureBase64 } from '../../lib/delegatedAuthSubmit'
 import { fetchActiveNetwork, networkPassphraseFor } from './activeNetwork'
 import { friendlyError, sendToBackground } from './backgroundClient'
 import {
@@ -70,7 +68,7 @@ export function findDelegatedSigningAccount(
 ): StoredAccount | undefined {
   const expected = gAddress?.trim()
   return accounts.find((account) => {
-    if (account.mode !== 'freighter' && account.mode !== 'mnemonic') return false
+    if (account.mode !== 'mnemonic') return false
     const g = account.gAddress?.trim()
     if (!g) return false
     return !expected || g === expected
@@ -131,7 +129,7 @@ export function peekMultisigApprovalSigner(args: {
     const resolved = resolveMultisigApprovalSigner(args)
     return {
       kind: resolved.kind,
-      approveLabel: multisigApprovalButtonLabel(resolved.kind, resolved.signingAccount),
+      approveLabel: multisigApprovalButtonLabel(resolved.kind),
       busyLabel: multisigApprovalBusyLabel(resolved.kind),
     }
   } catch {
@@ -139,12 +137,8 @@ export function peekMultisigApprovalSigner(args: {
   }
 }
 
-export function multisigApprovalButtonLabel(
-  kind: MultisigApprovalSignerKind,
-  signingAccount?: StoredAccount
-): string {
+export function multisigApprovalButtonLabel(kind: MultisigApprovalSignerKind): string {
   if (kind === 'delegated') {
-    if (signingAccount?.mode === 'freighter') return 'Approve with Freighter'
     return 'Approve with wallet'
   }
   return 'Approve with passkey'
@@ -308,41 +302,25 @@ export async function approveMultisigProposalWithDelegated(args: {
   })
   if (!beginRes.ok || !beginRes.data) throw new Error(friendlyError(beginRes.error))
 
-  const { templateXdr, signerAddress: beginSignerAddress } = parseDelegatedBeginTemplate(
+  const { templateXdr } = parseDelegatedBeginTemplate(
     beginRes.data
   )
   const networkPassphrase = networkPassphraseFor((await fetchActiveNetwork()).network)
 
-  let signedAuthEntryBase64: string
-  let signerAddress: string
-
-  if (signingAccount.mode === 'freighter') {
-    const gAddress = signingAccount.gAddress?.trim()
-    if (!gAddress) throw new Error('Missing G-address for Freighter account')
-    const signed = await signAuthEntry(templateXdr, {
+  const signRes = await sendToBackground<
+    SignDelegatedGAuthEntryRequest,
+    SignDelegatedGAuthEntryResponse
+  >({
+    type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
+    payload: {
+      accountId: signingAccount.id,
+      gAddressEntryTemplateXdr: templateXdr,
       networkPassphrase,
-      address: gAddress,
-    })
-    if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed')
-    if (!signed.signedAuthEntry) throw new Error('Freighter signing failed')
-    signedAuthEntryBase64 = normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-    signerAddress = signed.signerAddress ?? beginSignerAddress ?? gAddress
-  } else {
-    const signRes = await sendToBackground<
-      SignDelegatedGAuthEntryRequest,
-      SignDelegatedGAuthEntryResponse
-    >({
-      type: 'SIGN_DELEGATED_G_AUTH_ENTRY',
-      payload: {
-        accountId: signingAccount.id,
-        gAddressEntryTemplateXdr: templateXdr,
-        networkPassphrase,
-      },
-    })
-    if (!signRes.ok || !signRes.data) throw new Error(friendlyError(signRes.error))
-    signedAuthEntryBase64 = signRes.data.signedAuthEntryBase64
-    signerAddress = signRes.data.signerAddress
-  }
+    },
+  })
+  if (!signRes.ok || !signRes.data) throw new Error(friendlyError(signRes.error))
+  const signedAuthEntryBase64 = signRes.data.signedAuthEntryBase64
+  const signerAddress = signRes.data.signerAddress
 
   const finishRes = await sendToBackground<
     MultisigApproveDelegatedFinishRequest,

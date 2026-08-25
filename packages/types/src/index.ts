@@ -26,7 +26,7 @@ export interface SignTransactionResponse {
   signedXdr?: string
 }
 
-export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic' | 'multisig'
+export type AccountMode = 'passkey' | 'mnemonic' | 'multisig'
 
 export interface StoredAccount {
   id: string
@@ -38,15 +38,8 @@ export interface StoredAccount {
   /** Soroban smart account address */
   smartAccountAddress: string
 
-  /**
-   * Stellar G-address.
-   * - required for Freighter delegated signing
-   * - returned by backend for Phantom smart account
-   */
+  /** Stellar G-address; required for mnemonic delegated signing. */
   gAddress?: string
-
-  /** 32-byte Ed25519 pubkey in hex (no 0x prefix), for Phantom */
-  phantomPublicKeyHex?: string
 
   /** Base64url credential ID, for Passkey/WebAuthn */
   passkeyCredentialId?: string
@@ -70,7 +63,7 @@ export interface StoredAccount {
   cosignWckRefId?: string
   /** Cosign (unwired / not shipped): cached HMAC blind signer id for this member. */
   cosignBlindSignerId?: string
-  /** Cosign (unwired / not shipped): local passkey/freighter account id used to sign. */
+  /** Cosign (unwired / not shipped): local passkey/mnemonic account id used to sign. */
   cosignLinkedAccountId?: string
   /** Factory deploy salt for this multisig wallet. */
   multisigAccountSaltHex?: string
@@ -131,7 +124,12 @@ export interface GetSmartAccountBalancesApiResponse {
   balances: ApiSmartAccountBalance[]
 }
 
-export type SendSignerType = 'passkey' | 'phantom' | 'freighter'
+/**
+ * Backend build/setup contract (`BuildSendTxRequest.signerType`, etc.).
+ * `'freighter'` is the wire value for delegated G-signer builds and is what
+ * mnemonic accounts send; do not rename without a coordinated backend change.
+ */
+export type SendSignerType = 'passkey' | 'freighter'
 
 export interface BuildSendTxRequest {
   smartAccountAddress: string
@@ -313,18 +311,6 @@ export interface SignDelegatedGAuthEntryResponse {
   signerAddress: string
 }
 
-export interface CreateOrConnectPhantomRequest {
-  publicKeyHex: string
-  /** Stellar network; omit → API defaults to testnet. */
-  network?: Network
-}
-
-export interface CreateOrConnectPhantomResponse {
-  smartAccountAddress: string
-  gAddress: string
-  alreadyDeployed: boolean
-}
-
 export interface CreateOrConnectPasskeyRequest {
   keyDataHex: string
   credentialId: string
@@ -391,19 +377,6 @@ export interface BuildDelegatedTxResponse {
   estimatedFeeXlm?: string
   estimatedFeeUsd?: string
   feeLabel?: string
-}
-
-export interface SubmitPhantomTxRequest {
-  txXdr: string
-  authEntryXdr: string
-  authSignatureHex: string
-  prefixedMessage: string
-  publicKeyHex: string
-  contextRuleId: number
-  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
-  submit?: boolean
-  /** Stellar network; omit → API defaults to testnet. */
-  network?: Network
 }
 
 export interface SubmitDelegatedTxRequest {
@@ -689,15 +662,12 @@ export type MessageType =
   | 'SET_SETUP_STATE'
   | 'GET_ACCOUNTS'
   | 'SET_ACTIVE_ACCOUNT'
-  | 'CREATE_OR_CONNECT_FREIGHTER'
-  | 'CREATE_OR_CONNECT_PHANTOM'
   | 'CREATE_OR_CONNECT_PASSKEY'
   | 'IMPORT_MNEMONIC_ACCOUNT'
   | 'UNLOCK_MNEMONIC_VAULT'
   | 'SIGN_DELEGATED_G_AUTH_ENTRY'
   | 'BUILD_TX'
   | 'BUILD_DELEGATED_TX'
-  | 'SUBMIT_TX_PHANTOM'
   | 'SUBMIT_TX_DELEGATED'
   | 'SUBMIT_TX_WEBAUTHN'
   | 'PASSKEY_REG_BEGIN'
@@ -826,15 +796,12 @@ export type BackgroundRequestPayloadByType = {
   SET_SETUP_STATE: SetSetupStateRequest
   GET_ACCOUNTS: undefined
   SET_ACTIVE_ACCOUNT: SetActiveAccountRequest
-  CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterRequest
-  CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomRequest
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyRequest
   IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountRequest
   UNLOCK_MNEMONIC_VAULT: UnlockMnemonicVaultRequest
   SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryRequest
   BUILD_TX: BuildTxRequest
   BUILD_DELEGATED_TX: BuildDelegatedTxRequest
-  SUBMIT_TX_PHANTOM: SubmitPhantomTxRequest
   SUBMIT_TX_DELEGATED: SubmitDelegatedTxRequest
   SUBMIT_TX_WEBAUTHN: SubmitWebauthnTxRequest
   PASSKEY_REG_BEGIN: { displayName?: string } | undefined
@@ -970,15 +937,12 @@ export type BackgroundResponseDataByType = {
   SET_SETUP_STATE: undefined
   GET_ACCOUNTS: GetAccountsResponse
   SET_ACTIVE_ACCOUNT: undefined
-  CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterResponse & { account: StoredAccount }
-  CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomResponse & { account: StoredAccount }
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyResponse & { account: StoredAccount }
   IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountResponse
   UNLOCK_MNEMONIC_VAULT: undefined
   SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryResponse
   BUILD_TX: BuildTxResponse
   BUILD_DELEGATED_TX: BuildDelegatedTxResponse
-  SUBMIT_TX_PHANTOM: SubmitTxResponse
   SUBMIT_TX_DELEGATED: SubmitTxResponse
   SUBMIT_TX_WEBAUTHN: SubmitTxResponse
   PASSKEY_REG_BEGIN: BackendWebauthnBeginResponse

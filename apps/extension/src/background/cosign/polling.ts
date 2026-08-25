@@ -21,9 +21,7 @@ async function writeLastSeen(state: LastSeenState): Promise<void> {
 export async function runCosignPollCycle(): Promise<number> {
   let notified = 0
   const { accounts } = await getAccounts()
-  const passkeyOrSeed = accounts.filter(
-    (a) => a.mode === 'passkey' || a.mode === 'freighter' || a.mode === 'mnemonic'
-  )
+  const passkeyOrSeed = accounts.filter((a) => a.mode === 'passkey' || a.mode === 'mnemonic')
 
   for (const linked of passkeyOrSeed) {
     try {

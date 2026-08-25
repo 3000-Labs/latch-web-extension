@@ -1,5 +1,4 @@
 import type { StoredAccount } from '@latch/types'
-import { signAuthEntry } from '@stellar/freighter-api'
 import { Networks } from '@stellar/stellar-sdk'
 import { startAuthentication } from '@simplewebauthn/browser'
 
@@ -11,7 +10,6 @@ import {
   prepareAuthenticationOptionsForGet,
 } from '../webauthn/passkey'
 import { openPasskeyBridgeAndWait } from '../webauthn/passkeyBridge'
-import { normalizeDelegatedSignatureBase64 } from '../../lib/delegatedAuthSubmit'
 import { apiSignCosignRequest } from './cosignFlow'
 
 async function prepareUnsignedCosign(unsignedTxXdr: string, linked: StoredAccount) {
@@ -41,28 +39,12 @@ export async function approveCosignRequest(args: {
   const networkPassphrase =
     process.env.PLASMO_PUBLIC_STELLAR_NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
 
-  if (args.linkedAccount.mode === 'freighter' || args.linkedAccount.mode === 'mnemonic') {
+  if (args.linkedAccount.mode === 'mnemonic') {
     const template =
       prepared.gAddressEntryTemplateXdr ??
       prepared.smartAccountAuthEntryXdr ??
       prepared.authEntryXdr
     if (!template) throw new Error('Missing delegated auth entry template')
-
-    if (args.linkedAccount.mode === 'freighter') {
-      if (!args.linkedAccount.gAddress) throw new Error('Missing G-address')
-      const signed = await signAuthEntry(template, {
-        networkPassphrase,
-        address: args.linkedAccount.gAddress,
-      })
-      if (signed.error) throw new Error(signed.error.message ?? 'Freighter signing failed')
-      const signedAuthEntryBase64 = normalizeDelegatedSignatureBase64(signed.signedAuthEntry)
-      return apiSignCosignRequest({
-        requestId: args.requestId,
-        smartAccountAddress: args.multisigAccount.smartAccountAddress,
-        linkedAccountId: args.linkedAccount.id,
-        signedAuthEntryBase64,
-      })
-    }
 
     const signRes = await sendToBackground<
       import('@latch/types').SignDelegatedGAuthEntryRequest,

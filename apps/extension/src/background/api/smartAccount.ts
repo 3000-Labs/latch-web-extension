@@ -5,8 +5,6 @@ import type {
   CreateOrConnectFreighterResponse,
   CreateOrConnectPasskeyRequest,
   CreateOrConnectPasskeyResponse,
-  CreateOrConnectPhantomRequest,
-  CreateOrConnectPhantomResponse,
   FreighterSmartAccountStatusResponse,
 } from '@latch/types'
 
@@ -43,15 +41,6 @@ export async function ensureFreighterSmartAccountDeployed(
     return { smartAccountAddress: status.smartAccountAddress, alreadyDeployed: true }
   }
   return await createOrConnectFreighter({ gAddress })
-}
-
-export async function createOrConnectPhantom(
-  req: CreateOrConnectPhantomRequest
-): Promise<CreateOrConnectPhantomResponse> {
-  return await latchFetch<CreateOrConnectPhantomResponse>('/api/smart-account', {
-    method: 'POST',
-    body: JSON.stringify(await withActiveNetwork(req)),
-  })
 }
 
 export async function createOrConnectPasskey(
