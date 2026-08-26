@@ -14,7 +14,7 @@ import type {
 import { friendlyError, sendToBackground } from '../../../lib/backgroundClient'
 import { useSeedPhraseWords } from '../../import-seed/useSeedPhraseWords'
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   nextPasskeyAccountDisplayName,
@@ -118,7 +118,7 @@ export function AddAccountFlow({
           if (!begin.ok) throw new Error(friendlyError(begin.error))
 
           const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         } else {
           const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
@@ -129,7 +129,7 @@ export function AddAccountFlow({
           if (!begin.ok) throw new Error(friendlyError(begin.error))
 
           const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
         }
         if (!cancelled) setPasskeyPrefetchReady(true)
@@ -148,7 +148,7 @@ export function AddAccountFlow({
 
   const runPasskeyAuthentication = useCallback(
     async (optionsJSON: unknown) => {
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
       return await runWebauthnCredential(surface, 'authentication', optionsJSON)
     },
     [surface]
@@ -156,7 +156,7 @@ export function AddAccountFlow({
 
   const runPasskeyRegistration = useCallback(
     async (optionsJSON: unknown) => {
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
       return await runWebauthnCredential(surface, 'registration', optionsJSON)
     },
     [surface]

@@ -1,30 +1,19 @@
-import { describe, expect, it, vi, afterEach } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { DEFAULT_WEBAUTHN_RP_ID, latchWebauthnRpId, normalizeWebauthnRpId } from './latchEnv'
 
-describe('webauthnVerifierAddressFromEnv', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs()
-    vi.resetModules()
-  })
-
-  it('returns undefined on mainnet when only the testnet verifier env is set', async () => {
-    vi.stubEnv(
-      'PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS',
-      'CDBBGLSWWHWK52REY7GK5HWAQGAJJ4GP5O75LOM3F4INN6W4KT6DPBVY'
+describe('latchEnv webauthn RP ID', () => {
+  it('normalizeWebauthnRpId strips protocol and path', () => {
+    expect(normalizeWebauthnRpId('latch-testing.vercel.app')).toBe('latch-testing.vercel.app')
+    expect(normalizeWebauthnRpId('https://latch-testing.vercel.app/')).toBe(
+      'latch-testing.vercel.app'
     )
-    vi.stubEnv('PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS_MAINNET', '')
-    const { webauthnVerifierAddressFromEnv } = await import('./latchEnv')
-    expect(webauthnVerifierAddressFromEnv('mainnet')).toBeUndefined()
+    expect(normalizeWebauthnRpId('https://Latch-Testing.Vercel.App/foo')).toBe(
+      'latch-testing.vercel.app'
+    )
   })
 
-  it('returns the mainnet verifier when configured', async () => {
-    vi.stubEnv('PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS_MAINNET', 'CMAINNETVERIFIER')
-    const { webauthnVerifierAddressFromEnv } = await import('./latchEnv')
-    expect(webauthnVerifierAddressFromEnv('mainnet')).toBe('CMAINNETVERIFIER')
-  })
-
-  it('returns the shared verifier on testnet', async () => {
-    vi.stubEnv('PLASMO_PUBLIC_WEBAUTHN_VERIFIER_ADDRESS', 'CTESTVERIFIER')
-    const { webauthnVerifierAddressFromEnv } = await import('./latchEnv')
-    expect(webauthnVerifierAddressFromEnv('testnet')).toBe('CTESTVERIFIER')
+  it('latchWebauthnRpId defaults to latch-testing.vercel.app', () => {
+    expect(DEFAULT_WEBAUTHN_RP_ID).toBe('latch-testing.vercel.app')
+    expect(latchWebauthnRpId()).toBe('latch-testing.vercel.app')
   })
 })

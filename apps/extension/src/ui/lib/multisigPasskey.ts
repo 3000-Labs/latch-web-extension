@@ -8,7 +8,7 @@ import type {
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
 
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
@@ -59,7 +59,7 @@ export async function enrollNewPasskeyForCosignWizard(args: {
   })
   if (!begin.ok || !begin.data) throw new Error(friendlyError(begin.error))
   const optionsJSON = prepareRegistrationOptionsForCreate(begin.data.options, displayName)
-  assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+  assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
   let registration: unknown
   try {
     registration = await runWebauthnRegistration(args.surface, optionsJSON)
@@ -155,7 +155,7 @@ export async function enrollExistingPasskeyForDraft(args: {
 }): Promise<MultisigDraft> {
   const member = passkeyMemberFromAccount(args.account, args.label)
   const begin = await apiDraftPasskeyAuthBegin(args.draftId, args.label)
-  assertBeginOptionsRpIdMatchesExtension(begin.options)
+  assertBeginOptionsRpIdMatchesCanonicalDomain(begin.options)
   const narrowed = narrowAuthenticationOptionsToCredential(begin.options, member.credentialId!)
   let assertion: unknown
   try {
@@ -174,7 +174,7 @@ export async function enrollNewPasskeyForDraft(args: {
   surface: 'popup' | 'sidepanel'
 }): Promise<{ draft: MultisigDraft; credentialId: string }> {
   const begin = await apiDraftPasskeyRegBegin(args.draftId, args.displayName)
-  assertBeginOptionsRpIdMatchesExtension(begin.options)
+  assertBeginOptionsRpIdMatchesCanonicalDomain(begin.options)
   let assertion: unknown
   try {
     assertion = await runWebauthnRegistration(args.surface, begin.options)
@@ -199,7 +199,7 @@ export async function enrollExistingPasskeyForJoin(args: {
 }): Promise<{ draft: MultisigDraft; credentialId: string }> {
   const member = passkeyMemberFromAccount(args.account, args.label)
   const begin = await apiJoinPasskeyAuthBegin(args.token, args.label)
-  assertBeginOptionsRpIdMatchesExtension(begin.options)
+  assertBeginOptionsRpIdMatchesCanonicalDomain(begin.options)
   const narrowed = narrowAuthenticationOptionsToCredential(begin.options, member.credentialId!)
   let assertion: unknown
   try {
@@ -219,7 +219,7 @@ export async function enrollNewPasskeyForJoin(args: {
   surface: 'popup' | 'sidepanel'
 }): Promise<{ draft: MultisigDraft; credentialId: string }> {
   const begin = await apiJoinPasskeyRegBegin(args.token, args.displayName)
-  assertBeginOptionsRpIdMatchesExtension(begin.options)
+  assertBeginOptionsRpIdMatchesCanonicalDomain(begin.options)
   let assertion: unknown
   try {
     assertion = await runWebauthnRegistration(args.surface, begin.options)

@@ -13,7 +13,7 @@ import type {
 
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
   narrowAuthenticationOptionsToCredential,
@@ -110,7 +110,7 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
         if (!beginRes.ok) throw new Error(friendlyError(beginRes.error))
 
         const optionsJSON = prepareAuthenticationOptionsForGet(beginRes.data?.options)
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+        assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
 
         const mergedAccounts: BackendSessionAccount[] = [
           ...(backendRes.ok ? (backendRes.data?.accounts ?? []) : []),
@@ -160,7 +160,7 @@ export function useOnboardingPasskeyAuthentication(active: boolean) {
         ? narrowAuthenticationOptionsToCredential(pre.optionsJSON, selectedCredentialId)
         : pre.optionsJSON
       const optionsJSON = prepareAuthenticationOptionsForGet(narrowed)
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
 
       let assertion: Awaited<ReturnType<typeof startAuthentication>>
       try {

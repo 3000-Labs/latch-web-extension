@@ -17,7 +17,10 @@ import {
 } from './webauthnSession'
 import { withActiveNetwork } from './withActiveNetwork'
 
-/** When set, WebAuthn `/begin` routes should use `rp.id === chromeExtensionId` (Chrome extension WebAuthn). */
+/**
+ * When set, tells the Latch API this ceremony runs from `chrome-extension://<id>`
+ * (clientDataJSON.origin). RP ID is always the shared HTTPS domain (WEBAUTHN_RP_ID), not this value.
+ */
 function chromeExtensionIdForWebauthn(): string | undefined {
   try {
     if (
