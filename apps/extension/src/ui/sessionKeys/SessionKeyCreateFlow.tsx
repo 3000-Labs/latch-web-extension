@@ -20,7 +20,7 @@ export function SessionKeyCreateFlow({
       const response = await chrome.runtime.sendMessage({
         type: 'GENERATE_SESSION_KEY',
         payload: { accountId },
-      })
+      }) as { ok: boolean; data: { rawPublicKey: Uint8Array } }
       if (!response.ok) {
         throw new Error('Failed to generate session key')
       }

@@ -110,7 +110,7 @@ export async function signWithSessionKey(accountId: string, payload: Uint8Array)
       hash: { name: 'SHA-256' },
     },
     data.privateKey,
-    payload
+    payload as unknown as BufferSource
   )
 
   return new Uint8Array(signature)

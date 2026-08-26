@@ -27,7 +27,7 @@ export function SessionKeyRevokeFlow({
         const response = await chrome.runtime.sendMessage({
           type: 'GET_SESSION_KEYS',
           payload: { accountId },
-        })
+        }) as { ok: boolean; data?: { keys: SessionKeyInfo[] } }
         if (response.ok && response.data?.keys) {
           setSessions(response.data.keys)
         }
@@ -45,9 +45,9 @@ export function SessionKeyRevokeFlow({
       const response = await chrome.runtime.sendMessage({
         type: 'REVOKE_SESSION_KEY',
         payload: { accountId: sessionAccountId },
-      })
+      }) as { ok: boolean }
       if (!response.ok) throw new Error('Revoke failed')
-      setSessions(sessions.filter((s) => s.accountId !== sessionAccountId))
+      setSessions(sessions.filter((s: SessionKeyInfo) => s.accountId !== sessionAccountId))
       // TODO: send remove_context_rule transaction if not expired
     } catch (e) {
       console.error(e)
