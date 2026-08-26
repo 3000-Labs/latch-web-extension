@@ -302,9 +302,7 @@ export async function approveMultisigProposalWithDelegated(args: {
   })
   if (!beginRes.ok || !beginRes.data) throw new Error(friendlyError(beginRes.error))
 
-  const { templateXdr } = parseDelegatedBeginTemplate(
-    beginRes.data
-  )
+  const { templateXdr } = parseDelegatedBeginTemplate(beginRes.data)
   const networkPassphrase = networkPassphraseFor((await fetchActiveNetwork()).network)
 
   const signRes = await sendToBackground<

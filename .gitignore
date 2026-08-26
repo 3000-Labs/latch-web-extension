@@ -1,5 +1,8 @@
 node_modules/
 dist/
+
+# pnpm monorepo — npm lockfile must not be committed
+package-lock.json
 .plasmo/
 .turbo/
 .next/

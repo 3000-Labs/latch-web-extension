@@ -10,9 +10,7 @@ import type {
 
 import { startAuthentication } from '@simplewebauthn/browser'
 
-import {
-  resolveDelegatedAuthEntryForSigner,
-} from '../../lib/delegatedAuthSubmit'
+import { resolveDelegatedAuthEntryForSigner } from '../../lib/delegatedAuthSubmit'
 import {
   assertPasskeyAssertionMatchesAuthDigest,
   buildPasskeySigDataXdrFromAssertion,
@@ -163,7 +161,7 @@ export async function signAndSubmitBuiltTx(args: {
     (build.submitMethod === 'delegated' || build.submitMethod === 'bundler-delegated')
   ) {
     throw new Error(
-        'This smart account authorizes swaps via a delegated G-address, not your passkey. ' +
+      'This smart account authorizes swaps via a delegated G-address, not your passkey. ' +
         'Import the seed phrase for the delegated signer G-address, or log out and sign in with passkey to run one-time swap setup.'
     )
   }
