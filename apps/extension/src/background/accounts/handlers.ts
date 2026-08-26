@@ -14,6 +14,7 @@ import type {
 
 import { ensureSetupStateMatchesAccounts, getSetupState, setSetupState } from '../actionBehavior'
 import { BackendError } from '../api/client'
+import { logStructuredError } from '../errorLogging'
 import {
   createOrConnectFreighter,
   createOrConnectPasskey,
@@ -87,8 +88,10 @@ export async function tryHandleAccountsMessage(
           const { clearSmartAccountBalancesMemoryCache } = await import('../smartAccountBalances')
           clearSmartAccountBalancesMemoryCache()
         }
-      } catch {
-        // best-effort repair only
+      } catch (e) {
+        logStructuredError('accounts-address-repair', e, {
+          dedupeKey: 'accounts-address-repair',
+        })
       }
       const data = await getAccounts()
       let activeAccountHasMnemonicVault: boolean | undefined

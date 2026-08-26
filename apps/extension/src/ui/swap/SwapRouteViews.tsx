@@ -19,7 +19,12 @@ import { SwapFailureScreen } from '../screens/swap/SwapFailureScreen'
 import { SwapSuccessScreen } from '../screens/swap/SwapSuccessScreen'
 import { executeSwapWithSetupLoop } from '../lib/executeSwap'
 import { extractTransactionHash, signAndSubmitBuiltTx } from '../lib/signBuiltTx'
-import { friendlyError, sendToBackground } from '../lib/backgroundClient'
+import {
+  formatOperationError,
+  friendlyError,
+  logStructuredError,
+  sendToBackground,
+} from '../lib/backgroundClient'
 import type { SwapDraft, SwapQuoteVm, SwapTokenVm } from '../swap/swapVm'
 import {
   mergeSwapTokenCatalogs,
@@ -111,7 +116,14 @@ export function SwapRouteViews({
         setSwapPayTokenCatalog(res.data.payTokens.map(mapSwapTokenVm))
         setSwapReceiveTokenCatalog(res.data.receiveTokens.map(mapSwapTokenVm))
         setSwapPreferredReceiveTokenIds(res.data.preferredReceiveTokenIds)
+      } else {
+        logStructuredError('swap-catalog-prefetch', res.error ?? 'missing response', {
+          dedupeKey: 'swap-catalog-prefetch',
+        })
       }
+    } catch (e) {
+      // Catalog prefetch is non-blocking; the empty-catalog overlay remains unchanged for users.
+      logStructuredError('swap-catalog-prefetch', e, { dedupeKey: 'swap-catalog-prefetch' })
     } finally {
       setSwapCatalogLoading(false)
     }
@@ -133,16 +145,30 @@ export function SwapRouteViews({
     if (codes.length === 0) return
     let cancelled = false
     void (async () => {
-      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
-        type: 'GET_MARKET_PRICES',
-        payload: { tokens: codes },
-      })
-      if (cancelled || !res.ok || !res.data) return
-      const map: Record<string, number> = {}
-      for (const [code, row] of Object.entries(res.data.pricesByCodeUpper)) {
-        if (row?.priceUsd != null) map[code] = row.priceUsd
+      try {
+        const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+          type: 'GET_MARKET_PRICES',
+          payload: { tokens: codes },
+        })
+        if (cancelled) return
+        if (!res.ok || !res.data) {
+          logStructuredError('swap-market-price-prefetch', res.error ?? 'missing response', {
+            dedupeKey: `swap-market-price-prefetch:${codes.join(',')}`,
+          })
+          return
+        }
+        const map: Record<string, number> = {}
+        for (const [code, row] of Object.entries(res.data.pricesByCodeUpper)) {
+          if (row?.priceUsd != null) map[code] = row.priceUsd
+        }
+        setSwapTokenPriceUsdBySymbol(map)
+      } catch (e) {
+        if (!cancelled) {
+          logStructuredError('swap-market-price-prefetch', e, {
+            dedupeKey: `swap-market-price-prefetch:${codes.join(',')}`,
+          })
+        }
       }
-      setSwapTokenPriceUsdBySymbol(map)
     })()
     return () => {
       cancelled = true
@@ -153,8 +179,11 @@ export function SwapRouteViews({
     if (setupState !== 'has_account' || swapTokensUnion.length === 0) return
     let cancelled = false
     void (async () => {
-      const res = await sendToBackground<GetAssetIconDataUrlsRequest, GetAssetIconDataUrlsResponse>(
-        {
+      try {
+        const res = await sendToBackground<
+          GetAssetIconDataUrlsRequest,
+          GetAssetIconDataUrlsResponse
+        >({
           type: 'GET_ASSET_ICON_DATA_URLS',
           payload: {
             assets: swapTokensUnion.map((t) => ({
@@ -163,14 +192,22 @@ export function SwapRouteViews({
               sacContractId: t.contractId,
             })),
           },
+        })
+        if (cancelled) return
+        if (!res.ok || !res.data) {
+          logStructuredError('swap-icon-prefetch', res.error ?? 'missing response', {
+            dedupeKey: 'swap-icon-prefetch',
+          })
+          return
         }
-      )
-      if (cancelled || !res.ok || !res.data) return
-      const map: Record<string, string | null> = {}
-      swapTokensUnion.forEach((t, i) => {
-        map[t.symbol] = res.data!.icons[i] ?? t.iconUrl ?? null
-      })
-      setSwapIconByCode(map)
+        const map: Record<string, string | null> = {}
+        swapTokensUnion.forEach((t, i) => {
+          map[t.symbol] = res.data!.icons[i] ?? t.iconUrl ?? null
+        })
+        setSwapIconByCode(map)
+      } catch (e) {
+        if (!cancelled) logStructuredError('swap-icon-prefetch', e, { dedupeKey: 'swap-icon-prefetch' })
+      }
     })()
     return () => {
       cancelled = true
@@ -333,12 +370,18 @@ export function SwapRouteViews({
             sacContractId: assetOut.contractId,
           },
         },
-      })
+      }).catch((e) =>
+        logStructuredError('swap-sac-probe', e, { dedupeKey: 'swap-sac-probe' })
+      )
       void onLoadPortfolio()
-      if (txHash) console.info('[latch:swap] submitted', txHash)
     } catch (e) {
-      console.error('[latch:swap]', e)
-      setSwapFailureDetail(e instanceof Error ? e.message : String(e))
+      logStructuredError('swap-confirm', e, {
+        metadata: {
+          network: activeAccount ? 'active' : 'unknown',
+          accountMode: activeAccount?.mode ?? null,
+        },
+      })
+      setSwapFailureDetail(formatOperationError(e, 'swap'))
       setSwapStep('failure')
     } finally {
       setSwapBusy(false)

@@ -33,7 +33,12 @@ import { ReceiveFlow } from './screens/receive/ReceiveFlow'
 import { FundScreen } from './screens/fund/FundScreen'
 import { buildTransactionDetail } from './lib/historyFormat'
 import type { TransactionDetailVm } from './types/transaction-detail'
-import { friendlyError, sendToBackground } from './lib/backgroundClient'
+import {
+  friendlyError,
+  logStructuredError,
+  reportUiError,
+  sendToBackground,
+} from './lib/backgroundClient'
 import { openSidePanel, setDefaultSurface } from './lib/uiSurface'
 import {
   MULTISIG_ROUTES,
@@ -148,7 +153,12 @@ export function LatchRoot({ surface }: { surface: Surface }) {
   useEffect(() => {
     void apiGetMultisigProposalsBannerDismissed()
       .then(setMultisigBannerDismissedIds)
-      .catch(() => {})
+      // Optional home-banner prefetch: log once, but do not interrupt the wallet with a toast.
+      .catch((e) =>
+        logStructuredError('multisig-banner-prefetch', e, {
+          dedupeKey: 'multisig-banner-prefetch',
+        })
+      )
   }, [])
 
   const loadMultisigProposals = useCallback(async () => {
@@ -166,8 +176,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
       })
       if (res.ok && res.data?.proposals) setMultisigProposals(res.data.proposals)
       else setMultisigProposals([])
-    } catch {
-      // ignore — home banner is optional
+    } catch (e) {
+      // Optional home-banner prefetch: log once, but do not interrupt the wallet with a toast.
+      logStructuredError('multisig-proposals-prefetch', e, {
+        dedupeKey: 'multisig-proposals-prefetch',
+      })
     }
   }, [activeAccount])
 
@@ -222,7 +235,9 @@ export function LatchRoot({ surface }: { surface: Surface }) {
         setRoute(resolveMainRoute({ needsMnemonicUnlock: refreshed?.needsMnemonicUnlock ?? false }))
       } else {
         onboardingTabOpenedRef.current = false
-        void openOnboardingTab().catch(() => {})
+        void openOnboardingTab().catch((e) =>
+          reportUiError('onboarding-tab', e, setError, { operation: 'account-hydrate' })
+        )
       }
     } finally {
       setLoading(null)
@@ -304,7 +319,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                       })
                     )
                   })
-                  .catch(() => {})
+                  .catch((e) =>
+                    reportUiError('account-switch', e, setError, {
+                      operation: 'account-hydrate',
+                    })
+                  )
               }}
               onAddAccount={() => setRoute('addAccount')}
               onRenameAccount={(accountId) => {
@@ -367,7 +386,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                 flowHeightClass={flowHeightClass}
                 onOpenSetupTab={() => {
                   onboardingTabOpenedRef.current = true
-                  void openOnboardingTab().catch(() => {})
+                  void openOnboardingTab().catch((e) =>
+                    reportUiError('onboarding-tab', e, setError, {
+                      operation: 'account-hydrate',
+                    })
+                  )
                 }}
               />
             ) : null}
@@ -396,7 +419,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                     void sendToBackground<SetActiveAccountRequest, undefined>({
                       type: 'SET_ACTIVE_ACCOUNT',
                       payload: { accountId: id },
-                    }).catch(() => {})
+                    }).catch((e) =>
+                      reportUiError('account-switch', e, setError, {
+                        operation: 'account-hydrate',
+                      })
+                    )
                   }}
                 />
               </div>
@@ -481,9 +508,21 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                         onChangeSidePanelEnabled={(enabled) => {
                           const next = enabled ? 'sidepanel' : 'popup'
                           setPref(next)
-                          void setDefaultSurface(next).then(() => {
-                            if (next === 'sidepanel') void openSidePanel().catch(() => {})
-                          })
+                          void setDefaultSurface(next)
+                            .then(() => {
+                              if (next === 'sidepanel') {
+                                void openSidePanel().catch((e) =>
+                                  reportUiError('sidepanel-open', e, setError, {
+                                    operation: 'account-hydrate',
+                                  })
+                                )
+                              }
+                            })
+                            .catch((e) =>
+                              reportUiError('surface-preference', e, setError, {
+                                operation: 'account-hydrate',
+                              })
+                            )
                         }}
                         onSaveAccountName={(walletName) => {
                           if (!activeAccount?.id) return
@@ -495,7 +534,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                             },
                           })
                             .then(() => refreshAccounts())
-                            .catch(() => {})
+                            .catch((e) =>
+                              reportUiError('account-rename', e, setError, {
+                                operation: 'account-hydrate',
+                              })
+                            )
                         }}
                         onSelectAccount={(accountId) => {
                           void sendToBackground<SetActiveAccountRequest, undefined>({
@@ -503,10 +546,18 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                             payload: { accountId },
                           })
                             .then(() => refreshAccounts())
-                            .catch(() => {})
+                            .catch((e) =>
+                              reportUiError('account-switch', e, setError, {
+                                operation: 'account-hydrate',
+                              })
+                            )
                         }}
                         onAccountsChanged={() => {
-                          void refreshAccounts().catch(() => {})
+                          void refreshAccounts().catch((e) =>
+                            reportUiError('accounts-refresh', e, setError, {
+                              operation: 'account-hydrate',
+                            })
+                          )
                         }}
                         onCreateMultisig={() => {
                           setPage('main')
@@ -749,7 +800,11 @@ export function LatchRoot({ surface }: { surface: Surface }) {
               })
                 .then(() => refreshAccounts())
                 .then(() => setRenameAccountId(null))
-                .catch(() => {})
+                .catch((e) =>
+                  reportUiError('account-rename', e, setError, {
+                    operation: 'account-hydrate',
+                  })
+                )
             }}
           />
         ) : null}

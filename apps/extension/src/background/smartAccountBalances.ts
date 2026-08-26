@@ -13,6 +13,7 @@ import {
 import { getAccounts } from './storage'
 import { getMarketPrices } from './marketPrices'
 import { computeBalanceUsd, computeTotalBalanceUsd } from './tokenPrices'
+import { logStructuredError } from './errorLogging'
 
 type Snapshot = {
   updatedAtMs: number
@@ -54,7 +55,11 @@ async function readPersistedSnapshot(accountId: string): Promise<Snapshot | null
     if (typeof s.updatedAtMs !== 'number') return null
     if (!s.data || typeof s.data !== 'object') return null
     return { updatedAtMs: s.updatedAtMs, data: s.data as GetSmartAccountBalancesResponse }
-  } catch {
+  } catch (e) {
+    logStructuredError('balances-cache-read', e, {
+      dedupeKey: `balances-cache-read:${accountId}`,
+      metadata: { accountId },
+    })
     return null
   }
 }
@@ -63,8 +68,11 @@ async function writePersistedSnapshot(accountId: string, snapshot: Snapshot): Pr
   try {
     const key = await storageKeyForAccount(accountId)
     await chrome.storage.local.set({ [key]: snapshot })
-  } catch {
-    // best-effort only
+  } catch (e) {
+    logStructuredError('balances-cache-write', e, {
+      dedupeKey: `balances-cache-write:${accountId}`,
+      metadata: { accountId },
+    })
   }
 }
 
@@ -115,7 +123,10 @@ async function computeBalancesOnce(accountId: string): Promise<GetSmartAccountBa
   try {
     const res = await getMarketPrices(core.map((r) => r.code))
     pricesByCodeUpper = res.pricesByCodeUpper
-  } catch {
+  } catch (e) {
+    logStructuredError('balances-price-prefetch', e, {
+      dedupeKey: 'balances-price-prefetch',
+    })
     pricesByCodeUpper = {}
   }
 
@@ -201,7 +212,12 @@ function revalidateInBackground(accountId: string): void {
     })
 
   inflightByAccountId.set(accountId, p)
-  void p.catch(() => {})
+  void p.catch((e) =>
+    logStructuredError('balances-revalidate', e, {
+      dedupeKey: `balances-revalidate:${accountId}`,
+      metadata: { accountId },
+    })
+  )
 }
 
 export async function runGetSmartAccountBalances(

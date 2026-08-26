@@ -9,6 +9,8 @@ import type { LatchProviderEventMessage, Network } from '@latch/types'
 
 import inpageUrl from 'url:../scripts/inpage.ts'
 
+import { logStructuredError } from '../ui/lib/backgroundClient'
+
 export const config: PlasmoCSConfig = {
   matches: ['<all_urls>'],
   run_at: 'document_start',
@@ -70,8 +72,9 @@ async function emitActiveAccountFromStorage(): Promise<void> {
         payload: {},
       })) as BgRes<{ network: Network }>
       if (netRes?.ok && netRes.data?.network) network = netRes.data.network
-    } catch {
-      // keep testnet default
+    } catch (e) {
+      // Keep testnet as the safe default; accountChanged still emits without a toast.
+      logStructuredError('provider-network-read', e, { dedupeKey: 'provider-network-read' })
     }
 
     postProviderEvent({
@@ -79,8 +82,9 @@ async function emitActiveAccountFromStorage(): Promise<void> {
       event: 'accountChanged',
       data: { publicKey, network },
     })
-  } catch {
-    // ignore
+  } catch (e) {
+    // Storage events are best-effort, but a failed accountChanged emit must remain diagnosable.
+    logStructuredError('provider-account-emit', e, { dedupeKey: 'provider-account-emit' })
   }
 }
 

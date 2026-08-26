@@ -15,7 +15,7 @@ import type {
   StoredAccount,
 } from '@latch/types'
 
-import { sendToBackground } from '../lib/backgroundClient'
+import { logStructuredError, sendToBackground } from '../lib/backgroundClient'
 import { apiSyncLocalMultisigAccounts } from '../lib/multisigFlow'
 import { openOnboardingTab } from '../onboarding/openOnboardingTab'
 import { storedAccountLabel } from '../lib/storedAccountLabel'
@@ -72,9 +72,17 @@ export function useAccountsHydration({
       payload: undefined,
     })
       .then((res) => {
-        if (res.ok && res.data) setSetupState(res.data.setupState)
+        if (res.ok && res.data) {
+          setSetupState(res.data.setupState)
+        } else {
+          logStructuredError('setup-state-hydrate', res.error ?? 'missing response', {
+            dedupeKey: 'setup-state-hydrate',
+          })
+        }
       })
-      .catch(() => {})
+      .catch((e) =>
+        logStructuredError('setup-state-hydrate', e, { dedupeKey: 'setup-state-hydrate' })
+      )
 
     let cancelled = false
     void (async () => {
@@ -88,6 +96,9 @@ export function useAccountsHydration({
         if (cancelled) return
         if (!res.ok || !res.data) {
           setAccountsLoadSucceeded(false)
+          logStructuredError('accounts-hydrate', res.error ?? 'missing response', {
+            dedupeKey: 'accounts-hydrate',
+          })
           return
         }
         setAccounts(res.data.accounts)
@@ -113,8 +124,11 @@ export function useAccountsHydration({
                   })
           )
         }
-      } catch {
-        if (!cancelled) setAccountsLoadSucceeded(false)
+      } catch (e) {
+        if (!cancelled) {
+          setAccountsLoadSucceeded(false)
+          logStructuredError('accounts-hydrate', e, { dedupeKey: 'accounts-hydrate' })
+        }
       } finally {
         if (!cancelled) setAccountsHydrated(true)
       }
@@ -135,8 +149,9 @@ export function useAccountsHydration({
               (netRes.data.network === 'mainnet' ? 'Stellar Mainnet' : 'Stellar Testnet')
           )
         }
-      } catch {
-        // keep defaults
+      } catch (e) {
+        // Network hydration is optional; preserve the testnet default and do not show a toast.
+        logStructuredError('network-hydrate', e, { dedupeKey: 'network-hydrate' })
       }
     })()
 
@@ -162,7 +177,14 @@ export function useAccountsHydration({
           type: 'GET_ACCOUNTS',
           payload: undefined,
         })
-        if (cancelled || !res.ok || !res.data) return
+        if (cancelled || !res.ok || !res.data) {
+          if (!cancelled) {
+            logStructuredError('accounts-hydrate-retry', res.error ?? 'missing response', {
+              dedupeKey: 'accounts-hydrate-retry',
+            })
+          }
+          return
+        }
         setAccounts(res.data.accounts)
         setActiveAccountId(res.data.activeAccountId)
         setActiveAccountHasMnemonicVault(Boolean(res.data.activeAccountHasMnemonicVault))
@@ -181,8 +203,9 @@ export function useAccountsHydration({
               : resolveMainRoute({ needsMnemonicUnlock: locked, preferred: prev })
           )
         }
-      } catch {
-        // keep retrying
+      } catch (e) {
+        // Retry is intentionally silent to users, but retain a deduplicated diagnostic signal.
+        if (!cancelled) logStructuredError('accounts-hydrate-retry', e, { dedupeKey: 'accounts-hydrate-retry' })
       }
     }
     void attempt()
@@ -214,7 +237,9 @@ export function useAccountsHydration({
 
     if (!onboardingTabOpenedRef.current) {
       onboardingTabOpenedRef.current = true
-      void openOnboardingTab().catch(() => {})
+      void openOnboardingTab().catch((e) =>
+        logStructuredError('onboarding-tab', e, { dedupeKey: 'onboarding-tab' })
+      )
     }
   }, [accountsHydrated, accountsLoadSucceeded, accounts.length, needsMnemonicUnlock, route])
 
@@ -251,8 +276,9 @@ export function useAccountsHydration({
     try {
       const res = await apiSyncLocalMultisigAccounts()
       if (res.created.length > 0 || res.updated) await refreshAccounts()
-    } catch {
-      // best-effort
+    } catch (e) {
+      // Multisig account sync is best-effort; log without blocking account hydration.
+      logStructuredError('multisig-account-sync', e, { dedupeKey: 'multisig-account-sync' })
     }
   }, [])
 

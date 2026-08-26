@@ -15,7 +15,11 @@ import {
   signWithoutSubmitBuiltTx,
 } from '../lib/signBuiltTx'
 import { debugAgentLog } from '../lib/debugAgentLog'
-import { sendToBackground } from '../lib/backgroundClient'
+import {
+  formatOperationError,
+  logStructuredError,
+  sendToBackground,
+} from '../lib/backgroundClient'
 import { openOnboardingTab } from '../onboarding/openOnboardingTab'
 import type { Route, Surface } from '../routing/routes'
 
@@ -61,7 +65,9 @@ export function DappRouteViews({
       type: 'LIST_PENDING_DAPP_REQUESTS',
       payload: {},
     })
-    if (!res.ok || !res.data) return
+    if (!res.ok || !res.data) {
+      throw res.error ?? new Error('Pending dApp request response was empty')
+    }
     setPendingDappRequests(res.data.requests)
     if (res.data.requests.length > 0) {
       const netRes = await sendToBackground<undefined, { network: 'testnet' | 'mainnet' }>({
@@ -90,7 +96,7 @@ export function DappRouteViews({
       errorCode?: string
     }
   ) {
-    await sendToBackground({
+    const resolveRes = await sendToBackground({
       type: 'RESOLVE_PENDING_DAPP_REQUEST',
       payload: {
         requestId: req.id,
@@ -103,6 +109,7 @@ export function DappRouteViews({
         signedTxXdr: extra?.signedTxXdr,
       },
     })
+    if (!resolveRes.ok) throw resolveRes.error ?? new Error('Could not resolve the dApp request')
     setDappBusy(false)
     setDappProgressLabel(null)
     setDappError(null)
@@ -111,13 +118,21 @@ export function DappRouteViews({
       onSetRoute(accountsLength > 0 ? 'home' : 'home')
       if (accountsLength === 0) {
         onResetOnboardingTabOpened()
-        void openOnboardingTab().catch(() => {})
+        void openOnboardingTab().catch((e) =>
+          logStructuredError('onboarding-tab', e, { dedupeKey: 'onboarding-tab' })
+        )
       }
     }
   }
 
   useEffect(() => {
-    void loadPendingDapp().catch(() => {})
+    void loadPendingDapp().catch((e) => {
+      // Pending-request prefetch should not create a toast, but the failure is diagnosable.
+      logStructuredError('dapp-permission-prefetch', e, {
+        dedupeKey: 'dapp-permission-prefetch',
+      })
+      setDappError(formatOperationError(e, 'dapp'))
+    })
     // Mount-only, matches LatchRoot.
   }, [])
 
@@ -125,7 +140,12 @@ export function DappRouteViews({
     function onStorage(changes: { [key: string]: chrome.storage.StorageChange }, area: string) {
       if (area !== 'local') return
       if (changes['latch.pendingDappRequests']) {
-        void loadPendingDapp().catch(() => {})
+        void loadPendingDapp().catch((e) => {
+          logStructuredError('dapp-permission-prefetch', e, {
+            dedupeKey: 'dapp-permission-prefetch',
+          })
+          setDappError(formatOperationError(e, 'dapp'))
+        })
       }
     }
     chrome.storage.onChanged.addListener(onStorage)
@@ -220,12 +240,15 @@ export function DappRouteViews({
                 // does not resurrect a stale "Review transaction" screen.
                 try {
                   await resolvePendingDapp(req, false, {
-                    errorMessage: message,
+                    errorMessage: formatOperationError(message, 'dapp'),
                     errorCode: 'sign_failed',
                   })
                   onSetError(message)
-                } catch {
-                  setDappError(message)
+                } catch (resolveError) {
+                  logStructuredError('dapp-permission-resolve', resolveError, {
+                    dedupeKey: `dapp-permission-resolve:${req.id}`,
+                  })
+                  setDappError(formatOperationError(resolveError, 'dapp'))
                   setDappBusy(false)
                   setDappProgressLabel(null)
                 }
@@ -250,9 +273,12 @@ export function DappRouteViews({
           onApprove={() => {
             const req = pendingDappRequests[0]
             if (!req) return
-            void resolvePendingDapp(req, true).catch((e) =>
-              setDappError(e instanceof Error ? e.message : String(e))
-            )
+            void resolvePendingDapp(req, true).catch((e) => {
+              logStructuredError('dapp-permission-approve', e, {
+                dedupeKey: `dapp-permission-approve:${req.id}`,
+              })
+              setDappError(formatOperationError(e, 'dapp'))
+            })
           }}
           onReject={() => {
             const req = pendingDappRequests[0]

@@ -14,7 +14,11 @@ import { saveToAddressBook } from '../screens/send/useAddressBook'
 import { executeSendWithSetupLoop } from '../lib/executeSend'
 import { createMultisigSendProposalWithSetup } from '../lib/multisigProposal'
 import { enrichSendFailureDetail, buildSendRequestFromDraft } from '../lib/sendTx'
-import { sendToBackground } from '../lib/backgroundClient'
+import {
+  formatOperationError,
+  logStructuredError,
+  sendToBackground,
+} from '../lib/backgroundClient'
 import { INITIAL_SEND_DRAFT, type SendDraft, type SendResult, type SendStep } from '../types/send'
 import type { Route, Surface } from '../routing/routes'
 
@@ -82,12 +86,24 @@ export function SendRouteViews({
   }, [registerOpenSend, openSendFlow])
 
   const loadMarketPriceForToken = useCallback(async (code: string): Promise<number | null> => {
-    const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
-      type: 'GET_MARKET_PRICES',
-      payload: { tokens: [code] },
-    })
-    if (!res.ok || !res.data) return null
-    return res.data.pricesByCodeUpper[code.toUpperCase()]?.priceUsd ?? null
+    try {
+      const res = await sendToBackground<GetMarketPricesRequest, GetMarketPricesResponse>({
+        type: 'GET_MARKET_PRICES',
+        payload: { tokens: [code] },
+      })
+      if (!res.ok || !res.data) {
+        logStructuredError('send-market-price-prefetch', res.error ?? 'missing response', {
+          dedupeKey: `send-market-price-prefetch:${code.toUpperCase()}`,
+        })
+        return null
+      }
+      return res.data.pricesByCodeUpper[code.toUpperCase()]?.priceUsd ?? null
+    } catch (e) {
+      logStructuredError('send-market-price-prefetch', e, {
+        dedupeKey: `send-market-price-prefetch:${code.toUpperCase()}`,
+      })
+      return null
+    }
   }, [])
 
   useEffect(() => {
@@ -121,8 +137,12 @@ export function SendRouteViews({
         payload: buildBody,
       })
       if (buildRes.ok && buildRes.data) return buildRes.data
+      logStructuredError('send-fee-estimate', buildRes.error ?? 'missing response', {
+        dedupeKey: 'send-fee-estimate',
+      })
       return null
-    } catch {
+    } catch (e) {
+      logStructuredError('send-fee-estimate', e, { dedupeKey: 'send-fee-estimate' })
       return null
     }
   }, [activeAccount, sendDraft, sendTokenPriceUsd, activeNetwork])
@@ -167,20 +187,29 @@ export function SendRouteViews({
         void saveToAddressBook({
           address: sendDraft.recipientAddress,
           name: sendDraft.recipientName,
-        }).catch(() => {})
+        }).catch((e) =>
+          logStructuredError('address-book-save', e, {
+            dedupeKey: 'address-book-save',
+          })
+        )
       }
       void onLoadPortfolio()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      console.error('[latch:send]', message, e)
-      const errorMessage = await enrichSendFailureDetail({
+      logStructuredError('send-confirm', e, {
+        metadata: {
+          network: activeNetwork,
+          accountMode: activeAccount?.mode ?? null,
+        },
+      })
+      const enrichedErrorMessage = await enrichSendFailureDetail({
         errorMessage: message,
         draft: sendDraft,
         network: activeNetwork,
       })
       setSendResult({
         status: 'failure',
-        errorMessage,
+        errorMessage: formatOperationError(enrichedErrorMessage, 'send'),
         submittedAt: new Date().toISOString(),
       })
       setSendStep('failure')
