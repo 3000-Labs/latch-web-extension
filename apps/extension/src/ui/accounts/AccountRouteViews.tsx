@@ -23,7 +23,7 @@ import { PasskeyCreatedScreen } from '../screens/accounts/PasskeyCreatedScreen'
 import { openOnboardingTab } from '../onboarding/openOnboardingTab'
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   nextPasskeyAccountDisplayName,
@@ -137,7 +137,7 @@ export function AccountRouteViews({
             (begin.data as BackendWebauthnBeginResponse | undefined)?.options,
             displayName
           )
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         } else {
           const begin = await sendToBackground<undefined, BackendWebauthnBeginResponse>({
@@ -147,7 +147,7 @@ export function AccountRouteViews({
           if (cancelled) return
           if (!begin.ok) throw new Error(friendlyError(begin.error))
           const optionsJSON = prepareAuthenticationOptionsForGet(begin.data?.options)
-          assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+          assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
           passkeyPrefetchRef.current = { kind: 'authentication', optionsJSON }
         }
         if (!cancelled) setPasskeyPrefetchReady(true)
@@ -233,7 +233,7 @@ export function AccountRouteViews({
         )
       }
       const optionsJSON = pre.optionsJSON
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
       const reg = (await webauthnCredential('registration', optionsJSON)) as Awaited<
         ReturnType<typeof startRegistration>
       >
@@ -276,7 +276,7 @@ export function AccountRouteViews({
         )
       }
       const optionsJSON = pre.optionsJSON
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
       const assertion = (await webauthnCredential('authentication', optionsJSON)) as Awaited<
         ReturnType<typeof startAuthentication>
       >

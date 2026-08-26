@@ -11,7 +11,7 @@ import type {
 
 import { friendlyError, sendToBackground } from '../lib/backgroundClient'
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   assertRegistrationCeremonyForFinish,
   enrichWebauthnRpIdHashErrorMessage,
   formatWebauthnBrowserError,
@@ -69,7 +69,7 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
         if (!begin.ok) throw new Error(friendlyError(begin.error))
 
         const optionsJSON = prepareRegistrationOptionsForCreate(begin.data?.options, displayName)
-        assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+        assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
         prefetchRef.current = { kind: 'registration', optionsJSON, displayName }
         if (!cancelled) setPrefetchReady(true)
       } catch (e) {
@@ -100,7 +100,7 @@ export function useOnboardingPasskeyRegistration(active: boolean) {
       }
 
       const optionsJSON = pre.optionsJSON
-      assertBeginOptionsRpIdMatchesExtension(optionsJSON)
+      assertBeginOptionsRpIdMatchesCanonicalDomain(optionsJSON)
 
       let reg: Awaited<ReturnType<typeof startRegistration>>
       try {

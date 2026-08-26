@@ -1,5 +1,44 @@
 import type { Network } from '@latch/types'
 
+/** Default shared WebAuthn RP ID (hostname only). Overridable via PLASMO_PUBLIC_WEBAUTHN_RP_ID. */
+export const DEFAULT_WEBAUTHN_RP_ID = 'latch-testing.vercel.app'
+
+/**
+ * Normalize a WebAuthn RP ID / origin-ish string to a bare hostname.
+ * Accepts `latch-testing.vercel.app` or `https://latch-testing.vercel.app/` — never a path or port.
+ */
+export function normalizeWebauthnRpId(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed) return ''
+  try {
+    const withScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`
+    const { hostname } = new URL(withScheme)
+    return hostname.toLowerCase()
+  } catch {
+    return trimmed
+      .replace(/^https?:\/\//i, '')
+      .split('/')[0]!
+      .split(':')[0]!
+      .trim()
+      .toLowerCase()
+  }
+}
+
+/**
+ * Canonical HTTPS-domain WebAuthn RP ID for Latch (extension + web + future native).
+ * Not the Chrome extension id — that is only used as clientDataJSON.origin.
+ */
+export function latchWebauthnRpId(): string {
+  const fromEnv = process.env.PLASMO_PUBLIC_WEBAUTHN_RP_ID as string | undefined
+  const normalized =
+    typeof fromEnv === 'string' && fromEnv.trim() !== ''
+      ? normalizeWebauthnRpId(fromEnv)
+      : DEFAULT_WEBAUTHN_RP_ID
+  return normalized || DEFAULT_WEBAUTHN_RP_ID
+}
+
 /** Plasmo inlines `process.env.PLASMO_PUBLIC_*` at build time. */
 export function webauthnVerifierAddressFromEnv(network: Network = 'testnet'): string | undefined {
   if (network === 'mainnet') {

@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react'
 
 import backIconUrl from 'url:../../../../assets/home/icon-back.svg'
-import filterIconUrl from 'url:../../../../assets/home/icon-filter.svg'
 import searchIconUrl from 'url:../../../../assets/home/icon-search.svg'
 
 import { NewsCarousel } from '../../components/NewsCarousel'
@@ -21,7 +20,15 @@ export function ExploreScreen({ onBack }: { onBack: () => void }) {
   }, [query])
 
   const openDapp = (url: string) => {
-    void chrome.tabs.create({ url })
+    let safeUrl: URL
+    try {
+      safeUrl = new URL(url)
+    } catch {
+      return
+    }
+    // Only ever open https destinations — never javascript:, chrome:, etc.
+    if (safeUrl.protocol !== 'https:') return
+    void chrome.tabs.create({ url: safeUrl.toString() })
   }
 
   return (
@@ -38,23 +45,14 @@ export function ExploreScreen({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="mt-5 flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
-        <div className="flex items-center gap-2">
-          <div className="flex h-[34px] min-w-0 flex-1 items-center justify-between rounded-xl border border-stroke px-3">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search for assets or dApps ..."
-              className="w-full bg-transparent text-xs tracking-[-0.24px] text-fg outline-none placeholder:text-muted"
-            />
-            <img src={searchIconUrl} alt="" className="h-4 w-4 shrink-0" aria-hidden />
-          </div>
-          <button
-            type="button"
-            className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-xl border border-stroke"
-            aria-label="Filter"
-          >
-            <img src={filterIconUrl} alt="" className="h-[22px] w-[22px]" />
-          </button>
+        <div className="flex h-[34px] items-center justify-between rounded-xl border border-stroke px-3">
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search for assets or dApps ..."
+            className="w-full bg-transparent text-xs tracking-[-0.24px] text-fg outline-none placeholder:text-muted"
+          />
+          <img src={searchIconUrl} alt="" className="h-4 w-4 shrink-0" aria-hidden />
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
