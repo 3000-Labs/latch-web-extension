@@ -3,7 +3,10 @@ import { p256 } from '@noble/curves/nist.js'
 import { decodeMultiple } from 'cbor-x'
 import { xdr } from '@stellar/stellar-sdk'
 
+import { latchWebauthnRpId } from '../lib/latchEnv'
 import { base64UrlToBytes, bytesToBase64Url, bytesToHex, concatBytes, hexToBytes } from './utils'
+
+export { latchWebauthnRpId } from '../lib/latchEnv'
 
 /** WebAuthn `user.displayName` for the next passkey registration (1-based, counts existing local passkey accounts). */
 export function nextPasskeyAccountDisplayName(accounts: StoredAccount[]): string {
@@ -226,18 +229,12 @@ export function createLocalAuthenticationOptions(args: {
   } as const
 }
 
-/** Chrome extension id used as WebAuthn `rpId` for smart-account auth (not session login). */
+/**
+ * @deprecated Use {@link latchWebauthnRpId}. Passkeys use the shared HTTPS domain RP ID,
+ * not chrome.runtime.id. Kept as an alias so older call sites resolve during the cutover.
+ */
 export function extensionWebauthnRpId(): string {
-  const extId =
-    typeof chrome !== 'undefined' &&
-    typeof chrome.runtime?.id === 'string' &&
-    chrome.runtime.id.length > 0
-      ? chrome.runtime.id
-      : ''
-  if (!extId) {
-    throw new Error('WebAuthn for transactions requires the Chrome extension context.')
-  }
-  return extId
+  return latchWebauthnRpId()
 }
 
 /**
@@ -302,7 +299,7 @@ export function passkeyAuthenticationOptionsForAuthDigest(args: {
 }) {
   const hex = normalizeAuthDigestHex(args.authDigestHex)
   return createLocalAuthenticationOptions({
-    rpId: args.rpId ?? extensionWebauthnRpId(),
+    rpId: args.rpId ?? latchWebauthnRpId(),
     credentialId: args.credentialId,
     authDigestHex: hex,
   })
@@ -317,7 +314,7 @@ export function passkeyAuthenticationOptionsForV1Challenge(args: {
   const challenge = args.challengeBase64Url.trim()
   if (!challenge) throw new Error('V1 auth challenge missing nonce')
   return {
-    rpId: args.rpId ?? extensionWebauthnRpId(),
+    rpId: args.rpId ?? latchWebauthnRpId(),
     challenge,
     allowCredentials: [
       {
@@ -411,10 +408,6 @@ export function getWebauthnRpIdFromBeginOptions(options: unknown): string | unde
   return undefined
 }
 
-/**
- * Ensures server-issued options match extension WebAuthn (rp.id / rpId === chrome.runtime.id).
- * No-op when not on a chrome-extension page (e.g. unit tests without extension globals).
- */
 /** Restrict authentication begin options to one passkey when the user picked it in the UI. */
 export function narrowAuthenticationOptionsToCredential(
   options: unknown,
@@ -446,35 +439,40 @@ export function narrowAuthenticationOptionsToCredential(
   }
 }
 
-export function assertBeginOptionsRpIdMatchesExtension(options: unknown): void {
+/**
+ * Ensures server-issued options use the shared HTTPS-domain RP ID
+ * (`latchWebauthnRpId()`, e.g. latch-testing.vercel.app), not the Chrome extension id.
+ * No-op when not on a chrome-extension page (e.g. unit tests without extension globals).
+ */
+export function assertBeginOptionsRpIdMatchesCanonicalDomain(options: unknown): void {
   const protocol = typeof window !== 'undefined' ? window.location.protocol : ''
   if (protocol !== 'chrome-extension:') return
 
-  const extId =
-    typeof chrome !== 'undefined' &&
-    typeof chrome.runtime?.id === 'string' &&
-    chrome.runtime.id.length > 0
-      ? chrome.runtime.id
-      : ''
-  if (!extId) return
-
+  const expected = latchWebauthnRpId()
   const rpId = getWebauthnRpIdFromBeginOptions(options)
   if (rpId === undefined) {
     throw new Error(
       [
         'WebAuthn options from the server are missing rp.id (registration) or rpId (authentication).',
-        'The Latch API must return options built for this Chrome extension when chromeExtensionId is sent on begin.',
+        `The Latch API must set rp.id / rpId to the shared domain "${expected}" (WEBAUTHN_RP_ID).`,
+        'chromeExtensionId is only an origin hint (chrome-extension://…), not the RP ID.',
       ].join(' ')
     )
   }
-  if (rpId !== extId) {
+  if (rpId !== expected) {
     throw new Error(
       [
-        `WebAuthn RP mismatch: the server set rp.id/rpId to "${rpId}" but this extension's id is "${extId}".`,
-        'Registration/authentication will fail verification. Fix the API to set rp.id (and verify with expectedRPID) to chrome.runtime.id from chromeExtensionId.',
+        `WebAuthn RP mismatch: the server set rp.id/rpId to "${rpId}" but Latch expects "${expected}".`,
+        'Registration/authentication will fail. Fix the API to always set rp.id to WEBAUTHN_RP_ID',
+        '(not chromeExtensionId). See LATCH_BACKEND_DOMAIN_WEBAUTHN_RPID.md.',
       ].join(' ')
     )
   }
+}
+
+/** @deprecated Use {@link assertBeginOptionsRpIdMatchesCanonicalDomain}. */
+export function assertBeginOptionsRpIdMatchesExtension(options: unknown): void {
+  assertBeginOptionsRpIdMatchesCanonicalDomain(options)
 }
 
 export function formatWebauthnBrowserError(err: unknown): string {
@@ -485,12 +483,13 @@ export function formatWebauthnBrowserError(err: unknown): string {
   const protocol = typeof window !== 'undefined' ? window.location.protocol : ''
 
   if (code === 'ERROR_INVALID_DOMAIN' && protocol === 'chrome-extension:') {
-    const extId =
-      typeof chrome !== 'undefined' && chrome.runtime?.id ? chrome.runtime.id : 'your-extension-id'
+    const rpId = latchWebauthnRpId()
     const parts = [
       'WebAuthn failed in the extension.',
       causeMsg ? `Details: ${causeMsg}` : undefined,
-      `The server must receive chromeExtensionId and set WebAuthn rp.id to "${extId}" (same as chrome.runtime.id).`,
+      `The Latch API must set WebAuthn rp.id to "${rpId}" (shared HTTPS domain).`,
+      `This extension needs host permission for https://${rpId}/* so Chrome can claim that RP ID.`,
+      'chromeExtensionId is only used so the API can allowlist origin chrome-extension://<id>.',
     ].filter(Boolean)
     return parts.join(' ')
   }
@@ -577,6 +576,10 @@ export async function enrichWebauthnRpIdHashErrorMessage(
     )
   }
 
+  const canonical = latchWebauthnRpId()
+  parts.push(`Canonical Latch RP ID: ${JSON.stringify(canonical)}`)
+  parts.push(`SHA-256(canonical RP ID) (hex): ${await sha256HexUtf8(canonical)}`)
+
   const extId =
     typeof chrome !== 'undefined' &&
     typeof chrome.runtime?.id === 'string' &&
@@ -584,8 +587,9 @@ export async function enrichWebauthnRpIdHashErrorMessage(
       ? chrome.runtime.id
       : undefined
   if (extId) {
-    parts.push(`This extension chrome.runtime.id: ${JSON.stringify(extId)}`)
-    parts.push(`SHA-256(chrome.runtime.id) (hex): ${await sha256HexUtf8(extId)}`)
+    parts.push(
+      `This extension origin: chrome-extension://${extId} (not the RP ID; used for expectedOrigin only)`
+    )
   }
 
   return parts.join(' ')

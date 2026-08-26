@@ -3,12 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Encoder } from 'cbor-x'
 import { bytesToBase64Url, bytesToHex, concatBytes } from './utils'
 import {
-  assertBeginOptionsRpIdMatchesExtension,
+  assertBeginOptionsRpIdMatchesCanonicalDomain,
   enrichWebauthnRpIdHashErrorMessage,
   extractRegistrationKeyData,
   formatWebauthnBrowserError,
   getWebauthnCeremonyTypeFromCredential,
   getWebauthnRpIdFromBeginOptions,
+  latchWebauthnRpId,
   nextPasskeyAccountDisplayName,
   nextPasskeyRegistrationDisplayName,
   prepareRegistrationOptionsForCreate,
@@ -23,6 +24,9 @@ import {
   toLowSCompactSignatureP256,
 } from './passkey'
 import { base64UrlToBytes, bytesToBase64Url, hexToBytes } from './utils'
+import { DEFAULT_WEBAUTHN_RP_ID } from '../lib/latchEnv'
+
+const CANONICAL_RP = DEFAULT_WEBAUTHN_RP_ID
 
 function account(mode: StoredAccount['mode'], id: string): StoredAccount {
   return { id, mode, smartAccountAddress: 'SADDR', createdAt: 0 }
@@ -43,6 +47,10 @@ describe('webauthn/passkey', () => {
     )
   })
 
+  it('latchWebauthnRpId defaults to the shared HTTPS domain', () => {
+    expect(latchWebauthnRpId()).toBe(CANONICAL_RP)
+  })
+
   it('getWebauthnRpIdFromBeginOptions reads rp.id or rpId from object or JSON string', () => {
     expect(
       getWebauthnRpIdFromBeginOptions({ rp: { id: 'ext-1', name: 'x' }, challenge: 'c' })
@@ -56,25 +64,27 @@ describe('webauthn/passkey', () => {
     expect(getWebauthnRpIdFromBeginOptions(null)).toBeUndefined()
   })
 
-  it('assertBeginOptionsRpIdMatchesExtension throws on chrome-extension when rp id mismatches', () => {
+  it('assertBeginOptionsRpIdMatchesCanonicalDomain throws on chrome-extension when rp id mismatches', () => {
     vi.stubGlobal('chrome', { runtime: { id: 'expected-ext' } })
     vi.stubGlobal('window', { location: { protocol: 'chrome-extension:' } })
 
     expect(() =>
-      assertBeginOptionsRpIdMatchesExtension({ rp: { id: 'wrong', name: 'n' } })
+      assertBeginOptionsRpIdMatchesCanonicalDomain({ rp: { id: 'wrong', name: 'n' } })
     ).toThrow(/RP mismatch/)
 
     expect(() =>
-      assertBeginOptionsRpIdMatchesExtension({ rp: { id: 'expected-ext', name: 'n' } })
+      assertBeginOptionsRpIdMatchesCanonicalDomain({
+        rp: { id: CANONICAL_RP, name: 'n' },
+      })
     ).not.toThrow()
   })
 
-  it('assertBeginOptionsRpIdMatchesExtension is a no-op when not on chrome-extension protocol', () => {
+  it('assertBeginOptionsRpIdMatchesCanonicalDomain is a no-op when not on chrome-extension protocol', () => {
     vi.stubGlobal('chrome', { runtime: { id: 'expected-ext' } })
     vi.stubGlobal('window', { location: { protocol: 'https:' } })
 
     expect(() =>
-      assertBeginOptionsRpIdMatchesExtension({ rp: { id: 'wrong', name: 'n' } })
+      assertBeginOptionsRpIdMatchesCanonicalDomain({ rp: { id: 'wrong', name: 'n' } })
     ).not.toThrow()
   })
 
@@ -84,13 +94,24 @@ describe('webauthn/passkey', () => {
       location: { protocol: 'chrome-extension:' },
     })
 
-    const err = new Error('ghpalnblflhpeggnlilhhmohbdinlfne is an invalid domain')
+    const err = new Error(`${CANONICAL_RP} is an invalid domain`)
     ;(err as { code?: string }).code = 'ERROR_INVALID_DOMAIN'
     err.cause = new Error('SecurityError: The relying party ID is not valid.')
 
     const msg = formatWebauthnBrowserError(err)
     expect(msg).toContain('Details:')
-    expect(msg).toContain('rp.id to "ghpalnblflhpeggnlilhhmohbdinlfne"')
+    expect(msg).toContain(`rp.id to "${CANONICAL_RP}"`)
+    expect(msg).toContain(`https://${CANONICAL_RP}/*`)
+  })
+
+  it('passkeyAuthenticationOptionsForAuthDigest defaults rpId to the shared domain', () => {
+    const digest = '21e5a6e8c3d0940bdd4f01ba07ce73bd5898c8116911d444ed7e4a4b631ee975'
+    const opts = passkeyAuthenticationOptionsForAuthDigest({
+      credentialId: 'cred-id',
+      authDigestHex: digest,
+    })
+    expect(opts.rpId).toBe(CANONICAL_RP)
+    expect(opts.challenge).toBe(bytesToBase64Url(hexToBytes(digest)))
   })
 
   it('passkeyAuthenticationOptionsForAuthDigest uses auth digest as WebAuthn challenge', () => {
@@ -98,9 +119,9 @@ describe('webauthn/passkey', () => {
     const opts = passkeyAuthenticationOptionsForAuthDigest({
       credentialId: 'cred-id',
       authDigestHex: digest,
-      rpId: 'ghpalnblflhpeggnlilhhmohbdinlfne',
+      rpId: CANONICAL_RP,
     })
-    expect(opts.rpId).toBe('ghpalnblflhpeggnlilhhmohbdinlfne')
+    expect(opts.rpId).toBe(CANONICAL_RP)
     expect(opts.challenge).toBe(bytesToBase64Url(hexToBytes(digest)))
     expect(base64UrlToBytes(opts.challenge)).toEqual(hexToBytes(digest))
     // No transports filter so synced/hybrid (Google Password Manager) passkeys
@@ -114,10 +135,10 @@ describe('webauthn/passkey', () => {
     const opts = passkeyAuthenticationOptionsForV1Challenge({
       credentialId: 'cred-id',
       challengeBase64Url: nonce,
-      rpId: 'ghpalnblflhpeggnlilhhmohbdinlfne',
+      rpId: CANONICAL_RP,
     })
     expect(opts.challenge).toBe(nonce)
-    expect(opts.rpId).toBe('ghpalnblflhpeggnlilhhmohbdinlfne')
+    expect(opts.rpId).toBe(CANONICAL_RP)
   })
 
   it('assertPasskeyAssertionMatchesV1Challenge accepts matching nonce', () => {
