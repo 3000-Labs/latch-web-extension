@@ -52,6 +52,8 @@ import { SwapRouteViews, type SwapOverlayFlags } from './swap/SwapRouteViews'
 import { SendRouteViews } from './send/SendRouteViews'
 import { AccountRouteViews } from './accounts/AccountRouteViews'
 import { DappRouteViews } from './dapp/DappRouteViews'
+import { SessionKeyCreateFlow } from './sessionKeys/SessionKeyCreateFlow'
+import { SessionKeyRevokeFlow } from './sessionKeys/SessionKeyRevokeFlow'
 
 export function LatchRoot({ surface }: { surface: Surface }) {
   useTheme()
@@ -527,6 +529,14 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                         pendingMultisigProposalCount={
                           activeAccount?.mode === 'multisig' ? multisigPendingCount : 0
                         }
+                        onCreateSession={() => {
+                          setPage('main')
+                          setRoute('createSessionKey')
+                        }}
+                        onManageSessions={() => {
+                          setPage('main')
+                          setRoute('revokeSessionKey')
+                        }}
                         networkLabel={networkLabel}
                         activeNetwork={activeNetwork}
                         onChangeNetwork={async (network) => {
@@ -616,6 +626,34 @@ export function LatchRoot({ surface }: { surface: Surface }) {
                   setRoute(resolveMainRoute({ needsMnemonicUnlock, preferred: 'home' }))
                 }}
               />
+            ) : null}
+
+            {!loading && route === 'createSessionKey' && activeAccount?.id ? (
+              <div
+                className={[
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <SessionKeyCreateFlow
+                  accountId={activeAccount.id}
+                  onBack={() => setRoute('home')}
+                />
+              </div>
+            ) : null}
+
+            {!loading && route === 'revokeSessionKey' && activeAccount?.id ? (
+              <div
+                className={[
+                  `${routeContentMarginClass} flex min-h-0 flex-1 flex-col animate-screenIn`,
+                  flowHeightClass,
+                ].join(' ')}
+              >
+                <SessionKeyRevokeFlow
+                  accountId={activeAccount.id}
+                  onBack={() => setRoute('home')}
+                />
+              </div>
             ) : null}
 
             {!loading && route === 'history' ? (

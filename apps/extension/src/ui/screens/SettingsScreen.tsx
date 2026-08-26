@@ -83,6 +83,8 @@ export function SettingsScreen({
   onChangeNetwork: (network: Network) => Promise<void>
   onClose: () => void
   onLogout: () => void
+  onManageSessions?: () => void
+  onCreateSession?: () => void
 }) {
   const [view, setView] = useState<SettingsView>('menu')
 
@@ -241,6 +243,16 @@ export function SettingsScreen({
               icon={<img src={permissionsIconUrl} alt="" className={rowIconClass} />}
               label="Permissions"
               onClick={() => setView('permissions')}
+            />
+            <SettingItem
+              icon={<img src={signersIconUrl} alt="" className={rowIconClass} />}
+              label="Create Session Key"
+              onClick={onCreateSession}
+            />
+            <SettingItem
+              icon={<img src={permissionsIconUrl} alt="" className={rowIconClass} />}
+              label="Manage Sessions"
+              onClick={onManageSessions}
             />
           </SettingsSection>
 

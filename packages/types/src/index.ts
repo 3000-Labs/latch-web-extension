@@ -796,6 +796,9 @@ export type MessageType =
   | 'COSIGN_PREDICT_ACCOUNT'
   | 'COSIGN_PREPARE_SIGN'
   | 'COSIGN_ATTACH_WEBAUTHN_AUTH'
+  | 'GENERATE_SESSION_KEY'
+  | 'GET_SESSION_KEYS'
+  | 'REVOKE_SESSION_KEY'
 
 export type SetupState = 'new' | 'onboarding_done' | 'has_account'
 
@@ -962,6 +965,13 @@ export type BackgroundRequestPayloadByType = {
     contextRuleId: number
     authEntryXdr: string
   }
+  GENERATE_SESSION_KEY: {
+    accountId: string
+  }
+  GET_SESSION_KEYS: undefined
+  REVOKE_SESSION_KEY: {
+    accountId: string
+  }
 } & Record<string, unknown>
 
 export type BackgroundResponseDataByType = {
@@ -1086,6 +1096,19 @@ export type BackgroundResponseDataByType = {
   COSIGN_PREDICT_ACCOUNT: import('./multisig').MultisigPredictResponse
   COSIGN_PREPARE_SIGN: import('./index').PrepareSignResponse
   COSIGN_ATTACH_WEBAUTHN_AUTH: { signedAuthEntryBase64: string }
+  GENERATE_SESSION_KEY: {
+    accountId: string
+    rawPublicKey: Uint8Array
+    createdAt: number
+  }
+  GET_SESSION_KEYS: {
+    keys: Array<{
+      accountId: string
+      rawPublicKey: Uint8Array
+      createdAt: number
+    }>
+  }
+  REVOKE_SESSION_KEY: undefined
 } & Record<string, unknown>
 
 export interface CreateMultisigAccountResponse {

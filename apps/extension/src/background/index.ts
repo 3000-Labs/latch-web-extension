@@ -25,6 +25,7 @@ import { tryHandleMultisigMessage } from './multisig/handlers'
 import { tryHandleNetworkMessage } from './network/handlers'
 import { tryHandleOnboardingMessage } from './onboarding/handlers'
 import { tryHandleReadsMessage } from './reads/handlers'
+import { tryHandleSessionKeyMessage } from './sessionKeys/handlers'
 import { tryHandleSwapMessage } from './swap/handlers'
 import { tryHandleTxMessage } from './tx/handlers'
 import { tryHandleV1AuthMessage } from './v1Auth/handlers'
@@ -74,6 +75,9 @@ chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, se
       return
     }
     if (await tryHandleOnboardingMessage(message, sendResponse, ok)) {
+      return
+    }
+    if (await tryHandleSessionKeyMessage(message, sendResponse, ok)) {
       return
     }
 

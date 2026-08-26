@@ -36,6 +36,8 @@ export type Route =
   | 'dappApproval'
   | 'migration'
   | 'migrationSuccess'
+  | 'createSessionKey'
+  | 'revokeSessionKey'
 
 export type SignerId = 'freighter' | 'phantom' | 'passkey'
 
@@ -52,6 +54,7 @@ export function routeKeepsUiMountedForWebauthn(route: Route): boolean {
     route === 'addMultisigOwners' ||
     route === 'joinMultisig' ||
     route === 'multisigProposalDetail' ||
+    route === 'createSessionKey' ||
     route === 'fund'
   )
 }
