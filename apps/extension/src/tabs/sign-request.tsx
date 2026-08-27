@@ -19,7 +19,6 @@ import {
   signWithoutSubmitBuiltTx,
 } from '../ui/lib/signBuiltTx'
 import { friendlyError, sendToBackground } from '../ui/lib/backgroundClient'
-import { debugAgentLog } from '../ui/lib/debugAgentLog'
 
 type Phase = 'loading' | 'review' | 'redirecting' | 'error'
 
@@ -95,21 +94,6 @@ export default function SignRequestTab() {
     setBusy(true)
     setError(null)
     try {
-      // #region agent log
-      debugAgentLog({
-        hypothesisId: 'H3',
-        location: 'sign-request.tsx:handleConfirm',
-        message: 'sign-request tab confirm',
-        data: {
-          accountId: activeAccount.id,
-          accountMode: activeAccount.mode,
-          activeSmartSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
-          reqSmartSuffix: (session.signRequest.smartAccountAddress ?? '').slice(-8),
-          passkeyCredSuffix: (activeAccount.passkeyCredentialId ?? '').slice(-12),
-          hasPasskeyCred: Boolean(activeAccount.passkeyCredentialId?.trim()),
-        },
-      })
-      // #endregion
       const submit = session.signRequest.submit !== false
       if (submit) {
         const submitData = await signAndSubmitBuiltTx({

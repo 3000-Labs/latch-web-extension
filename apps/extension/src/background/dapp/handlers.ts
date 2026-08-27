@@ -10,7 +10,6 @@ import type {
 } from '@latch/types'
 
 import { BackendError } from '../api/client'
-import { debugAgentLog } from '../debugAgentLog'
 import { buildSignRequestSearchParams } from '../externalSign/parseSignRequest'
 import { runExternalSignFlow } from '../externalSign/orchestrator'
 import type { OkFn } from '../messageResponse'
@@ -183,28 +182,6 @@ export async function tryHandleDappMessage(
           code: 'not_connected',
         })
       }
-
-      // #region agent log
-      {
-        const { accounts, activeAccountId } = await getAccounts()
-        const active = accounts.find((a) => a.id === activeAccountId) ?? accounts[0]
-        debugAgentLog({
-          hypothesisId: 'H3',
-          location: 'background/index.ts:DAPP_SIGN_TRANSACTION',
-          message: 'dapp sign request vs active account',
-          data: {
-            origin,
-            accountToSignSuffix: (req.request.accountToSign ?? '').slice(-8),
-            activeSmartSuffix: (active?.smartAccountAddress ?? '').slice(-8),
-            accountsMatch: req.request.accountToSign === active?.smartAccountAddress,
-            activeMode: active?.mode ?? null,
-            passkeyCredSuffix: (active?.passkeyCredentialId ?? '').slice(-12),
-            hasPasskeyCred: Boolean(active?.passkeyCredentialId?.trim()),
-            submit: req.request.submit,
-          },
-        })
-      }
-      // #endregion
 
       const flowResult = await runExternalSignFlow({
         source: 'provider',

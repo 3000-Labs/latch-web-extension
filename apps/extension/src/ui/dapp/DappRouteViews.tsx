@@ -14,7 +14,6 @@ import {
   signAndSubmitBuiltTx,
   signWithoutSubmitBuiltTx,
 } from '../lib/signBuiltTx'
-import { debugAgentLog } from '../lib/debugAgentLog'
 import { sendToBackground } from '../lib/backgroundClient'
 import { openOnboardingTab } from '../onboarding/openOnboardingTab'
 import type { Route, Surface } from '../routing/routes'
@@ -172,27 +171,6 @@ export function DappRouteViews({
               setDappBusy(true)
               setDappError(null)
               try {
-                // #region agent log
-                debugAgentLog({
-                  hypothesisId: 'H3-H5',
-                  location: 'LatchRoot.tsx:dappApprovalConfirm',
-                  message: 'dapp approval confirm account vs request',
-                  data: {
-                    surface,
-                    accountId: activeAccount.id,
-                    accountMode: activeAccount.mode,
-                    activeSmartSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
-                    reqSmartSuffix: (req.signRequest?.smartAccountAddress ?? '').slice(-8),
-                    accountsMatch:
-                      activeAccount.smartAccountAddress === req.signRequest?.smartAccountAddress,
-                    passkeyCredSuffix: (activeAccount.passkeyCredentialId ?? '').slice(-12),
-                    hasPasskeyCred: Boolean(activeAccount.passkeyCredentialId?.trim()),
-                    hasKeyData: Boolean(activeAccount.passkeyKeyDataHex?.trim()),
-                    submit: req.signRequest?.submit,
-                    origin: req.origin,
-                  },
-                })
-                // #endregion
                 if (req.signRequest?.submit === false) {
                   const { signedTxXdr, signedAuthEntry } = await signWithoutSubmitBuiltTx({
                     build: req.prepared!,
