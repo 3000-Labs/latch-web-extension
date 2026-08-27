@@ -17,7 +17,13 @@ export function RecommendedDappCard({
     >
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-[#302813] p-1">
-          <img src={dapp.iconUrl} alt="" className="size-6 object-contain" />
+          {dapp.iconUrl ? (
+            <img src={dapp.iconUrl} alt="" className="size-6 object-contain" />
+          ) : (
+            <span className="text-sm font-bold leading-none text-primary">
+              {dapp.name.charAt(0).toUpperCase()}
+            </span>
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-base font-semibold leading-[1.31] tracking-[-0.16px] text-fg">
