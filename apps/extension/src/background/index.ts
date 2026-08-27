@@ -18,7 +18,6 @@ import { tryHandleAccountsMessage } from './accounts/handlers'
 import { initDappApprovalListeners } from './dapp/approvalSession'
 import { tryHandleDappMessage } from './dapp/handlers'
 import { tryHandleDepositMessage } from './deposit/handlers'
-import { postDebugPayload } from './debugAgentLog'
 import { ok, toSerializableError } from './messageResponse'
 import { tryHandleMigrationMessage } from './migration/handlers'
 import { tryHandleMultisigMessage } from './multisig/handlers'
@@ -32,14 +31,6 @@ import { tryHandleV1AuthMessage } from './v1Auth/handlers'
 initDappApprovalListeners()
 
 chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, sendResponse) => {
-  // #region agent log
-  const maybeDebug = rawMessage as { type?: string; payload?: Record<string, unknown> }
-  if (maybeDebug?.type === 'DEBUG_AGENT_LOG' && maybeDebug.payload) {
-    postDebugPayload(maybeDebug.payload as Parameters<typeof postDebugPayload>[0])
-    sendResponse({ ok: true })
-    return true
-  }
-  // #endregion
   const message = rawMessage as BackgroundMessage
 
   ;(async () => {
