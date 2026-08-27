@@ -103,7 +103,8 @@ export function AccountRouteViews({
   >
   onPersistSetupHasAccount: (publicKey: string) => Promise<void>
 }) {
-  // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
+  // Product direction: passkey-only for now. Re-enable when Phantom/Freighter launch is scheduled.
+  // Tracked: https://github.com/3K1-Labs/latch-web-extension/issues/27
   const ENABLE_OTHER_SIGNERS = false
 
   const [chooseSignerForExistingWallet, setChooseSignerForExistingWallet] = useState(false)
