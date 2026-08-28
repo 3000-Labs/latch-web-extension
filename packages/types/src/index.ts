@@ -4,6 +4,80 @@
  * No runtime code — types only.
  */
 
+
+// ---------------------------------------------------------------------------
+// SEP-0043 types
+// https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0043.md
+// ---------------------------------------------------------------------------
+
+/**
+ * Options accepted by the SEP-0043 `signTransaction` method.
+ * All fields are optional; Latch maps them onto SignTransactionRequest.
+ */
+export interface Sep0043SignTransactionOptions {
+  /** Stellar network passphrase — mapped to Latch `network` (testnet | mainnet). */
+  networkPassphrase?: string
+  /**
+   * Hint to the wallet: which account should sign.
+   * Mapped onto `accountToSign`; should be a smart-account C… or G… address.
+   */
+  address?: string
+  /** When true the wallet broadcasts the signed tx itself; same as Latch `submit`. */
+  submit?: boolean
+  /**
+   * Custom submit URL (SEP-0043 extension).
+   * Not supported in Latch v1 — documented for completeness; ignored by the adapter.
+   */
+  submitUrl?: string
+}
+
+/** Return value of SEP-0043 `getAddress()`. */
+export interface Sep0043GetAddressResponse {
+  /** The active smart-account address — a Soroban contract address (C…). */
+  address: string
+}
+
+/** Return value of SEP-0043 `signTransaction(xdr, opts?)`. */
+export interface Sep0043SignTransactionResponse {
+  /** Base64-encoded signed transaction XDR (always present; may be submitted). */
+  signedTxXdr: string
+  /** The address that signed the transaction (smart-account C… address). */
+  signerAddress: string
+}
+
+/** Return value of SEP-0043 `getNetwork()` when called on the SEP adapter. */
+export interface Sep0043GetNetworkResponse {
+  /** Human-readable network name, e.g. `"Test SDF Network ; September 2015"`. */
+  network: string
+  /** Stellar network passphrase. */
+  networkPassphrase: string
+}
+
+/**
+ * SEP-0043 error codes.
+ * See https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0043.md#errors
+ */
+export const SEP0043_ERROR_CODES = {
+  /** Internal wallet error (generic / unexpected). */
+  INTERNAL_ERROR: -1,
+  /** External / network error (Horizon, RPC, Latch API failure). */
+  EXTERNAL_ERROR: -2,
+  /** Invalid request (bad XDR, wrong network, account mismatch). */
+  INVALID_REQUEST: -3,
+  /** User rejected the request in the wallet UI. */
+  USER_REJECTED: -4,
+} as const
+
+export type Sep0043ErrorCode = (typeof SEP0043_ERROR_CODES)[keyof typeof SEP0043_ERROR_CODES]
+
+/** Error shape thrown by the SEP-0043 adapter methods. */
+export interface Sep0043Error {
+  message: string
+  code: Sep0043ErrorCode
+  /** Optional extensions (reserved for future use). */
+  ext?: string[]
+}
+
 export type Network = 'testnet' | 'mainnet'
 
 export interface SignTransactionRequest {
