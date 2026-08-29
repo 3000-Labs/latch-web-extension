@@ -9,7 +9,12 @@
  * that hides all internal wallet complexity from dapp developers.
  */
 
-import type { Network, SignTransactionRequest, SignTransactionResponse } from '@latch/types'
+import type {
+  Network,
+  OpenSignRequestParams,
+  SignTransactionRequest,
+  SignTransactionResponse,
+} from '@latch/types'
 
 export type LatchAccountChangedPayload = {
   publicKey: string
@@ -28,6 +33,9 @@ export interface LatchSDK {
   /** Request the user to sign an XDR-encoded transaction */
   signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
 
+  /** Open the extension's review flow for an externally prepared signing request */
+  openSignRequest(params: OpenSignRequestParams): Promise<void>
+
   /** Returns the active network */
   getNetwork(): Promise<Network>
 
@@ -43,6 +51,7 @@ declare global {
       isConnected(): Promise<boolean>
       getPublicKey(): Promise<string>
       signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+      openSignRequest(params: OpenSignRequestParams): Promise<void>
       getNetwork(): Promise<Network>
       on?(
         event: LatchProviderEventName,
@@ -73,6 +82,9 @@ export function getLatchSDK(): LatchSDK {
     },
     async signTransaction(request: SignTransactionRequest) {
       return await requireLatch().signTransaction(request)
+    },
+    async openSignRequest(params: OpenSignRequestParams) {
+      return await requireLatch().openSignRequest(params)
     },
     async getNetwork() {
       return await requireLatch().getNetwork()
