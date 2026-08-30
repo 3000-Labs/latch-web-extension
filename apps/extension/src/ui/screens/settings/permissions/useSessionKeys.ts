@@ -1,64 +1,96 @@
 import { useCallback, useEffect, useState } from 'react'
 
 import type { SessionKeyPermission } from './types'
+import { sendToBackground } from '../../../../lib/backgroundClient'
 
-const STORAGE_KEY = 'latch.sessionKeys'
-
-function isSessionKeyPermission(v: unknown): v is SessionKeyPermission {
-  if (typeof v !== 'object' || v == null) return false
-  const o = v as SessionKeyPermission
-  return (
-    typeof o.id === 'string' &&
-    typeof o.name === 'string' &&
-    typeof o.duration === 'string' &&
-    typeof o.spendingLimitAmount === 'string' &&
-    o.spendingLimitCurrency === 'USDC' &&
-    Array.isArray(o.allowed) &&
-    o.allowed.every((x) => typeof x === 'string')
-  )
-}
-
-export function useSessionKeys() {
+export function useSessionKeys(accountId: string) {
   const [sessions, setSessions] = useState<SessionKeyPermission[]>([])
   const [loaded, setLoaded] = useState(false)
 
   const reload = useCallback(async () => {
-    const res = await chrome.storage.local.get([STORAGE_KEY])
-    const raw = res[STORAGE_KEY]
-    if (Array.isArray(raw)) {
-      setSessions(raw.filter(isSessionKeyPermission))
+    if (!accountId) return
+    const res = await sendToBackground({ type: 'GET_SESSION_KEYS', payload: { accountId } })
+    if (res.ok && res.data?.keys) {
+      const keys = res.data.keys.map((k: any) => ({
+        id: k.sessionId,
+        name: k.name,
+        duration: k.duration,
+        spendingLimitAmount: k.spendingLimitAmount,
+        spendingLimitCurrency: k.spendingLimitCurrency,
+        allowed: k.allowed,
+      }))
+      setSessions(keys)
     } else {
       setSessions([])
     }
     setLoaded(true)
-  }, [])
+  }, [accountId])
 
   useEffect(() => {
     let cancelled = false
-    void chrome.storage.local.get([STORAGE_KEY]).then((res) => {
+    if (!accountId) return
+    void sendToBackground({ type: 'GET_SESSION_KEYS', payload: { accountId } }).then((res: any) => {
       if (cancelled) return
-      const raw = res[STORAGE_KEY]
-      if (Array.isArray(raw)) setSessions(raw.filter(isSessionKeyPermission))
+      if (res.ok && res.data?.keys) {
+        const keys = res.data.keys.map((k: any) => ({
+          id: k.sessionId,
+          name: k.name,
+          duration: k.duration,
+          spendingLimitAmount: k.spendingLimitAmount,
+          spendingLimitCurrency: k.spendingLimitCurrency,
+          allowed: k.allowed,
+        }))
+        setSessions(keys)
+      } else {
+        setSessions([])
+      }
       setLoaded(true)
     })
     return () => {
       cancelled = true
     }
-  }, [])
-
-  const persist = useCallback(async (next: SessionKeyPermission[]) => {
-    setSessions(next)
-    await chrome.storage.local.set({ [STORAGE_KEY]: next })
-  }, [])
+  }, [accountId])
 
   const addSession = useCallback(
     async (draft: Omit<SessionKeyPermission, 'id'>) => {
-      const next: SessionKeyPermission = { ...draft, id: crypto.randomUUID() }
-      await persist([next, ...sessions])
+      if (!accountId) throw new Error('No account ID provided')
+      
+      const res = await sendToBackground({
+        type: 'GENERATE_SESSION_KEY',
+        payload: {
+          accountId,
+          name: draft.name,
+          duration: draft.duration,
+          spendingLimitAmount: draft.spendingLimitAmount,
+          spendingLimitCurrency: draft.spendingLimitCurrency,
+          allowed: draft.allowed,
+        },
+      })
+      
+      if (!res.ok || !res.data) {
+        throw new Error('Failed to generate session key')
+      }
+      
+      const next: SessionKeyPermission = { ...draft, id: res.data.sessionId }
+      setSessions((prev: any) => [next, ...prev])
       return next
     },
-    [persist, sessions]
+    [accountId]
   )
 
-  return { sessions, loaded, reload, addSession }
+  const removeSession = useCallback(
+    async (sessionId: string) => {
+      if (!accountId) return
+      const res = await sendToBackground({
+        type: 'REVOKE_SESSION_KEY',
+        payload: { sessionId },
+      })
+      if (res.ok) {
+        setSessions((prev: any) => prev.filter((s: any) => s.id !== sessionId))
+      }
+    },
+    [accountId]
+  )
+
+  return { sessions, loaded, reload, addSession, removeSession }
 }

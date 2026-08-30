@@ -11,9 +11,9 @@ import { useSessionKeys } from './permissions/useSessionKeys'
 
 type PermissionsView = 'list' | 'createSessionKey' | 'setLimits' | 'review' | 'success' | 'failure'
 
-export function PermissionsFlow({ onBackToSettings }: { onBackToSettings: () => void }) {
+export function PermissionsFlow({ accountId, onBackToSettings }: { accountId: string; onBackToSettings: () => void }) {
   const [view, setView] = useState<PermissionsView>('list')
-  const { sessions, addSession } = useSessionKeys()
+  const { sessions, addSession } = useSessionKeys(accountId)
   const [draft, setDraft] = useState<SessionKeyDraft | null>(null)
 
   const safeDraft = useMemo<SessionKeyDraft>(() => {

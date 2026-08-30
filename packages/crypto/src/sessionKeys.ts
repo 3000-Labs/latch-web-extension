@@ -7,15 +7,18 @@
 
 const DB_NAME = 'latch_session_keys'
 const STORE_NAME = 'keys'
+const DB_VERSION = 2
 
 function getDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1)
+    const request = indexedDB.open(DB_NAME, DB_VERSION)
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'accountId' })
+      if (db.objectStoreNames.contains(STORE_NAME)) {
+        db.deleteObjectStore(STORE_NAME)
       }
+      const store = db.createObjectStore(STORE_NAME, { keyPath: 'sessionId' })
+      store.createIndex('accountId', 'accountId', { unique: false })
     }
     request.onsuccess = (event) => resolve((event.target as IDBOpenDBRequest).result)
     request.onerror = (event) => reject((event.target as IDBOpenDBRequest).error)
@@ -23,7 +26,13 @@ function getDB(): Promise<IDBDatabase> {
 }
 
 export interface SessionKeyData {
+  sessionId: string
   accountId: string
+  name: string
+  duration: string
+  spendingLimitAmount: string
+  spendingLimitCurrency: string
+  allowed: string[]
   privateKey: CryptoKey
   publicKey: CryptoKey
   rawPublicKey: Uint8Array
@@ -34,7 +43,14 @@ export interface SessionKeyData {
  * Generates an ephemeral P-256 (ES256) key pair and stores it in IndexedDB.
  * The private key is non-extractable.
  */
-export async function generateAndStoreSessionKey(accountId: string): Promise<SessionKeyData> {
+export async function generateAndStoreSessionKey(
+  accountId: string,
+  name: string,
+  duration: string,
+  spendingLimitAmount: string,
+  spendingLimitCurrency: string,
+  allowed: string[]
+): Promise<SessionKeyData> {
   const keyPair = await crypto.subtle.generateKey(
     {
       name: 'ECDSA',
@@ -46,9 +62,16 @@ export async function generateAndStoreSessionKey(accountId: string): Promise<Ses
 
   const rawPublicKeyBuf = await crypto.subtle.exportKey('raw', keyPair.publicKey)
   const rawPublicKey = new Uint8Array(rawPublicKeyBuf)
+  const sessionId = crypto.randomUUID()
 
   const data: SessionKeyData = {
+    sessionId,
     accountId,
+    name,
+    duration,
+    spendingLimitAmount,
+    spendingLimitCurrency,
+    allowed,
     privateKey: keyPair.privateKey,
     publicKey: keyPair.publicKey,
     rawPublicKey,
@@ -66,14 +89,14 @@ export async function generateAndStoreSessionKey(accountId: string): Promise<Ses
 }
 
 /**
- * Retrieves the stored session key for an account.
+ * Retrieves a specific stored session key.
  */
-export async function getSessionKey(accountId: string): Promise<SessionKeyData | null> {
+export async function getSessionKey(sessionId: string): Promise<SessionKeyData | null> {
   const db = await getDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly')
     const store = tx.objectStore(STORE_NAME)
-    const request = store.get(accountId)
+    const request = store.get(sessionId)
     request.onsuccess = (e) => {
       resolve((e.target as IDBRequest).result || null)
     }
@@ -82,26 +105,43 @@ export async function getSessionKey(accountId: string): Promise<SessionKeyData |
 }
 
 /**
- * Revokes (deletes) the stored session key for an account.
+ * Lists all stored session keys for an account.
  */
-export async function revokeSessionKey(accountId: string): Promise<void> {
+export async function listSessionKeys(accountId: string): Promise<SessionKeyData[]> {
+  const db = await getDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly')
+    const store = tx.objectStore(STORE_NAME)
+    const index = store.index('accountId')
+    const request = index.getAll(accountId)
+    request.onsuccess = (e) => {
+      resolve((e.target as IDBRequest).result || [])
+    }
+    request.onerror = (e) => reject((e.target as IDBRequest).error)
+  })
+}
+
+/**
+ * Revokes (deletes) a specific stored session key.
+ */
+export async function revokeSessionKey(sessionId: string): Promise<void> {
   const db = await getDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite')
     const store = tx.objectStore(STORE_NAME)
-    const request = store.delete(accountId)
+    const request = store.delete(sessionId)
     request.onsuccess = () => resolve()
     request.onerror = (e) => reject((e.target as IDBRequest).error)
   })
 }
 
 /**
- * Signs a payload using the stored session key.
+ * Signs a payload using a specific stored session key.
  */
-export async function signWithSessionKey(accountId: string, payload: Uint8Array): Promise<Uint8Array> {
-  const data = await getSessionKey(accountId)
+export async function signWithSessionKey(sessionId: string, payload: Uint8Array): Promise<Uint8Array> {
+  const data = await getSessionKey(sessionId)
   if (!data) {
-    throw new Error('No session key found for account')
+    throw new Error('No session key found')
   }
 
   const signature = await crypto.subtle.sign(

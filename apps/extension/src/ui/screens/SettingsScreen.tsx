@@ -83,8 +83,6 @@ export function SettingsScreen({
   onChangeNetwork: (network: Network) => Promise<void>
   onClose: () => void
   onLogout: () => void
-  onManageSessions?: () => void
-  onCreateSession?: () => void
 }) {
   const [view, setView] = useState<SettingsView>('menu')
 
@@ -117,7 +115,7 @@ export function SettingsScreen({
   if (view === 'permissions') {
     return (
       <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
-        <PermissionsFlow onBackToSettings={() => setView('menu')} />
+        <PermissionsFlow accountId={activeAccountId ?? ''} onBackToSettings={() => setView('menu')} />
       </div>
     )
   }
@@ -243,16 +241,6 @@ export function SettingsScreen({
               icon={<img src={permissionsIconUrl} alt="" className={rowIconClass} />}
               label="Permissions"
               onClick={() => setView('permissions')}
-            />
-            <SettingItem
-              icon={<img src={signersIconUrl} alt="" className={rowIconClass} />}
-              label="Create Session Key"
-              onClick={onCreateSession}
-            />
-            <SettingItem
-              icon={<img src={permissionsIconUrl} alt="" className={rowIconClass} />}
-              label="Manage Sessions"
-              onClick={onManageSessions}
             />
           </SettingsSection>
 

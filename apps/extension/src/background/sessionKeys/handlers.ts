@@ -1,6 +1,10 @@
 import type { BackgroundMessage } from '@latch/types'
-import { generateAndStoreSessionKey, getSessionKey, revokeSessionKey } from '@latch/crypto'
+import { generateAndStoreSessionKey, listSessionKeys, revokeSessionKey } from '@latch/crypto'
 import type { OkFn } from '../messageResponse'
+
+function toHex(buffer: Uint8Array): string {
+  return Array.prototype.map.call(buffer, (x: number) => ('00' + x.toString(16)).slice(-2)).join('')
+}
 
 export async function tryHandleSessionKeyMessage(
   message: BackgroundMessage,
@@ -9,12 +13,29 @@ export async function tryHandleSessionKeyMessage(
 ): Promise<boolean> {
   switch (message.type) {
     case 'GENERATE_SESSION_KEY': {
-      const req = message.payload as { accountId: string }
-      const keyData = await generateAndStoreSessionKey(req.accountId)
+      const req = message.payload as {
+        accountId: string
+        name: string
+        duration: string
+        spendingLimitAmount: string
+        spendingLimitCurrency: string
+        allowed: string[]
+      }
+      
+      const keyData = await generateAndStoreSessionKey(
+        req.accountId,
+        req.name,
+        req.duration,
+        req.spendingLimitAmount,
+        req.spendingLimitCurrency,
+        req.allowed
+      )
+
       sendResponse(
         ok({
+          sessionId: keyData.sessionId,
           accountId: keyData.accountId,
-          rawPublicKey: keyData.rawPublicKey,
+          rawPublicKeyHex: toHex(keyData.rawPublicKey),
           createdAt: keyData.createdAt,
         })
       )
@@ -22,18 +43,30 @@ export async function tryHandleSessionKeyMessage(
     }
 
     case 'GET_SESSION_KEYS': {
-      // In a real app we might want to list all keys in DB, 
-      // but indexedDB API currently only supports one by one or we'd need a cursor.
-      // For now we'll just mock it or assume the UI asks for a specific account.
-      // We didn't define a payload for GET_SESSION_KEYS, maybe we should fetch all?
-      // For simplicity let's just return empty array until we need a full list.
-      sendResponse(ok({ keys: [] }))
+      const req = message.payload as { accountId: string }
+      const keys = await listSessionKeys(req.accountId)
+      
+      sendResponse(
+        ok({
+          keys: keys.map((k: any) => ({
+            sessionId: k.sessionId,
+            accountId: k.accountId,
+            name: k.name,
+            duration: k.duration,
+            spendingLimitAmount: k.spendingLimitAmount,
+            spendingLimitCurrency: k.spendingLimitCurrency,
+            allowed: k.allowed,
+            rawPublicKeyHex: toHex(k.rawPublicKey),
+            createdAt: k.createdAt,
+          })),
+        })
+      )
       return true
     }
 
     case 'REVOKE_SESSION_KEY': {
-      const req = message.payload as { accountId: string }
-      await revokeSessionKey(req.accountId)
+      const req = message.payload as { sessionId: string }
+      await revokeSessionKey(req.sessionId)
       sendResponse(ok(undefined))
       return true
     }

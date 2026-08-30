@@ -967,10 +967,17 @@ export type BackgroundRequestPayloadByType = {
   }
   GENERATE_SESSION_KEY: {
     accountId: string
+    name: string
+    duration: string
+    spendingLimitAmount: string
+    spendingLimitCurrency: string
+    allowed: string[]
   }
-  GET_SESSION_KEYS: undefined
-  REVOKE_SESSION_KEY: {
+  GET_SESSION_KEYS: {
     accountId: string
+  }
+  REVOKE_SESSION_KEY: {
+    sessionId: string
   }
 } & Record<string, unknown>
 
@@ -1097,14 +1104,21 @@ export type BackgroundResponseDataByType = {
   COSIGN_PREPARE_SIGN: import('./index').PrepareSignResponse
   COSIGN_ATTACH_WEBAUTHN_AUTH: { signedAuthEntryBase64: string }
   GENERATE_SESSION_KEY: {
+    sessionId: string
     accountId: string
-    rawPublicKey: Uint8Array
+    rawPublicKeyHex: string
     createdAt: number
   }
   GET_SESSION_KEYS: {
     keys: Array<{
+      sessionId: string
       accountId: string
-      rawPublicKey: Uint8Array
+      name: string
+      duration: string
+      spendingLimitAmount: string
+      spendingLimitCurrency: string
+      allowed: string[]
+      rawPublicKeyHex: string
       createdAt: number
     }>
   }

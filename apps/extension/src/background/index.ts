@@ -32,7 +32,7 @@ import { tryHandleV1AuthMessage } from './v1Auth/handlers'
 
 initDappApprovalListeners()
 
-chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response: unknown) => void) => {
+chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, sendResponse) => {
   // #region agent log
   const maybeDebug = rawMessage as { type?: string; payload?: Record<string, unknown> }
   if (maybeDebug?.type === 'DEBUG_AGENT_LOG' && maybeDebug.payload) {
