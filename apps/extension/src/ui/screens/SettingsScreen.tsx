@@ -32,12 +32,7 @@ import type { Network } from '@latch/types'
 const rowIconClass = 'h-5 w-5 object-contain'
 
 type SettingsView =
-  | 'menu'
-  | 'accountInformation'
-  | 'viewAccounts'
-  | 'addressBook'
-  | 'permissions'
-  | 'network'
+  'menu' | 'accountInformation' | 'viewAccounts' | 'addressBook' | 'permissions' | 'network'
 
 export function SettingsScreen({
   surface,

@@ -28,7 +28,6 @@ import {
   resolvePasskeyAuthEntryXdr,
 } from './sendTx'
 import { friendlyError, sendToBackground } from './backgroundClient'
-import { debugAgentLog } from './debugAgentLog'
 import { fetchActiveNetwork, networkPassphraseFor } from './activeNetwork'
 
 export function extractTransactionHash(
@@ -55,24 +54,6 @@ async function runPasskeyAuth(
     hints?: string[]
     rpId?: string
   }
-  // #region agent log
-  debugAgentLog({
-    hypothesisId: 'H2-H4-H5',
-    location: 'signBuiltTx.ts:runPasskeyAuth',
-    message: 'prepared WebAuthn get() options before ceremony',
-    data: {
-      surface,
-      viaBridge: surface === 'sidepanel',
-      rpId: prepared.rpId ?? null,
-      allowCredCount: prepared.allowCredentials?.length ?? 0,
-      allowCredIdsSuffix: (prepared.allowCredentials ?? []).map((c) =>
-        typeof c.id === 'string' ? c.id.slice(-12) : null
-      ),
-      allowTransports: (prepared.allowCredentials ?? []).map((c) => c.transports ?? null),
-      hints: prepared.hints ?? null,
-    },
-  })
-  // #endregion
   if (surface === 'sidepanel') {
     return (await openPasskeyBridgeAndWait({
       mode: 'authentication',
@@ -172,37 +153,6 @@ export async function signAndSubmitBuiltTx(args: {
     credentialId: passkeySource.passkeyCredentialId,
     authDigestHex: build.authDigestHex,
   })
-  // #region agent log
-  {
-    const o = optionsJSON as {
-      rpId?: string
-      allowCredentials?: Array<{ id?: string; type?: string; transports?: string[] }>
-      hints?: string[]
-    }
-    debugAgentLog({
-      hypothesisId: 'H1-H2-H4',
-      location: 'signBuiltTx.ts:beforePasskeyAuth',
-      message: 'dapp/tx sign WebAuthn options about to run',
-      data: {
-        surface,
-        accountMode: activeAccount.mode,
-        accountId: activeAccount.id,
-        smartAccountSuffix: (activeAccount.smartAccountAddress ?? '').slice(-8),
-        passkeyCredSuffix: (passkeySource.passkeyCredentialId ?? '').slice(-12),
-        hasKeyData: Boolean(passkeySource.passkeyKeyDataHex),
-        signingAccountId: args.signingAccount?.id ?? null,
-        rpId: o.rpId ?? null,
-        allowCredCount: o.allowCredentials?.length ?? 0,
-        allowCredIdsSuffix: (o.allowCredentials ?? []).map((c) =>
-          typeof c.id === 'string' ? c.id.slice(-12) : null
-        ),
-        allowTransports: (o.allowCredentials ?? []).map((c) => c.transports ?? null),
-        hints: o.hints ?? null,
-        authDigestLen: (build.authDigestHex ?? '').length,
-      },
-    })
-  }
-  // #endregion
   progress('Signing…')
   const assertion = await runPasskeyAuth(surface, optionsJSON)
   assertPasskeyAssertionMatchesAuthDigest(assertion, build.authDigestHex)

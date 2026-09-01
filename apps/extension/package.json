@@ -70,8 +70,6 @@
       "https://api.soroswap.finance/*",
       "https://*/*",
       "http://localhost:3000/*",
-      "http://localhost:8000/*",
-      "http://127.0.0.1:7938/*",
       "https://latch-backend.onrender.com/*"
     ],
     "content_security_policy": {
