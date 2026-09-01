@@ -14,7 +14,6 @@ import type {
   SetupSwapRulesRequest,
   SetupSwapRulesResponse,
   SubmitDelegatedTxRequest,
-  SubmitPhantomTxRequest,
   SubmitTxResponse,
   SubmitWebauthnTxRequest,
 } from '@latch/types'
@@ -62,13 +61,6 @@ export async function buildDelegatedTx(
   req: BuildDelegatedTxRequest
 ): Promise<BuildDelegatedTxResponse> {
   return await latchFetch<BuildDelegatedTxResponse>('/api/transaction/build-delegated', {
-    method: 'POST',
-    body: JSON.stringify(await withActiveNetwork(req)),
-  })
-}
-
-export async function submitTxPhantom(req: SubmitPhantomTxRequest): Promise<SubmitTxResponse> {
-  return await latchFetch<SubmitTxResponse>('/api/transaction/submit', {
     method: 'POST',
     body: JSON.stringify(await withActiveNetwork(req)),
   })

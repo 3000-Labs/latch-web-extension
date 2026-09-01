@@ -232,7 +232,6 @@ export async function createAccount(params: {
   mode: AccountMode
   smartAccountAddress: string
   gAddress?: string
-  phantomPublicKeyHex?: string
   passkeyCredentialId?: string
   passkeyKeyDataHex?: string
   label?: string
@@ -264,19 +263,10 @@ export async function createAccount(params: {
         return true
       return false
     })
-  } else if (params.mode === 'mnemonic' || params.mode === 'freighter') {
+  } else if (params.mode === 'mnemonic') {
     existing = accounts.find((a) => {
-      if (a.mode !== 'mnemonic' && a.mode !== 'freighter') return false
+      if (a.mode !== 'mnemonic') return false
       if (params.gAddress && a.gAddress === params.gAddress) return true
-      if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress)
-        return true
-      return false
-    })
-  } else if (params.mode === 'phantom') {
-    existing = accounts.find((a) => {
-      if (a.mode !== 'phantom') return false
-      if (params.phantomPublicKeyHex && a.phantomPublicKeyHex === params.phantomPublicKeyHex)
-        return true
       if (params.smartAccountAddress && a.smartAccountAddress === params.smartAccountAddress)
         return true
       return false
@@ -332,7 +322,6 @@ export async function createAccount(params: {
       return params.smartAccountAddress
     })(),
     gAddress: params.gAddress,
-    phantomPublicKeyHex: params.phantomPublicKeyHex,
     passkeyCredentialId,
     passkeyKeyDataHex,
     label: params.label ?? existing?.label,
@@ -547,22 +536,6 @@ export async function disconnectSessionForLogoutDev() {
     STORAGE_KEYS.activeAccountId,
     STORAGE_KEYS.setupState,
   ])
-}
-
-/**
- * Optional one-time migration: if legacy `latch.accountPublicKey` exists and no accounts are present,
- * create a placeholder account for UI continuity.
- */
-export async function migrateLegacyPublicKeyIfNeeded() {
-  const { accounts } = await getAccounts()
-  if (accounts.length > 0) return
-
-  const res = await chrome.storage.local.get([STORAGE_KEYS.legacyAccountPublicKey])
-  const pk = res[STORAGE_KEYS.legacyAccountPublicKey] as string | undefined
-  if (!pk) return
-
-  // We don't know smartAccountAddress; keep as gAddress for now (treated as freighter-ish).
-  await createAccount({ mode: 'freighter', smartAccountAddress: '', gAddress: pk })
 }
 
 /** Reset migration latch for tests. */

@@ -10,7 +10,6 @@ import { getActiveNetwork } from './network/config'
 import {
   getAccounts,
   getSetupStateForNetwork,
-  migrateLegacyPublicKeyIfNeeded,
   setSetupStateForNetwork,
   storageKeys,
 } from './storage'
@@ -200,7 +199,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 
 chrome.runtime.onStartup.addListener(() => {
   void initExtensionActionBehavior()
-  void migrateLegacyPublicKeyIfNeeded()
 })
 
 chrome.storage.onChanged.addListener((changes, areaName) => {

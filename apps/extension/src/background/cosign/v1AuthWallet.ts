@@ -13,7 +13,7 @@ export function v1AuthWalletForLinkedAccount(linked: StoredAccount): {
     return { wallet, keyType: 'passkey' }
   }
 
-  if (linked.mode === 'freighter' || linked.mode === 'mnemonic' || linked.mode === 'phantom') {
+  if (linked.mode === 'mnemonic') {
     const wallet = linked.gAddress?.trim()
     if (!wallet) throw new Error('Delegated account missing G address for V1 auth')
     return { wallet, keyType: 'ed25519' }

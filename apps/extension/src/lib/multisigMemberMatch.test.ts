@@ -30,11 +30,11 @@ describe('multisigMemberMatch', () => {
     expect(membership?.account).toBeUndefined()
   })
 
-  it('resolves delegated membership from a local freighter account', () => {
+  it('resolves delegated membership from a local mnemonic account', () => {
     const localAccounts = [
       {
         id: 'a1',
-        mode: 'freighter',
+        mode: 'mnemonic',
         smartAccountAddress: 'C1',
         gAddress: 'GDELEGATED',
         createdAt: 1,

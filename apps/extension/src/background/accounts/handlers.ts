@@ -2,9 +2,7 @@ import type {
   BackgroundMessage,
   BackendWebauthnAuthenticationFinishRequest,
   BackendWebauthnRegistrationFinishRequest,
-  CreateOrConnectFreighterRequest,
   CreateOrConnectPasskeyRequest,
-  CreateOrConnectPhantomRequest,
   GetAccountsResponse,
   ImportMnemonicAccountRequest,
   SetActiveAccountRequest,
@@ -15,9 +13,7 @@ import type {
 import { ensureSetupStateMatchesAccounts, getSetupState, setSetupState } from '../actionBehavior'
 import { BackendError } from '../api/client'
 import {
-  createOrConnectFreighter,
   createOrConnectPasskey,
-  createOrConnectPhantom,
   ensureFreighterSmartAccountDeployed,
   getBackendAccounts,
   passkeyAuthenticationBegin,
@@ -116,31 +112,6 @@ export async function tryHandleAccountsMessage(
       // storage.onChanged also broadcasts; await here so dApps update before UI continues
       await broadcastActiveAccountChanged()
       sendResponse(ok())
-      return true
-    }
-
-    case 'CREATE_OR_CONNECT_FREIGHTER': {
-      const req = message.payload as CreateOrConnectFreighterRequest
-      const data = await createOrConnectFreighter(req)
-      const { account } = await createAccount({
-        mode: 'freighter',
-        smartAccountAddress: data.smartAccountAddress,
-        gAddress: req.gAddress,
-      })
-      sendResponse(ok({ ...data, account }))
-      return true
-    }
-
-    case 'CREATE_OR_CONNECT_PHANTOM': {
-      const req = message.payload as CreateOrConnectPhantomRequest
-      const data = await createOrConnectPhantom(req)
-      const { account } = await createAccount({
-        mode: 'phantom',
-        smartAccountAddress: data.smartAccountAddress,
-        gAddress: data.gAddress,
-        phantomPublicKeyHex: req.publicKeyHex,
-      })
-      sendResponse(ok({ ...data, account }))
       return true
     }
 

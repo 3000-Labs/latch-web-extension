@@ -60,7 +60,7 @@ export function findDraftMemberForDelegatedAccount(
 ): MultisigDraftMember | undefined {
   const gAddress = account.gAddress?.trim()
   if (!gAddress) return undefined
-  if (account.mode !== 'mnemonic' && account.mode !== 'freighter') return undefined
+  if (account.mode !== 'mnemonic') return undefined
   return members?.find((m) => m.gAddress?.trim() === gAddress)
 }
 
@@ -74,7 +74,7 @@ export function findDraftMemberForUser(
       if (member) return { member, account }
       continue
     }
-    if (account.mode === 'mnemonic' || account.mode === 'freighter') {
+    if (account.mode === 'mnemonic') {
       const member = findDraftMemberForDelegatedAccount(members, account)
       if (member) return { member, account }
     }
