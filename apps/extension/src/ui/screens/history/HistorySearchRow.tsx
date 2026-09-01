@@ -1,14 +1,14 @@
 import React from 'react'
-import { SlidersHorizontal, Search } from 'lucide-react'
+import { RefreshCw, Search } from 'lucide-react'
 
 export function HistorySearchRow({
   value,
   onChange,
-  onFilterClick,
+  onRefreshClick,
 }: {
   value: string
   onChange: (next: string) => void
-  onFilterClick?: () => void
+  onRefreshClick?: () => void
 }) {
   return (
     <div className="flex items-center gap-2 shrink-0">
@@ -23,11 +23,11 @@ export function HistorySearchRow({
       </div>
       <button
         type="button"
-        onClick={onFilterClick}
+        onClick={onRefreshClick}
         className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-2xl border border-border/40 bg-surface text-fg/60 hover:bg-surface/70 hover:text-fg active:bg-surface/85 transition-all"
-        aria-label="Filter"
+        aria-label="Refresh"
       >
-        <SlidersHorizontal className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
+        <RefreshCw className="h-[18px] w-[18px]" strokeWidth={2.5} aria-hidden />
       </button>
     </div>
   )
