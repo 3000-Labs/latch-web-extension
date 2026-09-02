@@ -1,5 +1,6 @@
 import type { LatchSDK } from './index'
 import type { Network } from '@latch/types'
+import { ModuleType, type IOnChangeEvent, type ModuleInterface } from '@creit.tech/stellar-wallets-kit/types'
 
 export const LATCH_MODULE_ID = 'latch'
 export const LATCH_MODULE_URL = 'https://latch.tech/'
@@ -12,33 +13,8 @@ export type WalletKitNetworkOptions = {
   path?: string
 }
 
-/** Structural copy of the required Stellar Wallets Kit ModuleInterface fields. */
-export interface StellarWalletsKitModule {
-  readonly moduleType: 'HOT_WALLET'
-  readonly productIcon: string
-  readonly productId: string
-  readonly productName: string
-  readonly productUrl: string
-  isAvailable(): Promise<boolean>
-  getAddress(params?: { path?: string; skipRequestAccess?: boolean }): Promise<{ address: string }>
-  onChange?(
-    callback: (event: { address: string; network: string; networkPassphrase: string }) => void
-  ): void
-  signTransaction(
-    xdr: string,
-    opts?: WalletKitNetworkOptions
-  ): Promise<{ signedTxXdr: string; signerAddress?: string }>
-  signAuthEntry(
-    authEntry: string,
-    opts?: WalletKitNetworkOptions
-  ): Promise<{ signedAuthEntry: string; signerAddress?: string }>
-  signMessage(
-    message: string,
-    opts?: WalletKitNetworkOptions
-  ): Promise<{ signedMessage: string; signerAddress?: string }>
-  getNetwork(): Promise<{ network: string; networkPassphrase: string }>
-  disconnect(): Promise<void>
-}
+/** Public alias to the kit's real module contract for downstream consumers. */
+export type StellarWalletsKitModule = ModuleInterface
 
 const PUBLIC_PASSPHRASE = 'Public Global Stellar Network ; September 2015'
 const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015'
@@ -78,8 +54,8 @@ function defaultSDK(): LatchSDK {
 }
 
 /** Latch adapter for the Stellar Wallets Kit ModuleInterface. */
-export class LatchModule implements StellarWalletsKitModule {
-  readonly moduleType = 'HOT_WALLET' as const
+export class LatchModule implements ModuleInterface {
+  readonly moduleType = ModuleType.HOT_WALLET
   readonly productIcon = LATCH_MODULE_ICON
   readonly productId = LATCH_MODULE_ID
   readonly productName = 'Latch'
@@ -139,7 +115,7 @@ export class LatchModule implements StellarWalletsKitModule {
   }
 
   onChange(
-    callback: (event: { address: string; network: string; networkPassphrase: string }) => void
+    callback: (event: IOnChangeEvent) => void
   ): void {
     const handler = (payload: { publicKey: string; network: Network }) => {
       callback({
