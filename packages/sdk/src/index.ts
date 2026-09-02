@@ -137,6 +137,18 @@ function requireLatch(): NonNullable<Window['latch']> {
   return window.latch
 }
 
+async function signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+async function signTransaction(
+  xdr: string,
+  opts?: Sep0043SignTransactionOptions
+): Promise<Sep0043SignTransactionResponse>
+async function signTransaction(
+  requestOrXdr: SignTransactionRequest | string,
+  opts?: Sep0043SignTransactionOptions
+): Promise<SignTransactionResponse | Sep0043SignTransactionResponse> {
+  return await requireLatch().signTransaction(requestOrXdr as SignTransactionRequest & string, opts)
+}
+
 export function getLatchSDK(): LatchSDK {
   return {
     async isConnected() {
@@ -147,15 +159,7 @@ export function getLatchSDK(): LatchSDK {
       return await requireLatch().getPublicKey()
     },
 
-    async signTransaction(
-      requestOrXdr: SignTransactionRequest | string,
-      opts?: Sep0043SignTransactionOptions
-    ): Promise<SignTransactionResponse | Sep0043SignTransactionResponse> {
-      return await requireLatch().signTransaction(
-        requestOrXdr as SignTransactionRequest & string,
-        opts
-      )
-    },
+    signTransaction,
 
     async openSignRequest(params: OpenSignRequestParams) {
       return await requireLatch().openSignRequest(params)
