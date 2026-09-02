@@ -11,11 +11,7 @@
   "dependencies": {
     "@latch/types": "workspace:*"
   },
-  "peerDependencies": {
-    "@creit.tech/stellar-wallets-kit": ">=2.2.0"
-  },
   "devDependencies": {
-    "@creit.tech/stellar-wallets-kit": "^2.6.0",
     "typescript": "^5.8.3"
   }
 }

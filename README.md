@@ -112,14 +112,22 @@ wrapper in bundled dApps.
   codes.
 
 **Stellar Wallets Kit:** add the module explicitly until Latch is included in the kit’s
-default module list:
+default module list. The SDK is currently private, so partners should use a workspace or
+path import until it is published:
 
 ```ts
-import { StellarWalletsKit } from '@creit.tech/stellar-wallets-kit/sdk'
+import { StellarWalletsKit, WalletNetwork } from '@creit.tech/stellar-wallets-kit'
 import { LatchModule } from '@latch/sdk'
 
-StellarWalletsKit.init({ modules: [new LatchModule()] })
-const { address } = await StellarWalletsKit.authModal()
+const kit = new StellarWalletsKit({
+  network: WalletNetwork.TESTNET,
+  selectedWalletId: 'latch',
+  modules: [new LatchModule()],
+})
+
+await kit.openModal()
+kit.setWallet('latch')
+const { address } = await kit.getAddress()
 ```
 
 The module implements the kit’s `ModuleInterface` and reports Latch’s `C…` smart-account

@@ -1,10 +1,28 @@
 import type { LatchSDK } from './index'
 import type { Network } from '@latch/types'
-import {
-  ModuleType,
-  type IOnChangeEvent,
-  type ModuleInterface,
-} from '@creit.tech/stellar-wallets-kit/types'
+
+type IOnChangeEvent = {
+  address: string
+  network: string
+  networkPassphrase: string
+}
+
+/** Structural copy of the kit contract, kept type-only so the SDK has no kit runtime dependency. */
+interface ModuleInterface {
+  moduleType: 'HOT_WALLET'
+  productIcon: string
+  productId: string
+  productName: string
+  productUrl: string
+  isAvailable(): Promise<boolean>
+  getAddress(params?: { path?: string; skipRequestAccess?: boolean }): Promise<{ address: string }>
+  signTransaction(xdr: string, opts?: WalletKitNetworkOptions): Promise<{ signedTxXdr: string; signerAddress?: string }>
+  signAuthEntry(authEntry: string, opts?: WalletKitNetworkOptions): Promise<{ signedAuthEntry: string; signerAddress?: string }>
+  signMessage(message: string, opts?: WalletKitNetworkOptions): Promise<{ signedMessage: string; signerAddress?: string }>
+  getNetwork(): Promise<{ network: string; networkPassphrase: string }>
+  onChange(callback: (event: IOnChangeEvent) => void): void
+  disconnect?(): Promise<void>
+}
 
 export const LATCH_MODULE_ID = 'latch'
 export const LATCH_MODULE_URL = 'https://latch.tech/'
@@ -59,13 +77,21 @@ function defaultSDK(): LatchSDK {
 
 /** Latch adapter for the Stellar Wallets Kit ModuleInterface. */
 export class LatchModule implements ModuleInterface {
-  readonly moduleType = ModuleType.HOT_WALLET
+  readonly moduleType = 'HOT_WALLET' as const
   readonly productIcon = LATCH_MODULE_ICON
   readonly productId = LATCH_MODULE_ID
   readonly productName = 'Latch'
   readonly productUrl = LATCH_MODULE_URL
 
-  constructor(private readonly sdk: LatchSDK = defaultSDK()) {}
+  private sdkInstance?: LatchSDK
+
+  constructor(sdk?: LatchSDK) {
+    this.sdkInstance = sdk
+  }
+
+  private get sdk(): LatchSDK {
+    return (this.sdkInstance ??= defaultSDK())
+  }
 
   async isAvailable(): Promise<boolean> {
     try {
