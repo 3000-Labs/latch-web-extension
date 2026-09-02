@@ -1,6 +1,10 @@
 import type { LatchSDK } from './index'
 import type { Network } from '@latch/types'
-import { ModuleType, type IOnChangeEvent, type ModuleInterface } from '@creit.tech/stellar-wallets-kit/types'
+import {
+  ModuleType,
+  type IOnChangeEvent,
+  type ModuleInterface,
+} from '@creit.tech/stellar-wallets-kit/types'
 
 export const LATCH_MODULE_ID = 'latch'
 export const LATCH_MODULE_URL = 'https://latch.tech/'
@@ -114,9 +118,7 @@ export class LatchModule implements ModuleInterface {
     return { network, networkPassphrase: passphraseFromNetwork(network) }
   }
 
-  onChange(
-    callback: (event: IOnChangeEvent) => void
-  ): void {
+  onChange(callback: (event: IOnChangeEvent) => void): void {
     const handler = (payload: { publicKey: string; network: Network }) => {
       callback({
         address: payload.publicKey,
