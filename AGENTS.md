@@ -85,8 +85,13 @@ packages/
   - define message payloads + responses in `@latch/types`
   - keep background handlers narrow and explicit per `MessageType`
 - **Make requests cancellable**:
-  - popup should send a request id (or use per-view lifecycle)
-  - background should support cancellation via `AbortController` when a view unmounts or a request is superseded
+  - popup/side panel sends an optional `requestId` on long reads (balances, history, swap quote)
+  - UI calls `CANCEL_REQUEST` with the same id on unmount, account switch, or superseded fetch
+  - background registers an `AbortController` per `requestId` and races the **waiter** (not shared inflight I/O) — always `sendResponse({ ok: false, error: { code: 'cancelled' } })` on cancel; never swallow abort without responding
+  - **Do not abort shared inflight** Horizon/RPC or quote-cache promises other waiters still need; cancel detaches only the message waiter
+  - v1: swap quote provider HTTP is not aborted on cancel (waiter-only); document if extending
+  - never cancel WebAuthn / signing mid-ceremony
+  - handler template: `withCancellableWaiter(req.requestId, () => runGet…())` in reads/swap handlers; see `requestRegistry.ts` + `requestWaiter.ts`
 - **De-dupe in-flight requests**:
   - if multiple UI renders ask for the same resource, background should reuse the same promise keyed by (endpoint, params, network)
 - **Cache where it matters**:

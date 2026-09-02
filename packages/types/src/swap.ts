@@ -52,6 +52,8 @@ export interface GetSwapQuoteRequest {
   amountIn: string
   slippageBps?: number
   providerId?: string
+  /** Optional per-view id; UI sends CANCEL_REQUEST with the same id to detach the waiter. */
+  requestId?: string
 }
 
 export interface GetSwapQuoteResponse {

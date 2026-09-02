@@ -262,6 +262,8 @@ export interface SetupSendRulesResponse extends BuildSendTxResponse {
 
 export interface GetSmartAccountBalancesRequest {
   accountId: string
+  /** Optional per-view id; UI sends CANCEL_REQUEST with the same id to detach the waiter. */
+  requestId?: string
 }
 
 export interface GetSmartAccountBalancesResponse {
@@ -300,6 +302,8 @@ export interface GetSmartAccountTransactionsRequest {
   accountId: string
   /** Bypass fresh TTL and recompute (History pull-to-refresh). */
   force?: boolean
+  /** Optional per-view id; UI sends CANCEL_REQUEST with the same id to detach the waiter. */
+  requestId?: string
 }
 
 export interface GetSmartAccountTransactionsResponse {
@@ -758,6 +762,7 @@ export type MessageType =
   | 'GET_ACTIVE_NETWORK'
   | 'SET_ACTIVE_NETWORK'
   | 'PING_EXTENSION'
+  | 'CANCEL_REQUEST'
   | 'GET_SWAP_TOKEN_CATALOG'
   | 'GET_SWAP_QUOTE'
   | 'PREPARE_SWAP_TX'
@@ -847,6 +852,10 @@ export interface SetSetupStateRequest {
   accountPublicKey?: string
 }
 
+export interface CancelRequest {
+  requestId: string
+}
+
 export type BackgroundRequestPayloadByType = {
   LOGOUT: undefined
   GET_SETUP_STATE: undefined
@@ -892,6 +901,7 @@ export type BackgroundRequestPayloadByType = {
   GET_ACTIVE_NETWORK: undefined
   SET_ACTIVE_NETWORK: { network: Network }
   PING_EXTENSION: undefined
+  CANCEL_REQUEST: CancelRequest
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogRequest
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteRequest
   PREPARE_SWAP_TX: import('./swap').PrepareSwapTxRequest
@@ -1037,6 +1047,7 @@ export type BackgroundResponseDataByType = {
   GET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
   SET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
   PING_EXTENSION: { connected: true }
+  CANCEL_REQUEST: undefined
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogResponse
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteResponse
   PREPARE_SWAP_TX: import('./swap').PrepareSwapTxResponse

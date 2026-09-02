@@ -12,6 +12,7 @@ import { getAssetIconDataUrlsBatch } from '../assetIcons'
 import { recordKnownSacProbe } from '../knownSacProbes'
 import { getMarketPrices } from '../marketPrices'
 import type { OkFn } from '../messageResponse'
+import { withCancellableWaiter } from '../requestWaiter'
 import { runGetSmartAccountBalances } from '../smartAccountBalances'
 import { runGetSmartAccountTransactions } from '../smartAccountTransactions'
 
@@ -24,16 +25,20 @@ export async function tryHandleReadsMessage(
   switch (message.type) {
     case 'GET_SMART_ACCOUNT_BALANCES': {
       const req = message.payload as GetSmartAccountBalancesRequest
-      const data = await runGetSmartAccountBalances(req.accountId)
+      const data = await withCancellableWaiter(req.requestId, () =>
+        runGetSmartAccountBalances(req.accountId)
+      )
       sendResponse(ok(data))
       return true
     }
 
     case 'GET_SMART_ACCOUNT_TRANSACTIONS': {
       const req = message.payload as GetSmartAccountTransactionsRequest
-      const data = await runGetSmartAccountTransactions(req.accountId, {
-        force: req.force === true,
-      })
+      const data = await withCancellableWaiter(req.requestId, () =>
+        runGetSmartAccountTransactions(req.accountId, {
+          force: req.force === true,
+        })
+      )
       sendResponse(ok(data))
       return true
     }

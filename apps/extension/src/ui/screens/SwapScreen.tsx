@@ -12,7 +12,8 @@ import {
 } from '../swap/swapVm'
 import { SwapDetails } from '../swap/components/SwapDetails'
 import { TokenPickerModal } from '../swap/components/TokenPickerModal'
-import { friendlyError, sendToBackground } from '../lib/backgroundClient'
+import { cancelBackgroundRequest, friendlyError, sendToBackground } from '../lib/backgroundClient'
+import { createRequestId, shouldApplyBackgroundResult } from '../lib/requestSession'
 import { SwapCardsStack } from './swap/components/SwapCardsStack'
 import { SwapEnterAmountButton } from './swap/components/SwapEnterAmountButton'
 import { SwapScreenHeader } from './swap/components/SwapScreenHeader'
@@ -99,9 +100,14 @@ export function SwapScreen({
   }, [accountId, payAmount, payN, payToken, receiveToken])
 
   const quoteSeqRef = useRef(0)
+  const quoteRequestIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!quoteRequestKey || !payToken || !receiveToken) {
+      if (quoteRequestIdRef.current) {
+        void cancelBackgroundRequest(quoteRequestIdRef.current)
+        quoteRequestIdRef.current = null
+      }
       setPreviewQuote(null)
       setQuoteError(null)
       setQuoteLoading(false)
@@ -113,6 +119,12 @@ export function SwapScreen({
     setQuoteError(null)
 
     const timer = setTimeout(() => {
+      if (quoteRequestIdRef.current) {
+        void cancelBackgroundRequest(quoteRequestIdRef.current)
+      }
+      const requestId = createRequestId()
+      quoteRequestIdRef.current = requestId
+
       void (async () => {
         try {
           const res = await sendToBackground<GetSwapQuoteRequest, GetSwapQuoteResponse>({
@@ -122,9 +134,19 @@ export function SwapScreen({
               assetInId: payToken.id,
               assetOutId: receiveToken.id,
               amountIn: payAmount,
+              requestId,
             },
           })
           if (seq !== quoteSeqRef.current) return
+          if (
+            !shouldApplyBackgroundResult({
+              currentId: quoteRequestIdRef.current,
+              responseId: requestId,
+              error: res.error,
+            })
+          ) {
+            return
+          }
           if (!res.ok || !res.data) {
             setPreviewQuote(null)
             setQuoteError(friendlyError(res.error))
@@ -139,12 +161,20 @@ export function SwapScreen({
           setPreviewQuote(null)
           setQuoteError(e instanceof Error ? e.message : String(e))
         } finally {
-          if (seq === quoteSeqRef.current) setQuoteLoading(false)
+          if (seq === quoteSeqRef.current && quoteRequestIdRef.current === requestId) {
+            setQuoteLoading(false)
+          }
         }
       })()
     }, QUOTE_DEBOUNCE_MS)
 
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      if (quoteRequestIdRef.current) {
+        void cancelBackgroundRequest(quoteRequestIdRef.current)
+        quoteRequestIdRef.current = null
+      }
+    }
   }, [accountId, payAmount, payToken, quoteRequestKey, receiveToken, tokenPriceUsdBySymbol])
 
   const payUsdPrice = payToken ? tokenPriceUsdBySymbol?.[payToken.symbol.toUpperCase()] : undefined
