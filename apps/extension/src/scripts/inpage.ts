@@ -6,9 +6,21 @@
 import type {
   Network,
   OpenSignRequestParams,
+  Sep0043GetAddressResponse,
+  Sep0043GetNetworkResponse,
+  Sep0043SignTransactionOptions,
+  Sep0043SignTransactionResponse,
   SignTransactionRequest,
   SignTransactionResponse,
 } from '@latch/types'
+
+import {
+  buildSep0043NetworkResponse,
+  buildSepSignRequest,
+  mapNativeSignResponseToSep,
+  passphraseToNetwork,
+  toSep0043Error,
+} from './sep0043'
 
 const LATCH_PROVIDER_REQUEST = 'LATCH_PROVIDER_REQUEST'
 const LATCH_PROVIDER_RESPONSE = 'LATCH_PROVIDER_RESPONSE'
@@ -103,11 +115,29 @@ async function sendToBackgroundWithTimeout<TData>(
   ])
 }
 
+async function fetchActivePublicKey(): Promise<string> {
+  const data = await sendToBackground<{ publicKey: string }>('DAPP_GET_PUBLIC_KEY', {
+    origin: window.location.origin,
+  })
+  return data.publicKey
+}
+
+async function fetchActiveNetwork(): Promise<Network> {
+  const data = await sendToBackground<{ network: Network }>('GET_ACTIVE_NETWORK', {})
+  return data.network
+}
+
 interface LatchProvider {
   isConnected(): Promise<boolean>
   getPublicKey(): Promise<string>
   getNetwork(): Promise<Network>
   signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+  signTransaction(
+    xdr: string,
+    opts?: Sep0043SignTransactionOptions
+  ): Promise<Sep0043SignTransactionResponse>
+  getAddress(): Promise<Sep0043GetAddressResponse>
+  getNetworkDetails(): Promise<Sep0043GetNetworkResponse>
   openSignRequest(params: OpenSignRequestParams): Promise<void>
   on(event: ProviderEventName, handler: ProviderEventHandler): void
   off(event: ProviderEventName, handler: ProviderEventHandler): void
@@ -148,24 +178,65 @@ function installLatch() {
       }
     },
     async getPublicKey() {
-      const data = await sendToBackground<{ publicKey: string }>('DAPP_GET_PUBLIC_KEY', {
-        origin: window.location.origin,
-      })
-      return data.publicKey
+      return await fetchActivePublicKey()
     },
-    async signTransaction(request: SignTransactionRequest) {
+    async signTransaction(
+      requestOrXdr: SignTransactionRequest | string,
+      opts?: Sep0043SignTransactionOptions
+    ): Promise<SignTransactionResponse | Sep0043SignTransactionResponse> {
+      if (typeof requestOrXdr === 'string') {
+        try {
+          const networkFromPassphrase = passphraseToNetwork(opts?.networkPassphrase)
+          const network = networkFromPassphrase ?? (await fetchActiveNetwork())
+          const activeAddress = await fetchActivePublicKey()
+          const nativeRequest = buildSepSignRequest({
+            xdr: requestOrXdr,
+            opts,
+            activeAddress,
+            network,
+          })
+
+          const data = await sendToBackground<{ response: SignTransactionResponse }>(
+            'DAPP_SIGN_TRANSACTION',
+            {
+              origin: window.location.origin,
+              request: nativeRequest,
+            }
+          )
+
+          return mapNativeSignResponseToSep(data.response, nativeRequest.accountToSign)
+        } catch (err) {
+          throw toSep0043Error(err)
+        }
+      }
+
       const data = await sendToBackground<{ response: SignTransactionResponse }>(
         'DAPP_SIGN_TRANSACTION',
         {
           origin: window.location.origin,
-          request,
+          request: requestOrXdr,
         }
       )
       return data.response
     },
     async getNetwork() {
-      const data = await sendToBackground<{ network: Network }>('GET_ACTIVE_NETWORK', {})
-      return data.network
+      return await fetchActiveNetwork()
+    },
+    async getAddress() {
+      try {
+        const address = await fetchActivePublicKey()
+        return { address }
+      } catch (err) {
+        throw toSep0043Error(err)
+      }
+    },
+    async getNetworkDetails() {
+      try {
+        const network = await fetchActiveNetwork()
+        return buildSep0043NetworkResponse(network)
+      } catch (err) {
+        throw toSep0043Error(err)
+      }
     },
     async openSignRequest(params: OpenSignRequestParams) {
       await sendToBackground('DAPP_OPEN_SIGN_REQUEST', {
