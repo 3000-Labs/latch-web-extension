@@ -112,9 +112,7 @@ describe('buildSepSignRequest', () => {
 
 describe('mapNativeSignResponseToSep', () => {
   it('returns signedTxXdr and signerAddress', () => {
-    expect(
-      mapNativeSignResponseToSep({ signedTxXdr: 'signed-xdr' }, 'CSIGNER')
-    ).toEqual({
+    expect(mapNativeSignResponseToSep({ signedTxXdr: 'signed-xdr' }, 'CSIGNER')).toEqual({
       signedTxXdr: 'signed-xdr',
       signerAddress: 'CSIGNER',
     })

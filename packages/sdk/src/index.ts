@@ -102,10 +102,7 @@ export interface LatchSDK {
   /** Subscribe to active account / network changes */
   on?(event: LatchProviderEventName, handler: (payload: LatchAccountChangedPayload) => void): void
 
-  off?(
-    event: LatchProviderEventName,
-    handler: (payload: LatchAccountChangedPayload) => void
-  ): void
+  off?(event: LatchProviderEventName, handler: (payload: LatchAccountChangedPayload) => void): void
 }
 
 declare global {

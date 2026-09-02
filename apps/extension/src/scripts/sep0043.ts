@@ -108,7 +108,10 @@ export function mapNativeSignResponseToSep(
  * Map a Latch string error code to a SEP-0043 numeric code.
  * Uses an explicit table — no regex on messages.
  */
-export function latchCodeToSep0043(code: string | undefined, message: string): Sep0043ProviderError {
+export function latchCodeToSep0043(
+  code: string | undefined,
+  message: string
+): Sep0043ProviderError {
   switch (code) {
     case 'user_rejected':
       return new Sep0043ProviderError(message || 'The user rejected this request.', -4)
@@ -117,10 +120,7 @@ export function latchCodeToSep0043(code: string | undefined, message: string): S
     case 'not_connected':
       return new Sep0043ProviderError(message || 'Request is invalid.', -3)
     default:
-      return new Sep0043ProviderError(
-        message || 'The wallet encountered an internal error.',
-        -1
-      )
+      return new Sep0043ProviderError(message || 'The wallet encountered an internal error.', -1)
   }
 }
 
