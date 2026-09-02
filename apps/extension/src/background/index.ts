@@ -12,7 +12,7 @@
 import './cleanup-main-injector'
 import './actionBehavior'
 
-import type { BackgroundMessage, BackgroundResponse } from '@latch/types'
+import type { BackgroundMessage, BackgroundResponse, CancelRequest } from '@latch/types'
 
 import { tryHandleAccountsMessage } from './accounts/handlers'
 import { initDappApprovalListeners } from './dapp/approvalSession'
@@ -24,6 +24,7 @@ import { tryHandleMultisigMessage } from './multisig/handlers'
 import { tryHandleNetworkMessage } from './network/handlers'
 import { tryHandleOnboardingMessage } from './onboarding/handlers'
 import { tryHandleReadsMessage } from './reads/handlers'
+import { abortRequest } from './requestRegistry'
 import { tryHandleSwapMessage } from './swap/handlers'
 import { tryHandleTxMessage } from './tx/handlers'
 import { tryHandleV1AuthMessage } from './v1Auth/handlers'
@@ -32,6 +33,15 @@ initDappApprovalListeners()
 
 chrome.runtime.onMessage.addListener((rawMessage: BackgroundMessage, _sender, sendResponse) => {
   const message = rawMessage as BackgroundMessage
+
+  if (message.type === 'CANCEL_REQUEST') {
+    const req = message.payload as CancelRequest
+    if (req?.requestId) {
+      abortRequest(req.requestId)
+    }
+    sendResponse(ok(undefined) satisfies BackgroundResponse)
+    return false
+  }
 
   ;(async () => {
     if (await tryHandleMultisigMessage(message, sendResponse, ok)) {

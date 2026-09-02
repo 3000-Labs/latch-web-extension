@@ -25,6 +25,7 @@ import {
 
 import { BackendError, buildSwapTx, prepareSign, setupSwapRules } from '../backend'
 import type { OkFn } from '../messageResponse'
+import { withCancellableWaiter } from '../requestWaiter'
 import { getActiveNetwork, networkPassphraseFor, sorobanRpcUrlFor } from '../network/config'
 import { getAccounts } from '../storage'
 import {
@@ -256,7 +257,7 @@ export async function tryHandleSwapMessage(
 
     case 'GET_SWAP_QUOTE': {
       const req = message.payload as GetSwapQuoteRequest
-      const data = await runGetSwapQuote(req)
+      const data = await withCancellableWaiter(req.requestId, () => runGetSwapQuote(req))
       sendResponse(ok(data))
       return true
     }
