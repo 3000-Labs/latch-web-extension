@@ -1,5 +1,5 @@
 import type { LatchSDK } from './index'
-import type { Network } from '@latch/types'
+import type { Network, SignTransactionRequest, SignTransactionResponse } from '@latch/types'
 
 type IOnChangeEvent = {
   address: string
@@ -16,9 +16,18 @@ interface ModuleInterface {
   productUrl: string
   isAvailable(): Promise<boolean>
   getAddress(params?: { path?: string; skipRequestAccess?: boolean }): Promise<{ address: string }>
-  signTransaction(xdr: string, opts?: WalletKitNetworkOptions): Promise<{ signedTxXdr: string; signerAddress?: string }>
-  signAuthEntry(authEntry: string, opts?: WalletKitNetworkOptions): Promise<{ signedAuthEntry: string; signerAddress?: string }>
-  signMessage(message: string, opts?: WalletKitNetworkOptions): Promise<{ signedMessage: string; signerAddress?: string }>
+  signTransaction(
+    xdr: string,
+    opts?: WalletKitNetworkOptions
+  ): Promise<{ signedTxXdr: string; signerAddress?: string }>
+  signAuthEntry(
+    authEntry: string,
+    opts?: WalletKitNetworkOptions
+  ): Promise<{ signedAuthEntry: string; signerAddress?: string }>
+  signMessage(
+    message: string,
+    opts?: WalletKitNetworkOptions
+  ): Promise<{ signedMessage: string; signerAddress?: string }>
   getNetwork(): Promise<{ network: string; networkPassphrase: string }>
   onChange(callback: (event: IOnChangeEvent) => void): void
   disconnect?(): Promise<void>
@@ -60,7 +69,14 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   })
 }
 
-function defaultSDK(): LatchSDK {
+type LatchModuleSDK = Pick<
+  LatchSDK,
+  'isConnected' | 'getPublicKey' | 'getNetwork' | 'openSignRequest' | 'on' | 'off'
+> & {
+  signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+}
+
+function defaultSDK(): LatchModuleSDK {
   if (typeof window === 'undefined' || !window.latch) {
     throw new Error('Latch extension not detected')
   }
@@ -83,13 +99,13 @@ export class LatchModule implements ModuleInterface {
   readonly productName = 'Latch'
   readonly productUrl = LATCH_MODULE_URL
 
-  private sdkInstance?: LatchSDK
+  private sdkInstance?: LatchModuleSDK
 
-  constructor(sdk?: LatchSDK) {
+  constructor(sdk?: LatchModuleSDK) {
     this.sdkInstance = sdk
   }
 
-  private get sdk(): LatchSDK {
+  private get sdk(): LatchModuleSDK {
     return (this.sdkInstance ??= defaultSDK())
   }
 
