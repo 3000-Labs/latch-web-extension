@@ -138,7 +138,10 @@ export async function revokeSessionKey(sessionId: string): Promise<void> {
 /**
  * Signs a payload using a specific stored session key.
  */
-export async function signWithSessionKey(sessionId: string, payload: Uint8Array): Promise<Uint8Array> {
+export async function signWithSessionKey(
+  sessionId: string,
+  payload: Uint8Array
+): Promise<Uint8Array> {
   const data = await getSessionKey(sessionId)
   if (!data) {
     throw new Error('No session key found')

@@ -115,7 +115,10 @@ export function SettingsScreen({
   if (view === 'permissions') {
     return (
       <div className="flex h-full w-full min-h-0 flex-col overflow-y-auto rounded-bl-lg rounded-br-lg bg-[#1c1c1c] py-6 pl-6 pr-4">
-        <PermissionsFlow accountId={activeAccountId ?? ''} onBackToSettings={() => setView('menu')} />
+        <PermissionsFlow
+          accountId={activeAccountId ?? ''}
+          onBackToSettings={() => setView('menu')}
+        />
       </div>
     )
   }

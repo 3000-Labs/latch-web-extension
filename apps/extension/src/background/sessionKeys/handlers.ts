@@ -3,7 +3,9 @@ import { generateAndStoreSessionKey, listSessionKeys, revokeSessionKey } from '@
 import type { OkFn } from '../messageResponse'
 
 function toHex(buffer: Uint8Array): string {
-  return Array.prototype.map.call(buffer, (x: number) => ('00' + x.toString(16)).slice(-2)).join('')
+  return Array.prototype.map
+    .call(buffer, (x: number) => ('00' + x.toString(16)).slice(-2))
+    .join('')
 }
 
 export async function tryHandleSessionKeyMessage(

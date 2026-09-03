@@ -11,7 +11,13 @@ import { useSessionKeys } from './permissions/useSessionKeys'
 
 type PermissionsView = 'list' | 'createSessionKey' | 'setLimits' | 'review' | 'success' | 'failure'
 
-export function PermissionsFlow({ accountId, onBackToSettings }: { accountId: string; onBackToSettings: () => void }) {
+export function PermissionsFlow({
+  accountId,
+  onBackToSettings,
+}: {
+  accountId: string
+  onBackToSettings: () => void
+}) {
   const [view, setView] = useState<PermissionsView>('list')
   const { sessions, addSession } = useSessionKeys(accountId)
   const [draft, setDraft] = useState<SessionKeyDraft | null>(null)
@@ -67,7 +73,7 @@ export function PermissionsFlow({ accountId, onBackToSettings }: { accountId: st
       <SetLimitsScreen
         onBack={() => setView('createSessionKey')}
         onContinue={(res) => {
-          setDraft((d) => ({
+          setDraft((d: SessionKeyDraft | null) => ({
             name: d?.name ?? '',
             duration: res.duration,
             spendingLimitAmount: res.spendingLimitAmount,
