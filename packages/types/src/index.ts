@@ -4,6 +4,63 @@
  * No runtime code — types only.
  */
 
+// ---------------------------------------------------------------------------
+// SEP-0043 types
+// https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0043.md
+// ---------------------------------------------------------------------------
+
+/** Options accepted by the SEP-0043 `signTransaction(xdr, opts?)` method. */
+export interface Sep0043SignTransactionOptions {
+  /** Stellar network passphrase — mapped to Latch `network` (testnet | mainnet). */
+  networkPassphrase?: string
+  /**
+   * Hint to the wallet: which account should sign.
+   * Mapped onto `accountToSign`; should be the active smart-account C… address.
+   */
+  address?: string
+  /** When true the wallet broadcasts the signed tx itself; Latch v1 adapter rejects this. */
+  submit?: boolean
+  /** Custom submit URL (SEP-0043 extension). Not supported in Latch v1. */
+  submitUrl?: string
+}
+
+/** Return value of SEP-0043 `getAddress()`. */
+export interface Sep0043GetAddressResponse {
+  /** The active smart-account address — a Soroban contract address (C…). */
+  address: string
+}
+
+/** Return value of SEP-0043 `signTransaction(xdr, opts?)`. */
+export interface Sep0043SignTransactionResponse {
+  /** Base64-encoded signed transaction XDR. */
+  signedTxXdr: string
+  /** The address that signed the transaction (smart-account C… address). */
+  signerAddress: string
+}
+
+/**
+ * Return value of SEP-0043 `getNetwork()` object shape.
+ * Exposed on `window.latch.getNetworkDetails()` — Latch-native `getNetwork()`
+ * still returns `'testnet' | 'mainnet'`.
+ */
+export interface Sep0043GetNetworkResponse {
+  /** Freighter-compatible network name (e.g. `'TESTNET'` | `'PUBLIC'`). */
+  network: 'TESTNET' | 'PUBLIC'
+  /** Stellar network passphrase. */
+  networkPassphrase: string
+}
+
+/** SEP-0043 error codes per the spec. */
+export type Sep0043ErrorCode = -1 | -2 | -3 | -4
+
+/** Error shape thrown by SEP-0043 adapter methods on `window.latch`. */
+export interface Sep0043Error {
+  message: string
+  code: Sep0043ErrorCode
+  /** Optional extensions (reserved for future use). */
+  ext?: string[]
+}
+
 export type Network = 'testnet' | 'mainnet'
 
 export interface SignTransactionRequest {
@@ -26,7 +83,7 @@ export interface SignTransactionResponse {
   signedXdr?: string
 }
 
-export type AccountMode = 'freighter' | 'phantom' | 'passkey' | 'mnemonic' | 'multisig'
+export type AccountMode = 'passkey' | 'mnemonic' | 'multisig'
 
 export interface StoredAccount {
   id: string
@@ -38,15 +95,8 @@ export interface StoredAccount {
   /** Soroban smart account address */
   smartAccountAddress: string
 
-  /**
-   * Stellar G-address.
-   * - required for Freighter delegated signing
-   * - returned by backend for Phantom smart account
-   */
+  /** Stellar G-address; required for mnemonic delegated signing. */
   gAddress?: string
-
-  /** 32-byte Ed25519 pubkey in hex (no 0x prefix), for Phantom */
-  phantomPublicKeyHex?: string
 
   /** Base64url credential ID, for Passkey/WebAuthn */
   passkeyCredentialId?: string
@@ -70,7 +120,7 @@ export interface StoredAccount {
   cosignWckRefId?: string
   /** Cosign (unwired / not shipped): cached HMAC blind signer id for this member. */
   cosignBlindSignerId?: string
-  /** Cosign (unwired / not shipped): local passkey/freighter account id used to sign. */
+  /** Cosign (unwired / not shipped): local passkey/mnemonic account id used to sign. */
   cosignLinkedAccountId?: string
   /** Factory deploy salt for this multisig wallet. */
   multisigAccountSaltHex?: string
@@ -131,7 +181,12 @@ export interface GetSmartAccountBalancesApiResponse {
   balances: ApiSmartAccountBalance[]
 }
 
-export type SendSignerType = 'passkey' | 'phantom' | 'freighter'
+/**
+ * Backend build/setup contract (`BuildSendTxRequest.signerType`, etc.).
+ * `'freighter'` is the wire value for delegated G-signer builds and is what
+ * mnemonic accounts send; do not rename without a coordinated backend change.
+ */
+export type SendSignerType = 'passkey' | 'freighter'
 
 export interface BuildSendTxRequest {
   smartAccountAddress: string
@@ -207,6 +262,8 @@ export interface SetupSendRulesResponse extends BuildSendTxResponse {
 
 export interface GetSmartAccountBalancesRequest {
   accountId: string
+  /** Optional per-view id; UI sends CANCEL_REQUEST with the same id to detach the waiter. */
+  requestId?: string
 }
 
 export interface GetSmartAccountBalancesResponse {
@@ -245,6 +302,8 @@ export interface GetSmartAccountTransactionsRequest {
   accountId: string
   /** Bypass fresh TTL and recompute (History pull-to-refresh). */
   force?: boolean
+  /** Optional per-view id; UI sends CANCEL_REQUEST with the same id to detach the waiter. */
+  requestId?: string
 }
 
 export interface GetSmartAccountTransactionsResponse {
@@ -313,18 +372,6 @@ export interface SignDelegatedGAuthEntryResponse {
   signerAddress: string
 }
 
-export interface CreateOrConnectPhantomRequest {
-  publicKeyHex: string
-  /** Stellar network; omit → API defaults to testnet. */
-  network?: Network
-}
-
-export interface CreateOrConnectPhantomResponse {
-  smartAccountAddress: string
-  gAddress: string
-  alreadyDeployed: boolean
-}
-
 export interface CreateOrConnectPasskeyRequest {
   keyDataHex: string
   credentialId: string
@@ -391,19 +438,6 @@ export interface BuildDelegatedTxResponse {
   estimatedFeeXlm?: string
   estimatedFeeUsd?: string
   feeLabel?: string
-}
-
-export interface SubmitPhantomTxRequest {
-  txXdr: string
-  authEntryXdr: string
-  authSignatureHex: string
-  prefixedMessage: string
-  publicKeyHex: string
-  contextRuleId: number
-  /** When false, backend signs + assembles but returns `signedTxXdr` without broadcasting. */
-  submit?: boolean
-  /** Stellar network; omit → API defaults to testnet. */
-  network?: Network
 }
 
 export interface SubmitDelegatedTxRequest {
@@ -689,15 +723,12 @@ export type MessageType =
   | 'SET_SETUP_STATE'
   | 'GET_ACCOUNTS'
   | 'SET_ACTIVE_ACCOUNT'
-  | 'CREATE_OR_CONNECT_FREIGHTER'
-  | 'CREATE_OR_CONNECT_PHANTOM'
   | 'CREATE_OR_CONNECT_PASSKEY'
   | 'IMPORT_MNEMONIC_ACCOUNT'
   | 'UNLOCK_MNEMONIC_VAULT'
   | 'SIGN_DELEGATED_G_AUTH_ENTRY'
   | 'BUILD_TX'
   | 'BUILD_DELEGATED_TX'
-  | 'SUBMIT_TX_PHANTOM'
   | 'SUBMIT_TX_DELEGATED'
   | 'SUBMIT_TX_WEBAUTHN'
   | 'PASSKEY_REG_BEGIN'
@@ -731,6 +762,7 @@ export type MessageType =
   | 'GET_ACTIVE_NETWORK'
   | 'SET_ACTIVE_NETWORK'
   | 'PING_EXTENSION'
+  | 'CANCEL_REQUEST'
   | 'GET_SWAP_TOKEN_CATALOG'
   | 'GET_SWAP_QUOTE'
   | 'PREPARE_SWAP_TX'
@@ -823,21 +855,22 @@ export interface SetSetupStateRequest {
   accountPublicKey?: string
 }
 
+export interface CancelRequest {
+  requestId: string
+}
+
 export type BackgroundRequestPayloadByType = {
   LOGOUT: undefined
   GET_SETUP_STATE: undefined
   SET_SETUP_STATE: SetSetupStateRequest
   GET_ACCOUNTS: undefined
   SET_ACTIVE_ACCOUNT: SetActiveAccountRequest
-  CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterRequest
-  CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomRequest
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyRequest
   IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountRequest
   UNLOCK_MNEMONIC_VAULT: UnlockMnemonicVaultRequest
   SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryRequest
   BUILD_TX: BuildTxRequest
   BUILD_DELEGATED_TX: BuildDelegatedTxRequest
-  SUBMIT_TX_PHANTOM: SubmitPhantomTxRequest
   SUBMIT_TX_DELEGATED: SubmitDelegatedTxRequest
   SUBMIT_TX_WEBAUTHN: SubmitWebauthnTxRequest
   PASSKEY_REG_BEGIN: { displayName?: string } | undefined
@@ -871,6 +904,7 @@ export type BackgroundRequestPayloadByType = {
   GET_ACTIVE_NETWORK: undefined
   SET_ACTIVE_NETWORK: { network: Network }
   PING_EXTENSION: undefined
+  CANCEL_REQUEST: CancelRequest
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogRequest
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteRequest
   PREPARE_SWAP_TX: import('./swap').PrepareSwapTxRequest
@@ -987,15 +1021,12 @@ export type BackgroundResponseDataByType = {
   SET_SETUP_STATE: undefined
   GET_ACCOUNTS: GetAccountsResponse
   SET_ACTIVE_ACCOUNT: undefined
-  CREATE_OR_CONNECT_FREIGHTER: CreateOrConnectFreighterResponse & { account: StoredAccount }
-  CREATE_OR_CONNECT_PHANTOM: CreateOrConnectPhantomResponse & { account: StoredAccount }
   CREATE_OR_CONNECT_PASSKEY: CreateOrConnectPasskeyResponse & { account: StoredAccount }
   IMPORT_MNEMONIC_ACCOUNT: ImportMnemonicAccountResponse
   UNLOCK_MNEMONIC_VAULT: undefined
   SIGN_DELEGATED_G_AUTH_ENTRY: SignDelegatedGAuthEntryResponse
   BUILD_TX: BuildTxResponse
   BUILD_DELEGATED_TX: BuildDelegatedTxResponse
-  SUBMIT_TX_PHANTOM: SubmitTxResponse
   SUBMIT_TX_DELEGATED: SubmitTxResponse
   SUBMIT_TX_WEBAUTHN: SubmitTxResponse
   PASSKEY_REG_BEGIN: BackendWebauthnBeginResponse
@@ -1033,6 +1064,7 @@ export type BackgroundResponseDataByType = {
   GET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
   SET_ACTIVE_NETWORK: { network: Network; networkLabel: string }
   PING_EXTENSION: { connected: true }
+  CANCEL_REQUEST: undefined
   GET_SWAP_TOKEN_CATALOG: import('./swap').GetSwapTokenCatalogResponse
   GET_SWAP_QUOTE: import('./swap').GetSwapQuoteResponse
   PREPARE_SWAP_TX: import('./swap').PrepareSwapTxResponse

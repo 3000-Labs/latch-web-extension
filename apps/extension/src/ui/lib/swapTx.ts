@@ -64,10 +64,6 @@ export async function buildSetupSwapRequestFromQuote(
       req.credentialId = account.passkeyCredentialId.trim()
     }
   }
-  if (signerType === 'phantom') {
-    if (!account.phantomPublicKeyHex?.trim()) return null
-    req.publicKeyHex = account.phantomPublicKeyHex
-  }
   if (signerType === 'freighter') {
     if (!account.gAddress?.trim()) return null
     req.gAddress = account.gAddress
@@ -84,10 +80,7 @@ export async function swapSetupPrerequisiteError(
   if (passkeyErr) return passkeyErr
   const signerType = accountToSignerType(account.mode)
   if (signerType === 'freighter' && !account.gAddress?.trim()) {
-    return 'Missing Freighter G-address for this account. Reconnect Freighter in Settings.'
-  }
-  if (signerType === 'phantom' && !account.phantomPublicKeyHex?.trim()) {
-    return 'Missing Phantom public key for this account. Reconnect Phantom in Settings.'
+    return 'Missing G-address for this account. Re-import the wallet in Settings.'
   }
   const { network } = await fetchActiveNetwork()
   if (quote.providerId === 'aquarius' && !resolveSwapRouterContractId(quote, network)) {
@@ -96,7 +89,7 @@ export async function swapSetupPrerequisiteError(
   return null
 }
 
-/** True when API built a bundler-only swap auth path but the user signs with passkey/phantom. */
+/** True when API built a bundler-only swap auth path but the user signs with passkey. */
 export function swapBuildNeedsSignerReconfigure(
   build: BuildSendTxResponse,
   account: StoredAccount
@@ -111,7 +104,7 @@ export function swapBuildNeedsSignerReconfigure(
     return false
   }
 
-  if (signerType !== 'passkey' && signerType !== 'phantom') return false
+  if (signerType !== 'passkey') return false
 
   const submitMethod = build.submitMethod
   if (submitMethod === 'bundler-delegated') return true

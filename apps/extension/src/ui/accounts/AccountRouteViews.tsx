@@ -4,19 +4,13 @@ import type {
   BackendWebauthnAuthenticationFinishResponse,
   BackendWebauthnBeginResponse,
   BackendWebauthnRegistrationFinishResponse,
-  CreateOrConnectFreighterRequest,
-  CreateOrConnectFreighterResponse,
-  CreateOrConnectPhantomRequest,
-  CreateOrConnectPhantomResponse,
   ImportMnemonicAccountRequest,
   ImportMnemonicAccountResponse,
   StoredAccount,
   UnlockMnemonicVaultRequest,
 } from '@latch/types'
 
-import { isAllowed, isConnected, setAllowed, getAddress } from '@stellar/freighter-api'
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser'
-import bs58 from 'bs58'
 
 import { ImportSeedScreen } from '../screens/import-seed/ImportSeedScreen'
 import { useSeedPhraseWords } from '../screens/import-seed/useSeedPhraseWords'
@@ -36,24 +30,8 @@ import {
   prepareAuthenticationOptionsForGet,
   prepareRegistrationOptionsForCreate,
 } from '../webauthn/passkey'
-import { bytesToHex } from '../webauthn/utils'
 import { runWebauthnCredential } from '../webauthn/runWebauthnCredential'
-import { resolveMainRoute, type Route, type SignerId, type Surface } from '../routing/routes'
-
-function readAddressFromFreighterGetAddressResult(v: unknown): string | undefined {
-  if (typeof v === 'string') return v
-  if (typeof v === 'object' && v) {
-    const maybe = v as { address?: unknown }
-    if (typeof maybe.address === 'string') return maybe.address
-  }
-  return undefined
-}
-
-type PhantomSolanaProvider = {
-  connect: () => Promise<{ publicKey?: { toBase58?: () => string } } | undefined>
-  publicKey?: { toBase58?: () => string }
-  signMessage: (msg: Uint8Array) => Promise<{ signature?: Uint8Array } | Uint8Array>
-}
+import { resolveMainRoute, type Route, type Surface } from '../routing/routes'
 
 const ACCOUNT_ROUTES = new Set([
   'addAccount',
@@ -103,11 +81,7 @@ export function AccountRouteViews({
   >
   onPersistSetupHasAccount: (publicKey: string) => Promise<void>
 }) {
-  // Product direction: ship passkey-only for now, but keep other signer integrations ready to re-enable.
-  const ENABLE_OTHER_SIGNERS = false
-
   const [chooseSignerForExistingWallet, setChooseSignerForExistingWallet] = useState(false)
-  const [selectedSigner, setSelectedSigner] = useState<SignerId>('passkey')
   const [importSeedStep, setImportSeedStep] = useState<'phrase' | 'encrypt'>('phrase')
   const [pendingMnemonic, setPendingMnemonic] = useState('')
   const seedWords = useSeedPhraseWords()
@@ -192,65 +166,6 @@ export function AccountRouteViews({
     // cancel an in-flight ceremony or re-issue /begin while the user is creating.
     // accounts length/contents are handled via route screen.
   }, [route, passkeyPrefetchNonce])
-
-  async function connectFreighter() {
-    onSetError(null)
-    onSetLoading('Connecting to Freighter…')
-    try {
-      const ok = await isConnected()
-      if (!ok) throw new Error('Freighter not detected. Please install the Freighter extension.')
-
-      const allowed = await isAllowed()
-      if (!allowed) await setAllowed()
-
-      const g = (await getAddress()) as unknown
-      const gAddress = readAddressFromFreighterGetAddressResult(g)
-      if (!gAddress) throw new Error('Failed to read Freighter address.')
-      const res = await sendToBackground<
-        CreateOrConnectFreighterRequest,
-        CreateOrConnectFreighterResponse & { account: StoredAccount }
-      >({
-        type: 'CREATE_OR_CONNECT_FREIGHTER',
-        payload: { gAddress },
-      })
-      if (!res.ok) throw new Error(friendlyError(res.error))
-      await onPersistSetupHasAccount(res.data!.smartAccountAddress)
-      await onRefreshAccounts()
-      onSetRoute('home')
-    } finally {
-      onSetLoading(null)
-    }
-  }
-
-  async function connectPhantom() {
-    onSetError(null)
-    onSetLoading('Connecting to Phantom…')
-    try {
-      const provider = (window as unknown as { phantom?: { solana?: PhantomSolanaProvider } })
-        .phantom?.solana
-      if (!provider) throw new Error('Phantom not detected. Please install Phantom.')
-
-      const conn = await provider.connect()
-      const base58Pk = conn?.publicKey?.toBase58?.() ?? provider.publicKey?.toBase58?.()
-      if (!base58Pk) throw new Error('Failed to read Phantom public key.')
-      const pkBytes = bs58.decode(base58Pk)
-      const publicKeyHex = bytesToHex(pkBytes)
-
-      const res = await sendToBackground<
-        CreateOrConnectPhantomRequest,
-        CreateOrConnectPhantomResponse & { account: StoredAccount }
-      >({
-        type: 'CREATE_OR_CONNECT_PHANTOM',
-        payload: { publicKeyHex },
-      })
-      if (!res.ok) throw new Error(friendlyError(res.error))
-      await onPersistSetupHasAccount(res.data!.smartAccountAddress)
-      await onRefreshAccounts()
-      onSetRoute('home')
-    } finally {
-      onSetLoading(null)
-    }
-  }
 
   async function beginMnemonicImport() {
     onSetError(null)
@@ -435,18 +350,10 @@ export function AccountRouteViews({
         <ChooseSignerScreen
           routeContentMarginClass={routeContentMarginClass}
           flowHeightClass={flowHeightClass}
-          enableOtherSigners={ENABLE_OTHER_SIGNERS}
           chooseSignerForExistingWallet={chooseSignerForExistingWallet}
-          selectedSigner={selectedSigner}
-          onSelectSigner={setSelectedSigner}
           onContinuePasskey={() =>
             onSetRoute(chooseSignerForExistingWallet ? 'addAccountPasskey' : 'createPasskey')
           }
-          onContinueOther={() => {
-            void (selectedSigner === 'freighter' ? connectFreighter() : connectPhantom()).catch(
-              (e) => onSetError(e instanceof Error ? e.message : String(e))
-            )
-          }}
           onGoBack={() => {
             setChooseSignerForExistingWallet(false)
             if (accounts.length > 0) {

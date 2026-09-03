@@ -85,6 +85,57 @@ worker:
 Implementation lives under `apps/extension/src/background/` (e.g.
 `stellarMnemonic.ts`, `delegatedLocalSign.ts`, `mnemonicVault.ts`).
 
+## dApp API (`window.latch` / `@latch/sdk`)
+
+Latch injects `window.latch` on every page. Use `@latch/sdk` (`getLatchSDK()`) as a thin
+wrapper in bundled dApps.
+
+**Latch-native (stable):**
+
+- `getPublicKey()` → smart-account `C…` string
+- `signTransaction({ xdr, network, accountToSign, submit? })`
+- `getNetwork()` → `'testnet' | 'mainnet'`
+
+**SEP-0043 interop (added alongside native methods):**
+
+- `getAddress()` → `{ address }` (same GrantAccess flow as `getPublicKey()`)
+- `signTransaction(xdr, opts?)` → `{ signedTxXdr, signerAddress }` (sign-only in v1)
+- `getNetworkDetails()` → `{ network: 'TESTNET' | 'PUBLIC', networkPassphrase }`
+
+**Integrator notes:**
+
+- Latch addresses are Soroban smart-account **`C…`**, not classic **`G…`**. Pass the same
+  `C…` as `opts.address` when using the SEP-shaped sign API.
+- SEP-shaped sign is sign-only in v1; the dApp submits `signedTxXdr`. `submit: true` and
+  `submitUrl` return SEP error code `-3`.
+- SEP methods throw errors with numeric `code` (`-1`…`-4`); Latch-native methods use string
+  codes.
+
+**Stellar Wallets Kit:** add the module explicitly until Latch is included in the kit’s
+default module list. The SDK is currently private, so partners should use a workspace or
+path import until it is published:
+
+```ts
+import { StellarWalletsKit, WalletNetwork } from '@creit.tech/stellar-wallets-kit'
+import { LatchModule } from '@latch/sdk'
+
+const kit = new StellarWalletsKit({
+  network: WalletNetwork.TESTNET,
+  selectedWalletId: 'latch',
+  modules: [new LatchModule()],
+})
+
+await kit.openModal()
+kit.setWallet('latch')
+const { address } = await kit.getAddress()
+```
+
+The module implements the kit’s `ModuleInterface` and reports Latch’s `C…` smart-account
+address. `signAuthEntry` and `signMessage` fail explicitly because those provider methods
+are not available yet; no key material is handled by the module.
+
+See [`packages/sdk/src/index.ts`](packages/sdk/src/index.ts) for the full typed surface.
+
 ## More
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — setup, PRs, AI policy

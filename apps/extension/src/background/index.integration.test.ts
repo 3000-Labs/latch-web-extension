@@ -49,4 +49,15 @@ describe('background message routing (smoke)', () => {
     expect(getRes.data.setupState).toBe('has_account')
     expect(getRes.data.accountPublicKey).toBe('GABC123')
   })
+
+  it('CANCEL_REQUEST returns ok synchronously', async () => {
+    vi.resetModules()
+    await import('./index')
+
+    const res = await chrome.runtime.sendMessage({
+      type: 'CANCEL_REQUEST',
+      payload: { requestId: 'test-cancel-id' },
+    })
+    expect(res.ok).toBe(true)
+  })
 })

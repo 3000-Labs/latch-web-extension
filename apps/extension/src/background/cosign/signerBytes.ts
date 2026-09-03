@@ -25,9 +25,6 @@ export async function signerPublicKeyBytesForAccount(account: StoredAccount): Pr
   if (account.passkeyKeyDataHex?.trim()) {
     return webauthnSignerPublicKeyBytes(account.passkeyKeyDataHex)
   }
-  if (account.phantomPublicKeyHex?.trim()) {
-    return ed25519SignerPublicKeyBytes(account.phantomPublicKeyHex)
-  }
   if (account.gAddress?.trim()) {
     const raw = StrKey.decodeEd25519PublicKey(account.gAddress)
     return new Uint8Array(raw)

@@ -18,9 +18,9 @@ const multisigAccount: StoredAccount = {
   multisigMemberId: 'member-delegated',
 }
 
-const freighterAccount: StoredAccount = {
+const delegatedAccount: StoredAccount = {
   id: 'f-1',
-  mode: 'freighter',
+  mode: 'mnemonic',
   gAddress: 'GDELEGATED',
 }
 
@@ -48,11 +48,11 @@ describe('multisigApprove signer routing', () => {
     expect(isMultisigPasskeyMember({ id: 'm5', memberType: 'delegated' })).toBe(false)
   })
 
-  it('routes delegated members to freighter/mnemonic signing accounts', () => {
+  it('routes delegated members to delegated (mnemonic) signing accounts', () => {
     const resolved = resolveMultisigApprovalSigner({
       proposal: delegatedProposal,
       activeAccount: multisigAccount,
-      accounts: [multisigAccount, freighterAccount],
+      accounts: [multisigAccount, delegatedAccount],
     })
     expect(resolved.kind).toBe('delegated')
     expect(resolved.signingAccount?.id).toBe('f-1')
@@ -71,14 +71,14 @@ describe('multisigApprove signer routing', () => {
     const peek = peekMultisigApprovalSigner({
       proposal: delegatedProposal,
       activeAccount: multisigAccount,
-      accounts: [multisigAccount, freighterAccount],
+      accounts: [multisigAccount, delegatedAccount],
     })
     expect(peek?.kind).toBe('delegated')
-    expect(peek?.approveLabel).toBe('Approve with Freighter')
+    expect(peek?.approveLabel).toBe('Approve with wallet')
   })
 
   it('findProposalMember and findDelegatedSigningAccount match expected rows', () => {
     expect(findProposalMember(delegatedProposal, 'member-delegated')?.gAddress).toBe('GDELEGATED')
-    expect(findDelegatedSigningAccount([freighterAccount], 'GDELEGATED')?.id).toBe('f-1')
+    expect(findDelegatedSigningAccount([delegatedAccount], 'GDELEGATED')?.id).toBe('f-1')
   })
 })

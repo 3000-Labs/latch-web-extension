@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { Plus } from 'lucide-react'
 
+import type { AccountMode } from '@latch/types'
+
 import copyIconUrl from 'url:../../../../assets/home/icon-copy.svg'
 import multisigIconUrl from 'url:../../../../assets/home/settings-multisig.svg'
 import userAvatarUrl from 'url:../../../../assets/icons/user.png'
@@ -14,7 +16,7 @@ export type ViewAccountItem = {
   id: string
   name: string
   address: string
-  mode?: 'passkey' | 'mnemonic' | 'freighter' | 'phantom' | 'multisig'
+  mode?: AccountMode
 }
 
 function truncateAddress(address: string) {

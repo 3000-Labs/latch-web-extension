@@ -9,7 +9,16 @@
  * that hides all internal wallet complexity from dapp developers.
  */
 
-import type { Network, SignTransactionRequest, SignTransactionResponse } from '@latch/types'
+import type {
+  Network,
+  OpenSignRequestParams,
+  Sep0043GetAddressResponse,
+  Sep0043GetNetworkResponse,
+  Sep0043SignTransactionOptions,
+  Sep0043SignTransactionResponse,
+  SignTransactionRequest,
+  SignTransactionResponse,
+} from '@latch/types'
 
 export type LatchAccountChangedPayload = {
   publicKey: string
@@ -22,14 +31,24 @@ export interface LatchSDK {
   /** Returns true if the Latch extension is installed and accessible */
   isConnected(): Promise<boolean>
 
-  /** Request the user's public key — triggers approval UI if not already permitted */
+  /** Request the user's smart-account address as a plain string. */
   getPublicKey(): Promise<string>
 
-  /** Request the user to sign an XDR-encoded transaction */
+  /** Request the user to sign an XDR-encoded transaction. */
   signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+  signTransaction(
+    xdr: string,
+    opts?: Sep0043SignTransactionOptions
+  ): Promise<Sep0043SignTransactionResponse>
+
+  /** Open the extension's review flow for an externally prepared signing request */
+  openSignRequest(params: OpenSignRequestParams): Promise<void>
 
   /** Returns the active network */
   getNetwork(): Promise<Network>
+
+  getAddress(): Promise<Sep0043GetAddressResponse>
+  getNetworkDetails(): Promise<Sep0043GetNetworkResponse>
 
   /** Subscribe to active account / network changes */
   on?(event: LatchProviderEventName, handler: (payload: LatchAccountChangedPayload) => void): void
@@ -42,8 +61,14 @@ declare global {
     latch?: {
       isConnected(): Promise<boolean>
       getPublicKey(): Promise<string>
-      signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+      signTransaction(
+        requestOrXdr: SignTransactionRequest | string,
+        opts?: Sep0043SignTransactionOptions
+      ): Promise<SignTransactionResponse | Sep0043SignTransactionResponse>
+      openSignRequest(params: OpenSignRequestParams): Promise<void>
       getNetwork(): Promise<Network>
+      getAddress(): Promise<Sep0043GetAddressResponse>
+      getNetworkDetails(): Promise<Sep0043GetNetworkResponse>
       on?(
         event: LatchProviderEventName,
         handler: (payload: LatchAccountChangedPayload) => void
@@ -54,6 +79,18 @@ declare global {
       ): void
     }
   }
+}
+
+async function signTransaction(request: SignTransactionRequest): Promise<SignTransactionResponse>
+async function signTransaction(
+  xdr: string,
+  opts?: Sep0043SignTransactionOptions
+): Promise<Sep0043SignTransactionResponse>
+async function signTransaction(
+  requestOrXdr: SignTransactionRequest | string,
+  opts?: Sep0043SignTransactionOptions
+): Promise<SignTransactionResponse | Sep0043SignTransactionResponse> {
+  return await requireLatch().signTransaction(requestOrXdr as SignTransactionRequest & string, opts)
 }
 
 function requireLatch(): NonNullable<Window['latch']> {
@@ -71,11 +108,18 @@ export function getLatchSDK(): LatchSDK {
     async getPublicKey() {
       return await requireLatch().getPublicKey()
     },
-    async signTransaction(request: SignTransactionRequest) {
-      return await requireLatch().signTransaction(request)
+    signTransaction,
+    async openSignRequest(params: OpenSignRequestParams) {
+      return await requireLatch().openSignRequest(params)
     },
     async getNetwork() {
       return await requireLatch().getNetwork()
+    },
+    async getAddress() {
+      return await requireLatch().getAddress()
+    },
+    async getNetworkDetails() {
+      return await requireLatch().getNetworkDetails()
     },
     on(event, handler) {
       requireLatch().on?.(event, handler)
@@ -87,3 +131,20 @@ export function getLatchSDK(): LatchSDK {
 }
 
 export default getLatchSDK
+
+export {
+  LatchModule,
+  LATCH_MODULE_ICON,
+  LATCH_MODULE_ID,
+  LATCH_MODULE_URL,
+} from './stellar-wallets-kit'
+export type { StellarWalletsKitModule, WalletKitNetworkOptions } from './stellar-wallets-kit'
+
+export type {
+  Sep0043GetAddressResponse,
+  Sep0043GetNetworkResponse,
+  Sep0043SignTransactionOptions,
+  Sep0043SignTransactionResponse,
+  Sep0043Error,
+  Sep0043ErrorCode,
+} from '@latch/types'

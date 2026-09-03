@@ -3,7 +3,6 @@ import {
   createAccount,
   getAccounts,
   getAccountsForNetwork,
-  migrateLegacyPublicKeyIfNeeded,
   resetAccountsPartitionMigrationForTests,
 } from './storage'
 import { setActiveNetwork, setCachedActiveNetwork } from './network/config'
@@ -27,19 +26,6 @@ describe('background/storage', () => {
     expect(activeAccountId).toBe(accounts[0]!.id)
     expect(accounts[0]!.mode).toBe('passkey')
     expect(accounts[0]!.smartAccountAddress).toBe('GSMARTACCOUNT')
-  })
-
-  it('migrateLegacyPublicKeyIfNeeded creates a placeholder account once', async () => {
-    await chrome.storage.local.set({ 'latch.accountPublicKey': 'GLEGACY' })
-
-    await migrateLegacyPublicKeyIfNeeded()
-    const first = await getAccounts()
-    expect(first.accounts).toHaveLength(1)
-    expect(first.accounts[0]!.mode).toBe('freighter')
-
-    await migrateLegacyPublicKeyIfNeeded()
-    const second = await getAccounts()
-    expect(second.accounts).toHaveLength(1)
   })
 
   it('migrates flat latch.accounts into testnet bucket and isolates mainnet', async () => {

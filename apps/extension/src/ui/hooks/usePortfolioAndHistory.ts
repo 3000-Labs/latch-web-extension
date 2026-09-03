@@ -15,7 +15,8 @@ import {
   iconUrlForCode,
   mapTransactionToHistoryItem,
 } from '../lib/historyFormat'
-import { sendToBackground } from '../lib/backgroundClient'
+import { cancelBackgroundRequest, sendToBackground } from '../lib/backgroundClient'
+import { createRequestId, shouldApplyBackgroundResult } from '../lib/requestSession'
 import type { HistorySectionVm } from '../types/history'
 import type { Page, Route } from '../routing/routes'
 
@@ -51,11 +52,25 @@ export function usePortfolioAndHistory({
   const portfolioRowsRef = useRef(portfolioRows)
   portfolioRowsRef.current = portfolioRows
   const portfolioHydratedRef = useRef(false)
+  const portfolioRequestIdRef = useRef<string | null>(null)
+  const historyRequestIdRef = useRef<string | null>(null)
 
   const recentActivityItems = useMemo(
     () => historySections.flatMap((section) => section.items),
     [historySections]
   )
+
+  const cancelPortfolioRequest = useCallback(() => {
+    const id = portfolioRequestIdRef.current
+    if (id) void cancelBackgroundRequest(id)
+    portfolioRequestIdRef.current = null
+  }, [])
+
+  const cancelHistoryRequest = useCallback(() => {
+    const id = historyRequestIdRef.current
+    if (id) void cancelBackgroundRequest(id)
+    historyRequestIdRef.current = null
+  }, [])
 
   useEffect(() => {
     portfolioHydratedRef.current = false
@@ -65,9 +80,9 @@ export function usePortfolioAndHistory({
     setHistorySections([])
     setPortfolioError(null)
     setHistoryError(null)
-    // Do not clear portfolioLoading/historyLoading here — in-flight fetches still
-    // own those flags and will clear them in finally.
-  }, [activeAccountId])
+    cancelPortfolioRequest()
+    cancelHistoryRequest()
+  }, [activeAccountId, cancelHistoryRequest, cancelPortfolioRequest])
 
   // Network switch: drop stale history rows. Skip the initial mount so we don't
   // race GET_ACTIVE_NETWORK and leave hydrated=false with no refetch started.
@@ -78,7 +93,15 @@ export function usePortfolioAndHistory({
     if (prev === null || prev === activeNetwork) return
     setHistorySections([])
     setHistoryError(null)
-  }, [activeNetwork])
+    cancelHistoryRequest()
+  }, [activeNetwork, cancelHistoryRequest])
+
+  useEffect(() => {
+    return () => {
+      cancelPortfolioRequest()
+      cancelHistoryRequest()
+    }
+  }, [cancelHistoryRequest, cancelPortfolioRequest])
 
   const loadHistory = useCallback(
     async (opts?: { force?: boolean }) => {
@@ -88,6 +111,9 @@ export function usePortfolioAndHistory({
         setHistoryLoading(false)
         return
       }
+      cancelHistoryRequest()
+      const requestId = createRequestId()
+      historyRequestIdRef.current = requestId
       setHistoryLoading(true)
       setHistoryError(null)
       try {
@@ -96,8 +122,17 @@ export function usePortfolioAndHistory({
           GetSmartAccountTransactionsResponse
         >({
           type: 'GET_SMART_ACCOUNT_TRANSACTIONS',
-          payload: { accountId: acc.id, force: opts?.force === true },
+          payload: { accountId: acc.id, force: opts?.force === true, requestId },
         })
+        if (
+          !shouldApplyBackgroundResult({
+            currentId: historyRequestIdRef.current,
+            responseId: requestId,
+            error: res.error,
+          })
+        ) {
+          return
+        }
         if (!res.ok) {
           setHistoryError(res.error?.message ?? 'Could not load transactions')
           setHistorySections([])
@@ -108,10 +143,12 @@ export function usePortfolioAndHistory({
         )
         setHistorySections(groupHistoryItems(items))
       } finally {
-        setHistoryLoading(false)
+        if (historyRequestIdRef.current === requestId) {
+          setHistoryLoading(false)
+        }
       }
     },
-    [accounts, activeAccountId]
+    [accounts, activeAccountId, cancelHistoryRequest]
   )
 
   const loadPortfolio = useCallback(async () => {
@@ -123,6 +160,9 @@ export function usePortfolioAndHistory({
       setPortfolioHydrated(true)
       return
     }
+    cancelPortfolioRequest()
+    const requestId = createRequestId()
+    portfolioRequestIdRef.current = requestId
     const showLoading = !portfolioHydratedRef.current
     if (showLoading) setPortfolioLoading(true)
     setPortfolioError(null)
@@ -132,8 +172,17 @@ export function usePortfolioAndHistory({
         GetSmartAccountBalancesResponse
       >({
         type: 'GET_SMART_ACCOUNT_BALANCES',
-        payload: { accountId: acc.id },
+        payload: { accountId: acc.id, requestId },
       })
+      if (
+        !shouldApplyBackgroundResult({
+          currentId: portfolioRequestIdRef.current,
+          responseId: requestId,
+          error: res.error,
+        })
+      ) {
+        return
+      }
       if (!res.ok) {
         setPortfolioError(res.error?.message ?? 'Could not load balances')
         setPortfolioRows([])
@@ -142,11 +191,13 @@ export function usePortfolioAndHistory({
       setPortfolioRows(res.data?.rows ?? [])
       setTotalBalanceUsd(res.data?.totalBalanceUsd ?? null)
     } finally {
-      setPortfolioLoading(false)
-      portfolioHydratedRef.current = true
-      setPortfolioHydrated(true)
+      if (portfolioRequestIdRef.current === requestId) {
+        setPortfolioLoading(false)
+        portfolioHydratedRef.current = true
+        setPortfolioHydrated(true)
+      }
     }
-  }, [accounts, activeAccountId])
+  }, [accounts, activeAccountId, cancelPortfolioRequest])
 
   useEffect(() => {
     if (page !== 'main' && page !== 'settings') return

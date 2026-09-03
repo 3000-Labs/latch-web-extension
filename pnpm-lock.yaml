@@ -62,15 +62,9 @@ importers:
       '@simplewebauthn/browser':
         specifier: ^13.3.0
         version: 13.3.0
-      '@stellar/freighter-api':
-        specifier: ^6.0.1
-        version: 6.0.1
       '@stellar/stellar-sdk':
         specifier: ^15.0.1
         version: 15.0.1
-      bs58:
-        specifier: ^6.0.0
-        version: 6.0.0
       cbor-x:
         specifier: ^1.6.4
         version: 1.6.4
@@ -2126,9 +2120,6 @@ packages:
     resolution: {integrity: sha512-P1Cz1dWaFfR4IR+U13mqqiGsLFf1KbayybWwdd2vfctdV6hDpUkgCY0nKOLLTMSoRd/jJNjtbqzf13K8DCCXQw==}
     engines: {node: '>=18'}
 
-  '@stellar/freighter-api@6.0.1':
-    resolution: {integrity: sha512-eqwakEqSg+zoLuPpSbKyrX0pG8DQFzL/J5GtbfuMCmJI+h+oiC9pQ5C6QLc80xopZQKdGt8dUAFCmDMNdAG95w==}
-
   '@stellar/js-xdr@4.0.0':
     resolution: {integrity: sha512-+NmNa7Tk5BI5XFdy/6xGTqAN4J9a9KgCrCGhj2uEUTCBhLkch0M+QbKzNH8zEnejWe0p8w+0q5hUVX6L3OzoVA==}
     engines: {node: '>=20.0.0', pnpm: '>=9.0.0'}
@@ -2136,6 +2127,7 @@ packages:
   '@stellar/stellar-base@15.0.0':
     resolution: {integrity: sha512-XQhxUr9BYiEcFcgc4oWcCMR9QJCny/GmmGsuwPKf/ieIcOeb5149KLHYx9mJCA0ea8QbucR2/GzV58QbXOTxQA==}
     engines: {node: '>=20.0.0'}
+    deprecated: This package is now rolled into @stellar/stellar-sdk. Please use @stellar/stellar-sdk to continue receiving updates and support.
 
   '@stellar/stellar-sdk@15.0.1':
     resolution: {integrity: sha512-iZjWKXtfohsPh+CX9wRyQNIlXLeA9VyuQB6UMC7AFBD9XnR92eOjnlfeONzk/Bsrkk6+UPlpzSy2MuF+ydHP1A==}
@@ -2677,9 +2669,6 @@ packages:
   base-x@3.0.11:
     resolution: {integrity: sha512-xz7wQ8xDhdyP7tQxwdteLYeFfS68tSMNCZ/Y37WJ4bhGfKPpqEIlmIyueQHqOyoPhE6xNUqjzRr8ra0eF9VRvA==}
 
-  base-x@5.0.1:
-    resolution: {integrity: sha512-M7uio8Zt++eg3jPj+rHMfCC+IuygQHHCOU+IYsVtik6FWjuYpVt/+MRKcgsAMHh8mMFAwnB+Bs+mTrFiXjMzKg==}
-
   base32.js@0.1.0:
     resolution: {integrity: sha512-n3TkB02ixgBOhTvANakDb4xaMXnYUVkNoRFJjQflcqMQhyEKxEHdj3E6N8t8sUQ0mjH/3/JxzlXuz3ul/J90pQ==}
     engines: {node: '>=0.12.0'}
@@ -2725,9 +2714,6 @@ packages:
     resolution: {integrity: sha512-48xSriZYYg+8qXna9kwqjIVzuQxi+KYWp2+5nCYnYKPTr0LvD89Jqk2Or5ogxz0NUMfIjhh2lIUX/LyX9B4oIg==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
-
-  bs58@6.0.0:
-    resolution: {integrity: sha512-PD0wEnEYg6ijszw/u8s+iI3H17cTymlrwkKhDhPZq+Sokl3AU4htyBFTjAeNAlCCmg0f53g6ih3jATyCKftTfw==}
 
   buffer@6.0.3:
     resolution: {integrity: sha512-FTiCpNxtwiZZHEZbcbTIcZjERVICn9yq/pDFkTl95/AxzD1naBctN7YO68riM/gLSDY7sdrMby8hofADYuuqOA==}
@@ -5536,7 +5522,7 @@ snapshots:
       json5: 2.2.3
       msgpackr: 1.11.9
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/diagnostic@2.8.3':
     dependencies:
@@ -5622,7 +5608,7 @@ snapshots:
       '@parcel/fs': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5715,7 +5701,7 @@ snapshots:
       '@parcel/types': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       '@parcel/workers': 2.9.3(@parcel/core@2.9.3)
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/packager-css@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -5856,7 +5842,7 @@ snapshots:
       browserslist: 4.28.2
       json5: 2.2.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5889,7 +5875,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
       srcset: 4.0.0
     transitivePeerDependencies:
       - '@parcel/core'
@@ -5920,7 +5906,7 @@ snapshots:
       browserslist: 4.28.2
       nullthrows: 1.1.1
       regenerator-runtime: 0.13.11
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/transformer-json@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -5946,7 +5932,7 @@ snapshots:
       clone: 2.1.2
       nullthrows: 1.1.1
       postcss-value-parser: 4.2.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5958,7 +5944,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -6003,7 +5989,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -6791,11 +6777,6 @@ snapshots:
 
   '@sindresorhus/is@7.2.0': {}
 
-  '@stellar/freighter-api@6.0.1':
-    dependencies:
-      buffer: 6.0.3
-      semver: 7.7.1
-
   '@stellar/js-xdr@4.0.0': {}
 
   '@stellar/stellar-base@15.0.0':
@@ -7352,8 +7333,6 @@ snapshots:
     dependencies:
       safe-buffer: 5.2.1
 
-  base-x@5.0.1: {}
-
   base32.js@0.1.0: {}
 
   base64-js@1.5.1: {}
@@ -7395,10 +7374,6 @@ snapshots:
       electron-to-chromium: 1.5.339
       node-releases: 2.0.37
       update-browserslist-db: 1.2.3(browserslist@4.28.2)
-
-  bs58@6.0.0:
-    dependencies:
-      base-x: 5.0.1
 
   buffer@6.0.3:
     dependencies:
@@ -8599,7 +8574,7 @@ snapshots:
       ky: 1.14.3
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
-      semver: 7.7.1
+      semver: 7.7.4
 
   parent-module@1.0.1:
     dependencies:
@@ -9003,7 +8978,7 @@ snapshots:
     dependencies:
       color: 4.2.3
       detect-libc: 2.1.2
-      semver: 7.7.1
+      semver: 7.7.4
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5

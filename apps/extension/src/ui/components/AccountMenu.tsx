@@ -19,10 +19,6 @@ function signerLabel(mode: StoredAccount['mode']): string {
       return 'Passkey'
     case 'mnemonic':
       return 'Seed'
-    case 'freighter':
-      return 'Freighter'
-    case 'phantom':
-      return 'Phantom'
     case 'multisig':
       return 'Multisig'
     default:
@@ -37,7 +33,7 @@ function shortAddr(addr?: string): string {
 
 function signerDetailLine(a: StoredAccount): string {
   const g = a.gAddress
-  if (a.mode === 'freighter' || a.mode === 'mnemonic' || a.mode === 'phantom') {
+  if (a.mode === 'mnemonic') {
     return g ? `${signerLabel(a.mode)} • ${shortAddr(g)}` : signerLabel(a.mode)
   }
   if (a.mode === 'multisig') {
