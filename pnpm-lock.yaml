@@ -2127,6 +2127,7 @@ packages:
   '@stellar/stellar-base@15.0.0':
     resolution: {integrity: sha512-XQhxUr9BYiEcFcgc4oWcCMR9QJCny/GmmGsuwPKf/ieIcOeb5149KLHYx9mJCA0ea8QbucR2/GzV58QbXOTxQA==}
     engines: {node: '>=20.0.0'}
+    deprecated: This package is now rolled into @stellar/stellar-sdk. Please use @stellar/stellar-sdk to continue receiving updates and support.
 
   '@stellar/stellar-sdk@15.0.1':
     resolution: {integrity: sha512-iZjWKXtfohsPh+CX9wRyQNIlXLeA9VyuQB6UMC7AFBD9XnR92eOjnlfeONzk/Bsrkk6+UPlpzSy2MuF+ydHP1A==}
@@ -5521,7 +5522,7 @@ snapshots:
       json5: 2.2.3
       msgpackr: 1.11.9
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/diagnostic@2.8.3':
     dependencies:
@@ -5607,7 +5608,7 @@ snapshots:
       '@parcel/fs': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5700,7 +5701,7 @@ snapshots:
       '@parcel/types': 2.9.3(@parcel/core@2.9.3)
       '@parcel/utils': 2.9.3
       '@parcel/workers': 2.9.3(@parcel/core@2.9.3)
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/packager-css@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -5841,7 +5842,7 @@ snapshots:
       browserslist: 4.28.2
       json5: 2.2.3
       nullthrows: 1.1.1
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5874,7 +5875,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
       srcset: 4.0.0
     transitivePeerDependencies:
       - '@parcel/core'
@@ -5905,7 +5906,7 @@ snapshots:
       browserslist: 4.28.2
       nullthrows: 1.1.1
       regenerator-runtime: 0.13.11
-      semver: 7.7.1
+      semver: 7.7.4
 
   '@parcel/transformer-json@2.9.3(@parcel/core@2.9.3)':
     dependencies:
@@ -5931,7 +5932,7 @@ snapshots:
       clone: 2.1.2
       nullthrows: 1.1.1
       postcss-value-parser: 4.2.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5943,7 +5944,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -5988,7 +5989,7 @@ snapshots:
       posthtml: 0.16.7
       posthtml-parser: 0.10.2
       posthtml-render: 3.0.0
-      semver: 7.7.1
+      semver: 7.7.4
     transitivePeerDependencies:
       - '@parcel/core'
 
@@ -8573,7 +8574,7 @@ snapshots:
       ky: 1.14.3
       registry-auth-token: 5.1.1
       registry-url: 6.0.1
-      semver: 7.7.1
+      semver: 7.7.4
 
   parent-module@1.0.1:
     dependencies:
@@ -8977,7 +8978,7 @@ snapshots:
     dependencies:
       color: 4.2.3
       detect-libc: 2.1.2
-      semver: 7.7.1
+      semver: 7.7.4
     optionalDependencies:
       '@img/sharp-darwin-arm64': 0.33.5
       '@img/sharp-darwin-x64': 0.33.5

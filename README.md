@@ -111,6 +111,29 @@ wrapper in bundled dApps.
 - SEP methods throw errors with numeric `code` (`-1`…`-4`); Latch-native methods use string
   codes.
 
+**Stellar Wallets Kit:** add the module explicitly until Latch is included in the kit’s
+default module list. The SDK is currently private, so partners should use a workspace or
+path import until it is published:
+
+```ts
+import { StellarWalletsKit, WalletNetwork } from '@creit.tech/stellar-wallets-kit'
+import { LatchModule } from '@latch/sdk'
+
+const kit = new StellarWalletsKit({
+  network: WalletNetwork.TESTNET,
+  selectedWalletId: 'latch',
+  modules: [new LatchModule()],
+})
+
+await kit.openModal()
+kit.setWallet('latch')
+const { address } = await kit.getAddress()
+```
+
+The module implements the kit’s `ModuleInterface` and reports Latch’s `C…` smart-account
+address. `signAuthEntry` and `signMessage` fail explicitly because those provider methods
+are not available yet; no key material is handled by the module.
+
 See [`packages/sdk/src/index.ts`](packages/sdk/src/index.ts) for the full typed surface.
 
 ## More
